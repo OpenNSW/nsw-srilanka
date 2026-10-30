@@ -123,8 +123,6 @@ const ta: Locale = {
       goBack: 'பின்செல்',
       refresh: 'புதுப்பி',
       taskId: 'பணி எண்',
-      continueTo: '{{name}} க்குத் தொடர்க',
-      continueToNext: 'அடுத்த பணிக்குத் தொடர்க',
       backToConsignment: 'அனுப்புப்பொருளுக்குத் திரும்பு',
       backToCase: 'வழக்கிற்குத் திரும்பு',
       draftSaved: 'வரைவு சேமிக்கப்பட்டது',

@@ -6,7 +6,7 @@
 // hook — extensions only fire on CompleteTaskStep. Like the write-side evaluator
 // it is pure: Layer 1 (internal/tasks/authzgate) resolves the caller's identity
 // and a lazy ownership resolver into a taskauthz.Input, and this package matches
-// that against the catalog and the task's render config. It touches no domain
+// that against the catalog and the task's template. It touches no domain
 // service and reads no configuration file.
 //
 // Eligibility — holding a role and owning the task's consignment in it — is
@@ -18,11 +18,12 @@
 // whose user holds both Trader and CHA is eligible for both on its own
 // consignments. Since visibility rules only ever AND, two true claims would
 // render two mutually contradictory sections at once ("here is the form" beside
-// "waiting for your CHA"). So when a render config declares read.roles, that list
+// "waiting for your CHA"). So when a task template declares read.roles, that list
 // is a precedence order: the caller acts as the first role in it they are
-// eligible for, and exactly one claim is true. A config that declares no
+// eligible for, and exactly one claim is true. A template that declares no
 // read.roles has expressed no precedence, so every eligible role's claim is
-// reported — safe, because such a config has no per-role sections to disagree.
+// reported — safe only when its render config has no per-role sections to
+// disagree.
 //
 // The package holds no state: the catalog is passed per call, so there is nothing
 // to construct and no boot-time failure path.
@@ -52,10 +53,9 @@ var ErrDenied = errors.New("task read authz: denied")
 // single place the spelling is decided.
 func ClaimKey(role string) string { return ClaimPrefix + role }
 
-// Policy is this application's slice of a render.json blob: which roles may read
-// the task. The blob is decoded independently by uiprojector (as a Blueprint) and
-// by core's zoneview (for handles and state actions); each parser ignores the
-// fields it does not own, so this third decode needs no library change.
+// Policy is this application's slice of a task template: which roles may read the
+// task. Core decodes the same template as types.TaskTemplate, which ignores this
+// field.
 type Policy struct {
 	Read *ReadPolicy `json:"read"`
 }
@@ -70,7 +70,8 @@ type ReadPolicy struct {
 
 // Resolve decides whether the caller may read a task of case caseID, which is the
 // id of the consignment the task belongs to, and if so returns the
-// claims that shape their view of it. It returns ErrDenied when they may not; any
+// claims that shape their view of it. taskTemplate is the task's template, as raw
+// JSON, whose read policy decides. It returns ErrDenied when they may not; any
 // other error is a real failure, not a denial, and must not be answered as one.
 //
 // The returned map always carries one entry per catalog role, denials included as
@@ -82,8 +83,8 @@ type ReadPolicy struct {
 // answer, and it cannot arise in the wiring anyway: the read route is served
 // through the authz gate, whose construction already requires the catalog to
 // define both owner roles.
-func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, renderConfig json.RawMessage, caseID string) (map[string]bool, error) {
-	allowed, declared, err := allowedRoles(ctx, cat, renderConfig)
+func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, taskTemplate json.RawMessage, caseID string) (map[string]bool, error) {
+	allowed, declared, err := allowedRoles(ctx, cat, taskTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -129,17 +130,17 @@ func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, ren
 	return nil, ErrDenied
 }
 
-// allowedRoles returns the logical role names the render config admits and
+// allowedRoles returns the logical role names the task template admits and
 // whether it declared them. When it did, the order is the caller's precedence
 // order; when it did not, every catalog role is admitted in no meaningful order.
 //
 // A name the catalog does not define cannot be owned by anyone, so it is dropped
-// and logged — the render-config validator is the place that will turn it into a
-// startup failure.
-func allowedRoles(ctx context.Context, cat taskauthz.Catalog, renderConfig json.RawMessage) ([]string, bool, error) {
+// and logged — the artifacts' CI (check_agency_authz.py) is the place that
+// rejects it.
+func allowedRoles(ctx context.Context, cat taskauthz.Catalog, taskTemplate json.RawMessage) ([]string, bool, error) {
 	var policy Policy
-	if len(renderConfig) > 0 {
-		if err := json.Unmarshal(renderConfig, &policy); err != nil {
+	if len(taskTemplate) > 0 {
+		if err := json.Unmarshal(taskTemplate, &policy); err != nil {
 			return nil, false, fmt.Errorf("readauthz: decode read policy: %w", err)
 		}
 	}
@@ -150,7 +151,7 @@ func allowedRoles(ctx context.Context, cat taskauthz.Catalog, renderConfig json.
 	names := make([]string, 0, len(policy.Read.Roles))
 	for _, name := range policy.Read.Roles {
 		if _, ok := cat.Roles[name]; !ok {
-			slog.WarnContext(ctx, "readauthz: render config allows a role the catalog does not define; ignoring it",
+			slog.WarnContext(ctx, "readauthz: task template allows a role the catalog does not define; ignoring it",
 				"role", name)
 			continue
 		}

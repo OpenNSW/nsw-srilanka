@@ -21,6 +21,7 @@ import (
 
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
@@ -280,9 +281,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
 
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
-	sqlMock.ExpectCommit()
+	expectCreateConsignment(sqlMock)
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(returnedID, "EXPORT", traderID, traderCompanyID, "IN_PROGRESS", time.Now(), time.Now()))
@@ -656,8 +655,8 @@ func TestConsignmentRouter_HandleGetConsignments_BothRoles(t *testing.T) {
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "both-ou").
 		Return(&company.Record{ID: "company-1"}, nil)
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments".*\(trader_company_id = \$1 OR cha_company_id = \$2\)`).
-		WithArgs("company-1", "company-1", sqlmock.AnyArg()).
+	sqlMock.ExpectQuery(consignmentSelect+`\(trader_party\.party_id = \$5 OR cha_party\.party_id = \$6\)`).
+		WithArgs(partyRoleTrader, caseparty.TypeCompany, partyRoleCHA, caseparty.TypeCompany, "company-1", "company-1", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
@@ -720,8 +719,8 @@ func TestConsignmentRouter_HandleGetConsignments_CHARole(t *testing.T) {
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "cha-ou").
 		Return(&company.Record{ID: "company-cha"}, nil)
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments".*cha_company_id = \$1`).
-		WithArgs("company-cha", sqlmock.AnyArg()).
+	sqlMock.ExpectQuery(consignmentSelect+`cha_party\.party_id = \$5`).
+		WithArgs(partyRoleTrader, caseparty.TypeCompany, partyRoleCHA, caseparty.TypeCompany, "company-cha", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)

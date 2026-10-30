@@ -5,38 +5,30 @@ import (
 	"log/slog"
 )
 
-const categoryAudit = "audit"
+// Category is the slog attribute value on every LogSink record. Bootstrap and
+// collectors filter on this string; keep a single definition here.
+const Category = "audit"
 
 // LogSink writes enriched audit records as structured slog lines with
-// category=audit so they can be filtered from ops logs on the same stream.
+// category=audit. A nil logger discards writes. Bootstrap passes an OTLP-only
+// logger at construction so records never reach the process (pod) log and are
+// not dropped while workers start.
 type LogSink struct {
 	logger *slog.Logger
 }
 
-// NewLogSink returns a LogSink. A nil logger uses slog.Default on each Write
-// rather than at construction, so it follows server.logLevel and the handler
-// installed after OpenTelemetry starts, which replaces slog.Default.
+// NewLogSink returns a LogSink. A nil logger discards. The category attribute
+// is applied here so callers do not need to set it.
 func NewLogSink(logger *slog.Logger) *LogSink {
 	if logger != nil {
-		logger = logger.With(slog.String("category", categoryAudit))
+		logger = logger.With(slog.String("category", Category))
 	}
 	return &LogSink{logger: logger}
 }
 
-func (s *LogSink) active() *slog.Logger {
-	if s.logger != nil {
-		return s.logger
-	}
-	return slog.Default().With(slog.String("category", categoryAudit))
-}
-
 // Write implements Sink.
 func (s *LogSink) Write(ctx context.Context, r Record) {
-	if s == nil {
-		return
-	}
-	logger := s.active()
-	if logger == nil {
+	if s == nil || s.logger == nil {
 		return
 	}
 	attrs := []any{
@@ -59,5 +51,5 @@ func (s *LogSink) Write(ctx context.Context, r Record) {
 	if len(r.Message) > 0 {
 		attrs = append(attrs, "message", string(r.Message))
 	}
-	logger.InfoContext(ctx, "audit", attrs...)
+	s.logger.InfoContext(ctx, "audit", attrs...)
 }

@@ -77,25 +77,45 @@ func TestConfigureLoggingAddSourceTiedToDebugLevel(t *testing.T) {
 
 // alwaysEnabled records every Handle. It reports every level as enabled, the
 // same way otelslog does, so a missing level filter would accept DEBUG.
+// WithAttrs is retained so category=audit from LogSink is visible on records.
 type alwaysEnabled struct {
-	levels []slog.Level
-	attrs  []map[string]string
+	levels *[]slog.Level
+	attrs  *[]map[string]string
+	bound  map[string]string
+}
+
+func newAlwaysEnabled() *alwaysEnabled {
+	levels := []slog.Level{}
+	attrs := []map[string]string{}
+	return &alwaysEnabled{levels: &levels, attrs: &attrs, bound: map[string]string{}}
 }
 
 func (h *alwaysEnabled) Enabled(context.Context, slog.Level) bool { return true }
 
 func (h *alwaysEnabled) Handle(_ context.Context, r slog.Record) error {
-	h.levels = append(h.levels, r.Level)
+	*h.levels = append(*h.levels, r.Level)
 	got := map[string]string{}
+	for k, v := range h.bound {
+		got[k] = v
+	}
 	r.Attrs(func(a slog.Attr) bool {
 		got[a.Key] = a.Value.String()
 		return true
 	})
-	h.attrs = append(h.attrs, got)
+	*h.attrs = append(*h.attrs, got)
 	return nil
 }
 
-func (h *alwaysEnabled) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *alwaysEnabled) WithAttrs(attrs []slog.Attr) slog.Handler {
+	bound := map[string]string{}
+	for k, v := range h.bound {
+		bound[k] = v
+	}
+	for _, a := range attrs {
+		bound[a.Key] = a.Value.String()
+	}
+	return &alwaysEnabled{levels: h.levels, attrs: h.attrs, bound: bound}
+}
 
 func (h *alwaysEnabled) WithGroup(string) slog.Handler { return h }
 
@@ -103,7 +123,7 @@ func TestConfigureLoggingExtrasHonorLogLevel(t *testing.T) {
 	prevDefault := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prevDefault) })
 
-	extra := &alwaysEnabled{}
+	extra := newAlwaysEnabled()
 	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, io.Discard, extra)
 
 	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
@@ -111,12 +131,12 @@ func TestConfigureLoggingExtrasHonorLogLevel(t *testing.T) {
 	}
 	slog.Debug("hidden")
 	slog.Info("shown")
-	if len(extra.levels) != 1 || extra.levels[0] != slog.LevelInfo {
-		t.Fatalf("extra handler levels = %v, want [INFO]", extra.levels)
+	if len(*extra.levels) != 1 || (*extra.levels)[0] != slog.LevelInfo {
+		t.Fatalf("extra handler levels = %v, want [INFO]", *extra.levels)
 	}
 }
 
-func TestConfigureLoggingAuditUsesServerLevelAndLatestDest(t *testing.T) {
+func TestLogSinkExportsOnlyViaOTLPHandler(t *testing.T) {
 	prevDefault := slog.Default()
 	t.Cleanup(func() {
 		slog.SetDefault(prevDefault)
@@ -132,55 +152,84 @@ func TestConfigureLoggingAuditUsesServerLevelAndLatestDest(t *testing.T) {
 		TargetID:   "t1",
 	}
 
-	var first bytes.Buffer
-	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &first)
-	sink := nswaudit.NewLogSink(nil)
+	var processLog bytes.Buffer
+	extra := newAlwaysEnabled()
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &processLog, extra)
 
-	var second bytes.Buffer
-	extra := &alwaysEnabled{}
-	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &second, extra)
+	nilSink := nswaudit.NewLogSink(nil)
+	nilSink.Write(context.Background(), record)
+	if processLog.Len() != 0 || len(*extra.attrs) != 0 {
+		t.Fatalf("nil LogSink wrote somewhere: process=%q export=%v", processLog.String(), *extra.attrs)
+	}
+
+	sink := nswaudit.NewLogSink(slog.New(auditExportHandler(
+		&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}},
+		extra,
+	)))
 	sink.Write(context.Background(), record)
 
-	if strings.Contains(first.String(), "category=audit") {
-		t.Fatalf("audit line used the logger from before reconfigure: %s", first.String())
-	}
-	if !strings.Contains(second.String(), "category=audit") {
-		t.Fatalf("audit line missing from the latest destination: %s", second.String())
+	if strings.Contains(processLog.String(), "category=audit") || strings.Contains(processLog.String(), `"audit"`) {
+		t.Fatalf("audit line reached the process log: %s", processLog.String())
 	}
 	var auditRecords int
-	for _, level := range extra.levels {
-		if level == slog.LevelInfo {
+	for _, attrs := range *extra.attrs {
+		if attrs["category"] == nswaudit.Category {
 			auditRecords++
 		}
 	}
 	if auditRecords != 1 {
-		t.Fatalf("extra handler info records = %d, want 1 (the audit line)", auditRecords)
+		t.Fatalf("export handler audit records = %d, want 1", auditRecords)
 	}
 
-	var warnBuf bytes.Buffer
-	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &warnBuf)
-	sink.Write(context.Background(), record)
-	if strings.Contains(warnBuf.String(), "category=audit") {
-		t.Fatalf("audit line written below server.logLevel: %s", warnBuf.String())
+	extraWarn := newAlwaysEnabled()
+	warnSink := nswaudit.NewLogSink(slog.New(auditExportHandler(
+		&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}},
+		extraWarn,
+	)))
+	warnSink.Write(context.Background(), record)
+	for _, attrs := range *extraWarn.attrs {
+		if attrs["category"] == nswaudit.Category {
+			t.Fatal("audit line exported below server.logLevel")
+		}
 	}
 }
 
-func TestLogSuppressedAuditWarnsAboveInfo(t *testing.T) {
+func TestLogAuditExportStatus(t *testing.T) {
 	prevDefault := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prevDefault) })
 
 	var warnBuf bytes.Buffer
 	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &warnBuf)
-	logSuppressedAudit(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}})
-	if !strings.Contains(warnBuf.String(), "audit records (category=audit) are not written") {
-		t.Fatalf("missing audit-dropped warning: %s", warnBuf.String())
+	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, false)
+	if !strings.Contains(warnBuf.String(), "audit records (category=audit) are not exported") {
+		t.Fatalf("missing log-level warning: %s", warnBuf.String())
+	}
+	if !strings.Contains(warnBuf.String(), "otel log export is off") {
+		t.Fatalf("missing export-off warning when level is also high: %s", warnBuf.String())
+	}
+	if strings.Count(warnBuf.String(), "server.logLevel is above info") != 1 {
+		t.Fatalf("log-level warning should appear once: %s", warnBuf.String())
+	}
+
+	var errorBuf bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelError}}, &errorBuf)
+	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelError}}, false)
+	if !strings.Contains(errorBuf.String(), "otel log export is off") {
+		t.Fatalf("export-off warning dropped at error level: %s", errorBuf.String())
+	}
+
+	var noExport bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &noExport)
+	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, false)
+	if !strings.Contains(noExport.String(), "otel log export is off") {
+		t.Fatalf("missing export-off warning: %s", noExport.String())
 	}
 
 	var infoBuf bytes.Buffer
 	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &infoBuf)
-	logSuppressedAudit(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}})
+	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, true)
 	if infoBuf.Len() != 0 {
-		t.Fatalf("warning at info: %s", infoBuf.String())
+		t.Fatalf("warning when export is on at info: %s", infoBuf.String())
 	}
 }
 
@@ -188,17 +237,17 @@ func TestConfigureLoggingExtrasIncludeTraceID(t *testing.T) {
 	prevDefault := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prevDefault) })
 
-	extra := &alwaysEnabled{}
+	extra := newAlwaysEnabled()
 	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, io.Discard, extra)
 
 	const traceID = "abc123"
 	ctx := trace.ContextWithTraceID(context.Background(), traceID)
 	slog.InfoContext(ctx, "handled")
 
-	if len(extra.attrs) != 1 {
-		t.Fatalf("extra records = %d, want 1", len(extra.attrs))
+	if len(*extra.attrs) != 1 {
+		t.Fatalf("extra records = %d, want 1", len(*extra.attrs))
 	}
-	if extra.attrs[0]["traceId"] != traceID {
-		t.Fatalf("traceId = %q, want %q", extra.attrs[0]["traceId"], traceID)
+	if (*extra.attrs)[0]["traceId"] != traceID {
+		t.Fatalf("traceId = %q, want %q", (*extra.attrs)[0]["traceId"], traceID)
 	}
 }

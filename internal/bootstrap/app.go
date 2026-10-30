@@ -26,6 +26,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
@@ -43,6 +44,7 @@ import (
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
@@ -108,7 +110,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // Build initializes dependencies and returns a fully wired application server.
 // The initialization flow is structured in distinct stages to ensure readability.
-func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:gocyclo
+func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //nolint:gocyclo
 	// -------------------------------------------------------------------
 	// Stage 1: Relational Database & Connection Health Check
 	// -------------------------------------------------------------------
@@ -121,6 +123,27 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("database health check failed: %w", err)
 	}
+
+	// OTLP before the auditor and workers so in-flight workflow audit on
+	// restart is not dropped while telemetry was still starting. On a later
+	// Build failure, shut telemetry down here; App.Close does it on success.
+	tel, err := telemetry.Start(ctx, cfg.Otel)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to start telemetry: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tel.Shutdown(context.Background())
+		}
+	}()
+	exportLogs := tel.SlogHandler()
+	configureLogging(cfg, os.Stdout, exportLogs)
+	var auditLogger *slog.Logger
+	if h := auditExportHandler(cfg, exportLogs); h != nil {
+		auditLogger = slog.New(h)
+	}
+	logAuditExportStatus(cfg, exportLogs != nil)
 
 	// -------------------------------------------------------------------
 	// Stage 2: Domain Core Repositories & Base Services
@@ -148,9 +171,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
 	// Built before payment and storage are handed to the task stack. Workers
 	// can emit events as soon as those services exist, so the auditor has to
-	// be attached here rather than after the task manager starts.
+	// be attached here rather than after the task manager starts. Telemetry
+	// above already supplied the OTLP (or nil) logger.
 	auditor := nswaudit.New()
-	auditor.RegisterSink(nswaudit.NewLogSink(nil))
+	auditor.RegisterSink(nswaudit.NewLogSink(auditLogger))
 	coreAuditor := nswaudit.NewCoreAdapter(auditor)
 	var unwiredAudit []string
 	if !attachAuditor(paymentService, coreAuditor) {
@@ -239,6 +263,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			IssueForClient: func(clientID, value string) (string, error) {
 				return fileAccess.IssueForClient(clientID, value, fileaccess.ScopeRead)
 			},
+			RenderConfigOf: renderConfigOf(artifacts),
 		}
 	}
 	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifacts, globalCatalog, cfg, onTaskCompleted)
@@ -335,6 +360,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to register task workflow manager with consignment service: %w", err)
 		}
+		if err := consignmentService.RegisterTaskCanceller(tm); err != nil {
+			_ = stopParentRunner()
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to register task canceller with consignment service: %w", err)
+		}
 	}
 
 	// -------------------------------------------------------------------
@@ -425,23 +457,25 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
-	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts))
+	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), renderConfigOf(artifacts))
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
 	// An agency uses task claims: every officer owns every injected workflow, so a
 	// claim shows the others who is working a task. TNSW does not: a step is already
 	// limited to the trader or CHA company that owns the consignment.
 	taskHandler.ClaimsEnabled = agencyMode
+	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
-	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
-	// task through its consignment; in an agency an officer owns every injected
-	// workflow's tasks (see agency.go).
+	// extension and the read evaluator to consume. In TNSW a company owns a task in
+	// every role it holds on the task's case (case_parties: the consignment's trader
+	// and CHA); in an agency an officer owns every injected workflow's tasks (see
+	// agency.go).
 	var taskAuthzGate taskGate
 	if agencyMode {
 		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
 	} else {
-		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+		taskAuthzGate, err = authzgate.NewMiddleware(caseparty.NewRepository(db), companyIDResolver{svc: companyService})
 	}
 	if err != nil {
 		_ = stopParentRunner()
@@ -556,27 +590,17 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// OTLP metrics/logs/traces when otel.endpoint is set; otherwise a no-op.
-	tel, err := telemetry.Start(ctx, cfg.Otel)
-	if err != nil {
-		_ = stopParentRunner()
-		_ = stopTask()
-		temporalClient.Close()
-		_ = authnManager.Close()
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to start telemetry: %w", err)
-	}
-	// Fan stdout logs out to OTLP when export is on (no-op handler otherwise).
-	// Security log reads slog.Default after that, so its line is on the same
-	// stream. It sits inside trace middleware so the line carries the trace
-	// id, and outside CORS so a preflight is logged too. Authentication
+	// Security log reads slog.Default (process stream, and OTLP when export
+	// is on from the early configureLogging). It sits inside trace so the
+	// line carries the trace id, and outside CORS so a preflight is logged
+	// too. CaptureRoute next to the mux records Pattern for Middleware:
+	// otelhttp copies the request before ServeMux sets it. Authentication
 	// attaches the principal on a child request; the log reads it back from
 	// authn.RequestCaller.
-	configureLogging(cfg, os.Stdout, tel.SlogHandler())
 	for _, name := range unwiredAudit {
 		slog.Warn(name + " audit is not wired: service has no WithAuditor")
 	}
-	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", mux))))
+	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", securitylog.CaptureRoute(mux)))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
@@ -692,11 +716,11 @@ func wireParentRunner(c client.Client, namespace string, activator parentTaskAct
 		return nil, nil, fmt.Errorf("parent task activator cannot be nil")
 	}
 
-	onActivation := func(payload workflow.TaskPayload) (map[string]any, error) {
-		return activator.StartTask(context.Background(), payload)
+	onActivation := func(ctx context.Context, payload workflow.TaskPayload) (map[string]any, error) {
+		return activator.StartTask(ctx, payload)
 	}
 
-	onCompletion := func(completion workflow.WorkflowCompletion) error {
+	onCompletion := func(_ context.Context, completion workflow.WorkflowCompletion) error {
 		log.Printf("\n[Parent Workflow] Completed. Final state: %v\n", completion.FinalVariables)
 		if upstream != nil {
 			if err := upstream.CompletionHandler(completion.WorkflowID, completion.FinalVariables); err != nil {
@@ -730,27 +754,6 @@ type taskStack struct {
 	Runner    workflow.TemporalManager
 	Store     *gormstore.TaskStore
 	Assembler *zoneview.ZoneViewAssembler
-}
-
-// caseOwnership adapts the consignment service to
-// authzgate.CaseOwnership. A consignment that does not exist is reported as
-// ("", "", nil) — the caller then owns neither side and is denied cleanly, the
-// same fail-closed convention companyIDResolver follows, rather than surfacing a
-// missing consignment as a 500.
-//
-// It wraps the same interface it produces: *consignment.Service already has the
-// right shape, so all this adds is the error translation.
-type caseOwnership struct{ svc authzgate.CaseOwnership }
-
-func (r caseOwnership) GetOwnership(ctx context.Context, caseID string) (string, string, error) {
-	traderCompanyID, chaCompanyID, err := r.svc.GetOwnership(ctx, caseID)
-	if err != nil {
-		if errors.Is(err, consignment.ErrConsignmentNotFound) {
-			return "", "", nil
-		}
-		return "", "", err
-	}
-	return traderCompanyID, chaCompanyID, nil
 }
 
 // taskCatalog narrows the global catalog to the slice task authorization needs.
@@ -815,6 +818,14 @@ func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
 		return nil, err
 	}
 	return fileaccess.New(codec, cfg.TokenTTL())
+}
+
+// renderConfigOf resolves a task's render config through its task template, in the
+// manifest version the task runs on.
+func renderConfigOf(artifacts *artifact.Set) tasks.RenderConfigOf {
+	return func(ctx context.Context, record store.TaskRecord) (json.RawMessage, error) {
+		return renderconfig.Load(ctx, artifacts, record)
+	}
 }
 
 // stepNamespace looks up the output namespace of a task's active step template,
@@ -1013,31 +1024,38 @@ func initTask(
 		return nil, nil, fmt.Errorf("failed to build ui assembler: %w", err)
 	}
 	taskRenderer := zoneview.NewTaskRenderer(uiAssembler)
-	zoneAssembler := zoneview.NewZoneViewAssembler(taskRenderer)
+	zoneAssembler := zoneview.NewZoneViewAssembler(taskRenderer, artifacts)
 
 	var tm *orchestrator.TaskManager
 
 	// Handlers for events on the per-task (micro) sub-workflows running on
 	// MICRO_WORKFLOW_QUEUE. Nodes inside a task workflow activate subtasks
 	// via tm.StartTaskStep, which dispatches to the matching plugin.
-	microActivationHandler := func(payload workflow.TaskPayload) (map[string]any, error) {
+	microActivationHandler := func(ctx context.Context, payload workflow.TaskPayload) (map[string]any, error) {
 		log.Printf("\n[Micro Workflow] Step activated: node=%s template=%s\n", payload.NodeID, payload.TaskTemplateID)
 		if tm == nil {
 			return nil, fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		return tm.StartTaskStep(context.Background(), payload)
+		return tm.StartTaskStep(ctx, payload)
 	}
 
-	microCompletionHandler := func(completion workflow.WorkflowCompletion) error {
+	microCompletionHandler := func(ctx context.Context, completion workflow.WorkflowCompletion) error {
 		log.Printf("\n[Micro Workflow] Completed. Final state: %v\n", completion.FinalVariables)
 		if tm == nil {
 			return fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		return tm.HandleTaskCompletion(context.Background(), completion)
+		return tm.HandleTaskCompletion(ctx, completion)
 	}
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, cfg.Temporal.Namespace, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
-	workflowRunner.RegisterAdminParkHandler(newAdminParkLogger("task workflow"))
+	logTaskPark := newAdminParkLogger("task workflow")
+	workflowRunner.RegisterAdminParkHandler(func(payload workflow.AdminParkPayload) error {
+		_ = logTaskPark(payload)
+		if tm == nil {
+			return fmt.Errorf("task manager is not initialized (misconfiguration)")
+		}
+		return tm.HoldTask(context.Background(), payload)
+	})
 
 	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
 	if err != nil {

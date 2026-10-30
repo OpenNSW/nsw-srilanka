@@ -357,7 +357,11 @@ components:
 
     WorkflowNodeState:
       type: string
-      enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED]
+      enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED, CANCELLED, ON_HOLD]
+      description: >-
+        `CANCELLED` is a task an admin closed by force-parking its node; it
+        cannot be submitted. `ON_HOLD` is a task whose workflow parked on one
+        of its steps for admin intervention.
 
     SummaryDTO:
       type: object
@@ -387,9 +391,6 @@ components:
         chaCompanyId:
           type: string
           description: CHA company selected at Stage 1.
-        chaId:
-          type: string
-          description: CHA assigned at Stage 2 (empty until claimed).
         createdAt:
           type: string
           format: date-time
@@ -490,8 +491,6 @@ components:
         traderCompanyId:
           type: string
         chaCompanyId:
-          type: string
-        chaId:
           type: string
         createdAt:
           type: string

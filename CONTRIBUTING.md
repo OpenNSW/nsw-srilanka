@@ -146,7 +146,10 @@ Runs on every PR. Labels it from its title and author, then fails the
 
 Runs on every PR. When the PR changes `version.txt`, it runs the checks the
 release will run, so a bad release PR fails in review; otherwise it passes at
-once.
+once. [CHANGELOG.md](CHANGELOG.md) is written only by a release PR, together
+with `version.txt`, so a PR that changes it without `version.txt` fails. Put the
+note for deployers in the PR's Deployment Notes instead; the release's
+CHANGELOG section is written from them.
 
 ### Required checks and the merge queue
 

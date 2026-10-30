@@ -16,7 +16,7 @@ type Props = {
 export function Zone({ component, onAction }: Props) {
   return (
     <section className="space-y-2">
-      {component.title && <h2 className="text-xs font-semibold text-foreground-subtle">{component.title}</h2>}
+      {component.title && <h2 className="text-xs font-semibold text-foreground-muted">{component.title}</h2>}
       {/* A stepper form draws its own cards: the step list and the step. */}
       {component.type === 'FORM' && isStepperUiSchema(component.payload.uiSchema) ? (
         renderZoneComponent(component, { onAction })

@@ -73,6 +73,9 @@ type HTTPHandler struct {
 	// CanAct decides whether a reader's file references can be submitted.
 	// Without it, they can only be opened.
 	CanAct CanAct
+	// TaskTemplateOf resolves a task's task template, whose read policy decides
+	// who may read the task.
+	TaskTemplateOf TaskTemplateOf
 }
 
 func NewHTTPHandler(
@@ -101,8 +104,8 @@ func NewHTTPHandler(
 }
 
 // HandleGetTask returns the ZoneView payload for a single task, scoped to the
-// caller: they must own the task's consignment in a role the task's render
-// config admits, and the claims resolved for them decide which sections of the
+// caller: they must own the task's consignment in a role the task's template
+// admits, and the claims resolved for them decide which sections of the
 // view they see. Where claims are on, the response also says who holds the task's
 // claim.
 //
@@ -132,7 +135,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	// The case ID is the consignment id, so this decides the caller's access
 	// from their role-tied ownership of the task's consignment, and returns the
 	// claims that shape their view of it.
-	claims, err := readauthz.Resolve(ctx, h.AuthzCatalog, in, record.RenderConfig, record.CaseID)
+	claims, err := h.resolveRead(ctx, in, record)
 	if err != nil {
 		if !errors.Is(err, readauthz.ErrDenied) {
 			httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
@@ -142,14 +145,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		// indistinguishable from a task that does not exist and cannot be used to
 		// probe which task ids are real. Mirrors GET /api/v1/consignments/{id}.
 		slog.WarnContext(ctx, "tasks: read authorization denied", "taskId", taskID)
-		h.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventTask,
-			Action:     nswaudit.ActionRead,
-			TargetType: nswaudit.TargetTask,
-			TargetID:   taskID,
-			Failure:    true,
-			Metadata:   map[string]any{"error": "task read access denied"},
-		})
+		h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, true, map[string]any{"error": "task read access denied"}))
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return
 	}
@@ -157,7 +153,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	// The reader gets references to the task's files, never their stored
 	// values, and can submit them back only on a step they may act on.
 	p, _ := authn.FromContext(ctx)
-	view, err := h.Files.ForReader(record, p, h.canAct(ctx, record, in))
+	view, err := h.Files.ForReader(ctx, record, p, h.canAct(ctx, record, in))
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to issue file references", err, "taskId", taskID)
 		return
@@ -172,13 +168,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	// claimed_at would repeat it, and show the holder's internal user id.
 	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
-	h.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventTask,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetTask,
-		TargetID:   taskID,
-		Failure:    false,
-	})
+	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, false, nil))
 	resp := taskResponse{ZoneView: zv}
 	if h.ClaimsEnabled {
 		// From the stored record, not the view: the view only swaps file values.
@@ -506,14 +496,7 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 }
 
 func (h *HTTPHandler) auditTaskUpdate(ctx context.Context, taskID string, failure bool, meta map[string]any) {
-	h.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventTask,
-		Action:     nswaudit.ActionUpdate,
-		TargetType: nswaudit.TargetTask,
-		TargetID:   taskID,
-		Failure:    failure,
-		Metadata:   meta,
-	})
+	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionUpdate, taskID, failure, meta))
 }
 
 // taskAuditMeta copies the step, command, and draft flag out of a slog-style

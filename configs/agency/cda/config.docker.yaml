@@ -9,6 +9,18 @@
 
 mode: agency
 
+server:
+  port: 8080
+  logLevel: debug
+  # The browser-facing URL: the host port compose publishes. TNSW's
+  # config.docker.yaml services entry "cda" also calls 8083.
+  serviceURL: http://localhost:8083
+  maxRequestBytes: 33554432
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
+
 # Its own database on the shared Postgres, created by cda-init.
 db:
   driver: postgres
@@ -24,55 +36,12 @@ db:
       maxOpenConns: 100
       maxConnLifetimeSeconds: 3600
 
-server:
-  port: 8080
-  logLevel: debug
-  # The browser-facing URL: the host port compose publishes. TNSW's
-  # config.docker.yaml services entry "cda" also calls 8083.
-  serviceURL: http://localhost:8083
-  maxRequestBytes: 33554432
-  readHeaderTimeout: 5s
-  readTimeout: 15s
-  writeTimeout: 30s
-  idleTimeout: 60s
-
-# The catalog: the logical names the agency's workflow rules use, mapped to
-# this deployment's IdP token roles and OAuth2 client ids. Each role here
-# owns an injected workflow; tnsw names the client TNSW calls this agency as.
-catalog:
-  roles:
-    officer: CDA Officer
-  clients:
-    tnsw: NSW_TO_CDA
-
-# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
-# {{file:/path}} placeholders, expanded with the rest of this config at load.
-services:
-  - id: tnsw
-    url: http://api:8080
-    timeout: 30s
-    auth:
-      type: oauth2
-      oauth2:
-        tokenURL: http://thunderid:8090/oauth2/token
-        clientID: CDA_TO_NSW
-        clientSecret: "{{env:M2M_CDA_TO_NSW_SECRET}}"
-        scopes:
-          - nsw:task:write
-          - nsw:storage:read
-          - nsw:storage:write
-          - nsw:storage:internalwrite
-        endpointParams:
-          resource: https://api.nsw-srilanka.local
-
-# The CDA portal (the trader-app in agency mode).
-cors:
-  allowedOrigins:
-    - http://localhost:5176
-  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
-  allowedHeaders: [Content-Type, Authorization]
-  allowCredentials: true
-  maxAge: 3600
+# Its own namespace, created by cda-init, so TNSW and CDA workers never pick up
+# each other's workflows.
+temporal:
+  host: temporal
+  port: 7233
+  namespace: cda
 
 # CDA keeps no files of its own: it serves TNSW's storage, calling TNSW as
 # CDA_TO_NSW (services entry tnsw), so officers open the documents
@@ -118,24 +87,14 @@ authn:
   issuer: http://localhost:8090
   audience: https://api.cda.nsw-agency.local
 
-# Placeholder providers.
-notification:
-  providers:
-    email:
-      baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
-    sms:
-      baseURL: https://smsservice.lk
-      userName: replace-with-actual-username
-      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-      sidCode: sidCode
-
-# Its own namespace, created by cda-init, so TNSW and CDA workers never pick up
-# each other's workflows.
-temporal:
-  host: temporal
-  port: 7233
-  namespace: cda
+# The catalog: the logical names the agency's workflow rules use, mapped to
+# this deployment's IdP token roles and OAuth2 client ids. Each role here
+# owns an injected workflow; tnsw names the client TNSW calls this agency as.
+catalog:
+  roles:
+    officer: CDA Officer
+  clients:
+    tnsw: NSW_TO_CDA
 
 # The cda folder of a one-trade-artifacts clone, which compose bind-mounts
 # at /app/artifacts: ../one-trade-artifacts/cda by default, or set
@@ -150,6 +109,35 @@ artifactLoader:
   #   repo: one-trade-artifacts
   #   ref: main
   #   basePath: cda
+
+# The CDA portal (the trader-app in agency mode).
+cors:
+  allowedOrigins:
+    - http://localhost:5176
+  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowedHeaders: [Content-Type, Authorization]
+  allowCredentials: true
+  maxAge: 3600
+
+# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
+# {{file:/path}} placeholders, expanded with the rest of this config at load.
+services:
+  - id: tnsw
+    url: http://api:8080
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: CDA_TO_NSW
+        clientSecret: "{{env:M2M_CDA_TO_NSW_SECRET}}"
+        scopes:
+          - nsw:task:write
+          - nsw:storage:read
+          - nsw:storage:write
+          - nsw:storage:internalwrite
+        endpointParams:
+          resource: https://api.nsw-srilanka.local
 
 # Reference ID formats for the cda REFID_GENERATOR tasks, in the schema of
 # github.com/OpenNSW/core/refid. The counters live in cda_db (refid_sequences)
@@ -215,3 +203,15 @@ refid:
               pattern: "[0-9]{4}/[0-9]{2}"
   lists:
     pqc_cert_type: [P, S, PS]
+
+# Placeholder providers.
+notification:
+  providers:
+    email:
+      baseURL: https://email.svc.local
+      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    sms:
+      baseURL: https://smsservice.lk
+      userName: replace-with-actual-username
+      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+      sidCode: sidCode

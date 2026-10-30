@@ -51,7 +51,10 @@ export type TradeFlow = 'IMPORT' | 'EXPORT'
 
 export type ConsignmentState = 'IN_PROGRESS' | 'FINISHED'
 
-export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'QUEUED_EXTERNALLY' | 'COMPLETED' | 'FAILED'
+// CANCELLED is a task an admin closed by force-parking its node; it cannot be submitted.
+// ON_HOLD is a task whose workflow parked on one of its steps for admin intervention.
+export type WorkflowNodeState =
+  'READY' | 'LOCKED' | 'IN_PROGRESS' | 'QUEUED_EXTERNALLY' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'ON_HOLD'
 
 export type StepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT' | 'PAYMENT' | 'START' | 'END' | 'GATEWAY' | 'END_NODE'
 
@@ -98,7 +101,6 @@ export interface ConsignmentSummary {
   name?: string
   flow: TradeFlow
   traderId: string
-  chaId?: string
   // The roles the signed-in user acts in on this consignment.
   callerRoles: CallerRole[]
   state: ConsignmentState
@@ -114,7 +116,6 @@ export interface ConsignmentDetail {
   name?: string
   flow: TradeFlow
   traderId: string
-  chaId?: string
   state: ConsignmentState
   items: ConsignmentItem[]
   globalContext: GlobalContext

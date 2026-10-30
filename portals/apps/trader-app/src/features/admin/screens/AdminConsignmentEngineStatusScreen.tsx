@@ -12,6 +12,7 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons'
 import {
+  forceParkNode,
   getConsignmentForAdmin,
   getTaskWorkflowEngineStatus,
   getWorkflowEngineStatus,
@@ -67,7 +68,7 @@ function IdentityField({ label, id }: { label: string; id: string }) {
   const { name, uuid } = splitIDName(id)
   return (
     <div title={id} className="min-w-0">
-      <span className="text-xs text-foreground-subtle">{label}</span>
+      <span className="text-xs text-foreground-muted">{label}</span>
       <div className="font-mono text-sm text-foreground break-all">{name}</div>
       {uuid && <div className="font-mono text-sm text-foreground-muted break-all">{uuid}</div>}
     </div>
@@ -266,11 +267,11 @@ function FlowList({
 }) {
   return (
     <div className="bg-app-surface rounded-lg shadow mb-6 overflow-x-auto">
-      <div className={`${FLOW_ROW_GRID} min-w-[700px] border-b border-app-border text-left`}>
-        <div className="p-3 font-medium text-foreground-subtle text-sm">Flow</div>
-        <div className="p-3 font-medium text-foreground-subtle text-sm">Status</div>
-        <div className="p-3 font-medium text-foreground-subtle text-sm">Started</div>
-        <div className="p-3 font-medium text-foreground-subtle text-sm">Workflow ID</div>
+      <div className={`${FLOW_ROW_GRID} min-w-[700px] border-b border-border text-left`}>
+        <div className="p-3 font-medium text-foreground-muted text-sm">Flow</div>
+        <div className="p-3 font-medium text-foreground-muted text-sm">Status</div>
+        <div className="p-3 font-medium text-foreground-muted text-sm">Started</div>
+        <div className="p-3 font-medium text-foreground-muted text-sm">Workflow ID</div>
       </div>
       {flows.length === 0 ? (
         <Text size="2" color="gray" className="block p-3">
@@ -285,7 +286,7 @@ function FlowList({
               type="button"
               aria-pressed={selected}
               onClick={() => onSelect(flow.workflowId)}
-              className={`${FLOW_ROW_GRID} min-w-[700px] w-full text-left border-b border-app-border last:border-0 ${
+              className={`${FLOW_ROW_GRID} min-w-[700px] w-full text-left border-b border-border last:border-0 ${
                 selected ? 'bg-primary-subtle' : 'hover:bg-app-surface-muted'
               }`}
             >
@@ -490,12 +491,12 @@ function EngineStatusView({
       <p className="mb-4 text-xs font-mono text-foreground-muted">{status.workflow_id}</p>
 
       <div className="bg-app-surface rounded-lg shadow mb-6 overflow-x-auto">
-        <div className={`${NODE_ROW_GRID} min-w-[700px] border-b border-app-border text-left`}>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Node</div>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Type</div>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Status</div>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Updated</div>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Last error</div>
+        <div className={`${NODE_ROW_GRID} min-w-[700px] border-b border-border text-left`}>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Node</div>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Type</div>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Status</div>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Updated</div>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Last error</div>
         </div>
         <div className="min-w-[700px]">
           {topLevelNodes.length === 0 ? (
@@ -639,10 +640,10 @@ function LineNumberedTextArea({
     // The border lives on this wrapper, not the <textarea> — a bare <textarea> carries its own
     // UA-default border independent of any wrapper border, which without an explicit border-0
     // shows through as a second, darker (often black) border nested just inside this one.
-    <div className="flex border border-app-border rounded overflow-hidden font-mono text-xs h-48 focus-within:border-primary">
+    <div className="flex border border-border rounded overflow-hidden font-mono text-xs h-48 focus-within:border-primary">
       <div
         ref={gutterRef}
-        className="shrink-0 w-9 overflow-hidden bg-app-surface-muted text-right py-2 pr-2 text-foreground-subtle select-none"
+        className="shrink-0 w-9 overflow-hidden bg-app-surface-muted text-right py-2 pr-2 text-foreground-muted select-none"
         aria-hidden
       >
         {Array.from({ length: lineCount }, (_, i) => (
@@ -704,6 +705,11 @@ const PARK_CATEGORY_INFO: Record<ParkCategory, { label: string; color: 'amber' |
     color: 'red',
     hint: "The workflow definition itself is invalid, so setting variables won't fix it.",
   },
+  ADMIN_FORCED: {
+    label: 'Force-parked by admin',
+    color: 'amber',
+    hint: 'An admin force-parked this waiting step. Complete with the outcome to move on, Retry to run it again, or Abort.',
+  },
   UNKNOWN: {
     label: 'Unclassified',
     color: 'gray',
@@ -747,7 +753,7 @@ function MappingList({ title, note, mapping }: { title: string; note: string; ma
           return (
             <div key={rawKey} className="whitespace-pre-wrap break-all py-0.5">
               {key}
-              {optional && <span className="text-foreground-subtle"> (optional)</span>} → {value}
+              {optional && <span className="text-foreground-muted"> (optional)</span>} → {value}
             </div>
           )
         })}
@@ -916,7 +922,7 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
                     {edge.condition ? (
                       edge.condition
                     ) : (
-                      <span className="text-foreground-subtle">(default — no condition)</span>
+                      <span className="text-foreground-muted">(default — no condition)</span>
                     )}
                   </div>
                 ))}
@@ -1225,6 +1231,109 @@ function ErrorCell({ message }: { message: string }) {
   )
 }
 
+// What force-parking does at each level, as the dialog explains it (see forceParkNode).
+const FORCE_PARK_INFO: Record<AdminWorkflowKind, { description: string; next: string }> = {
+  workflow: {
+    description:
+      "The node's whole task is closed, so the trader or officer cannot submit it, and the node parks for you to resolve. This can't be undone.",
+    next: 'Then resolve it: RETRY with a variables patch to start a new task, COMPLETE with the outcome to move on, or ABORT to fail the workflow.',
+  },
+  task: {
+    description:
+      'Only this step parks; the task stays open. While it is parked, a submission for the step is rejected.',
+    next: 'Then resolve it: COMPLETE with the variables the step would have produced lets the task carry on as if its callback had arrived; RETRY runs the step again; ABORT fails the task.',
+  },
+}
+
+// Force-parks one RUNNING TASK node (see NodeRow's "Force park" button) after the admin gives a
+// reason. It changes a live workflow with no undo, so this is an AlertDialog like the resolve
+// confirmation. It stays open on an error so the admin can read it and try again.
+function ForceParkDialog({
+  open,
+  onOpenChange,
+  workflowId,
+  workflowKind,
+  nodeId,
+  stepId,
+  onParked,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  workflowId: string
+  workflowKind: AdminWorkflowKind
+  nodeId: string
+  stepId: string
+  onParked: () => void
+}) {
+  const info = FORCE_PARK_INFO[workflowKind]
+  const [reason, setReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    setSubmitting(true)
+    setError(null)
+    try {
+      await forceParkNode(workflowId, stepId, reason, workflowKind)
+      setReason('')
+      onOpenChange(false)
+      onParked()
+    } catch (err) {
+      console.error('Failed to force-park node:', err)
+      setError(err instanceof Error ? err.message : 'Failed to force-park node.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <AlertDialog.Root open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+      <AlertDialog.Content maxWidth="480px">
+        <AlertDialog.Title className="mb-3">
+          {workflowKind === 'task' ? 'Force park step' : 'Force park node'}
+        </AlertDialog.Title>
+        <AlertDialog.Description size="2" className="mb-4">
+          {info.description}
+        </AlertDialog.Description>
+
+        <div className="flex flex-wrap gap-4 mb-4 p-3 bg-app-surface-muted rounded">
+          <IdentityField label="Workflow" id={workflowId} />
+          <IdentityField label="Node" id={nodeId} />
+        </div>
+
+        <Text as="p" size="2" color="gray" className="mb-4">
+          {info.next}
+        </Text>
+
+        <TextArea
+          aria-label="Reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          placeholder="Why are you force-parking this node? (required)"
+        />
+
+        {error && (
+          <Text as="p" size="2" color="red" className="mt-3">
+            {error}
+          </Text>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <AlertDialog.Cancel>
+            <Button variant="soft" color="gray" disabled={submitting}>
+              Cancel
+            </Button>
+          </AlertDialog.Cancel>
+          <Button color="amber" disabled={!reason.trim() || submitting} onClick={() => void submit()}>
+            {submitting ? 'Force parking…' : 'Force park'}
+          </Button>
+        </div>
+      </AlertDialog.Content>
+    </AlertDialog.Root>
+  )
+}
+
 // One engine node's row. A native engine child (SPLIT_TASK/BATCH_SPLIT/PARALLEL_SPLIT) gets a
 // full-width expandable branch below, since those are rare and structurally significant. A TASK
 // node's own task workflow (task_workflow_id) is common — nearly every TASK node that has
@@ -1267,13 +1376,17 @@ function NodeRow({
 }) {
   const childIds = node.child_workflow_ids ?? []
   const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task', expandSignal)
+  const [forceParkOpen, setForceParkOpen] = useState(false)
+  // Only a TASK node that is waiting can be force-parked: on a consignment workflow that closes its
+  // task, in a task workflow it parks just that step (see forceParkNode).
+  const canForcePark = node.type === 'TASK' && node.status === 'RUNNING' && !!node.step_id
 
   // Indentation lives only on the Node cell's own padding, never on the grid row/container
   // itself — the grid's own column tracks (Type/Status/Updated/Last error) are fixed-width, so
   // padding on the row would push every one of them right by the same amount, throwing nested
   // rows out of sync with the header and with sibling rows at a different depth.
   return (
-    <div className="border-b border-app-border last:border-0">
+    <div className="border-b border-border last:border-0">
       <div className={`${NODE_ROW_GRID} py-2`}>
         <div className="pr-3 font-mono text-xs truncate" style={{ paddingLeft: 12 + depth * 20 }} title={node.id}>
           {node.id}
@@ -1334,9 +1447,25 @@ function NodeRow({
               Resolve
             </Button>
           )}
+          {canForcePark && (
+            <>
+              <Button variant="soft" color="gray" size="1" onClick={() => setForceParkOpen(true)}>
+                Force park
+              </Button>
+              <ForceParkDialog
+                open={forceParkOpen}
+                onOpenChange={setForceParkOpen}
+                workflowId={workflowId}
+                workflowKind={workflowKind}
+                nodeId={node.id}
+                stepId={node.step_id ?? ''}
+                onParked={onRefresh}
+              />
+            </>
+          )}
         </div>
         <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>
-        <div className="px-3 text-xs text-red-600 min-w-0">
+        <div className="px-3 text-xs text-error-strong min-w-0">
           {node.last_error && <ErrorCell message={node.last_error} />}
         </div>
       </div>
@@ -1406,7 +1535,7 @@ function ChildWorkflowBranch({
             className="flex items-center gap-1.5 py-1.5 px-3 text-xs font-mono text-foreground-muted hover:text-foreground text-left"
           >
             <ChevronRightIcon className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden />
-            <span className="text-foreground-subtle">child workflow</span>
+            <span className="text-foreground-muted">child workflow</span>
             {workflowId}
           </button>
           {status && (
@@ -1475,11 +1604,11 @@ function TaskWorkflowPanel({
   return (
     <>
       <div
-        className="border-l-2 border-app-border flex items-center justify-between pr-3 py-1 pl-2"
+        className="border-l-2 border-border flex items-center justify-between pr-3 py-1 pl-2"
         style={{ marginLeft: 12 + depth * 20 }}
       >
         <span className="text-[11px] font-mono text-foreground-muted truncate" title={workflowId}>
-          <span className="text-foreground-subtle">task workflow </span>
+          <span className="text-foreground-muted">task workflow </span>
           {workflowId}
         </span>
         {status && (

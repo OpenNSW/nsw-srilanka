@@ -221,6 +221,8 @@ Write the company to a file. The shape is the one in
         "br_no": "PV-00123456",
         "vat_no": "VAT-409123456-7000",
         "tin_no": "134256789",
+        "tel": "+94112345678",
+        "contact_email": "exports@acme-exports.lk",
         "slpacmsuser_key": "<key issued by SLPA>",
         "agencies": {
           "cda": { "registration_number": "CDA-EXP-000123" }
@@ -230,6 +232,8 @@ Write the company to a file. The shape is the one in
   ]
 }
 ```
+
+`address`, `tel` and `contact_email` prefill the company's details on the agencies' application forms, so fill them for every trader and CHA. A field left out stays empty on the form.
 
 Stream it into the pod over stdin, so nothing has to be written to the container's
 filesystem:

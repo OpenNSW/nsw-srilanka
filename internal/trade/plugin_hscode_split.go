@@ -19,7 +19,8 @@ type hscodeSplitConfig struct {
 // driven by plugin_properties.mappings in the task template config artifact (transform.json).
 // If an unmapped HS code is requested, it fails with an error.
 //
-// Each item carries the submitting company in its payload when one is mapped in.
+// Each item carries the submitting company, and the CHA chosen for the consignment, in its
+// payload when they are mapped in.
 // A branch child is started with only its iteration context — none of the parent
 // workflow's variables — so anything an agency flow needs about the consignment
 // has to travel this way. Agencies read what they need from it (SLPA, for one,
@@ -57,6 +58,7 @@ func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) e
 
 	// Optional: a consignment whose artifacts need no company data maps none in.
 	company, _ := ctx.Inputs["company"].(map[string]any)
+	cha, _ := ctx.Inputs["cha"].(map[string]any)
 
 	templates, err := resolveTemplates(items, cfg.Mappings)
 	if err != nil {
@@ -68,6 +70,9 @@ func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) e
 		payload := map[string]any{}
 		if company != nil {
 			payload["company"] = company
+		}
+		if cha != nil {
+			payload["cha"] = cha
 		}
 		splitItems = append(splitItems, map[string]any{
 			"template_id": templateID,

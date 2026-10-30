@@ -16,25 +16,38 @@ import (
 // default and wires httputil's correlation ID hook to trace.GetTraceID, so
 // the correlationId returned in error responses matches the traceId written
 // to server logs. Must be called before any request is served.
+//
+// Audit records do not use this default logger. Bootstrap points LogSink at
+// the OTLP handler when telemetry starts (before workers). Call
+// logAuditExportStatus once that path is known.
 func ConfigureLogging(cfg *config.Config) {
 	configureLogging(cfg, os.Stdout)
-	// configureLogging runs again once OpenTelemetry is up, so the warning
-	// stays here and is logged once.
-	logSuppressedAudit(cfg)
 }
 
-// logSuppressedAudit reports that audit records are not written when
-// server.logLevel is above info. Audit lines are Info, and the message is
-// logged at the configured level so the filter it describes lets it through.
-func logSuppressedAudit(cfg *config.Config) {
+// logAuditExportStatus reports when audit records will not be retained.
+// Both conditions are reported when both apply: a high logLevel suppresses
+// Info audit lines on the export handler, and a missing OTLP exporter means
+// there is no destination. Messages are logged at least at warn, or at the
+// configured level when that is higher, so the filter they describe lets
+// them through.
+func logAuditExportStatus(cfg *config.Config, exportEnabled bool) {
 	if cfg.Server.LogLevel > slog.LevelInfo {
 		slog.Log(context.Background(), cfg.Server.LogLevel,
-			"server.logLevel is above info: audit records (category=audit) are not written")
+			"server.logLevel is above info: audit records (category=audit) are not exported")
+	}
+	if !exportEnabled {
+		level := slog.LevelWarn
+		if cfg.Server.LogLevel > level {
+			level = cfg.Server.LogLevel
+		}
+		slog.Log(context.Background(), level,
+			"otel log export is off: audit records (category=audit) are not retained")
 	}
 }
 
 // configureLogging is ConfigureLogging with an injectable log destination
 // and optional extra slog handlers (e.g. OTLP) fan-out via MultiHandler.
+// Audit does not go through this path; see NewLogSink in Build.
 func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler) {
 	opts := &slog.HandlerOptions{
 		AddSource: cfg.Server.LogLevel <= slog.LevelDebug,
@@ -60,6 +73,15 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 	}
 	slog.SetDefault(slog.New(logHandler))
 	httputil.CorrelationIDFunc = trace.GetTraceID
+}
+
+// auditExportHandler wraps the OTLP slog handler so Info audit lines honor
+// server.logLevel the same way the process MultiHandler extras do.
+func auditExportHandler(cfg *config.Config, otlp slog.Handler) slog.Handler {
+	if otlp == nil {
+		return nil
+	}
+	return &levelFilter{min: cfg.Server.LogLevel, next: logging.NewHandler(otlp)}
 }
 
 // levelFilter drops records below min before they reach next. Enabled must

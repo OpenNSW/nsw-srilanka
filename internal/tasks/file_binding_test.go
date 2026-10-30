@@ -94,6 +94,13 @@ func decodeMap(t *testing.T, s string) map[string]any {
 	return m
 }
 
+// fixedRenderConfig resolves every task's render config to renderConfig.
+func fixedRenderConfig(renderConfig string) RenderConfigOf {
+	return func(context.Context, store.TaskRecord) (json.RawMessage, error) {
+		return json.RawMessage(renderConfig), nil
+	}
+}
+
 const filesRenderConfig = `{
   "id": "x:render",
   "files": ["form.invoice", "form.docs[*].file", "review.certificate"]
@@ -101,9 +108,8 @@ const filesRenderConfig = `{
 
 func TestFileBinding_ForReaderGivesReferences(t *testing.T) {
 	refs := newFakeFileRefs()
-	b := NewFileBinding(refs, nil)
+	b := NewFileBinding(refs, nil, fixedRenderConfig(filesRenderConfig))
 	record := store.TaskRecord{
-		RenderConfig: json.RawMessage(filesRenderConfig),
 		Data: decodeMap(t, `{
 			"form": {"invoice": "k-invoice", "docs": [{"file": "k-doc", "name": "doc"}], "note": "k-note"},
 			"review": {}
@@ -111,7 +117,7 @@ func TestFileBinding_ForReaderGivesReferences(t *testing.T) {
 	}
 	stored := record.DeepCopy()
 
-	view, err := b.ForReader(record, userPrincipal("alice"), true)
+	view, err := b.ForReader(context.Background(), record, userPrincipal("alice"), true)
 	require.NoError(t, err)
 
 	assert.Equal(t, decodeMap(t, `{
@@ -132,28 +138,28 @@ func TestFileBinding_ForReaderGivesReferences(t *testing.T) {
 // submit them.
 func TestFileBinding_ForReaderWhoCannotAct(t *testing.T) {
 	refs := newFakeFileRefs()
-	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), Data: decodeMap(t, `{"form": {"invoice": "k-invoice"}}`)}
+	record := store.TaskRecord{Data: decodeMap(t, `{"form": {"invoice": "k-invoice"}}`)}
 
-	view, err := NewFileBinding(refs, nil).ForReader(record, userPrincipal("alice"), false)
+	view, err := NewFileBinding(refs, nil, fixedRenderConfig(filesRenderConfig)).ForReader(context.Background(), record, userPrincipal("alice"), false)
 	require.NoError(t, err)
 	assert.Equal(t, decodeMap(t, `{"form": {"invoice": "ref1"}}`), view.Data)
 	assert.Equal(t, []fileaccess.Scope{fileaccess.ScopeRead}, refs.issued["ref1"].scopes)
 }
 
 func TestFileBinding_ForReaderWithoutFiles(t *testing.T) {
-	b := NewFileBinding(newFakeFileRefs(), nil)
-	record := store.TaskRecord{RenderConfig: json.RawMessage(`{"id":"x:render"}`), Data: decodeMap(t, `{"form":{"invoice":"k"}}`)}
+	b := NewFileBinding(newFakeFileRefs(), nil, fixedRenderConfig(`{"id":"x:render"}`))
+	record := store.TaskRecord{Data: decodeMap(t, `{"form":{"invoice":"k"}}`)}
 
-	view, err := b.ForReader(record, userPrincipal("alice"), false)
+	view, err := b.ForReader(context.Background(), record, userPrincipal("alice"), false)
 	require.NoError(t, err)
 	assert.Equal(t, record, view)
 }
 
 func TestFileBinding_ForReaderRejectsABadDeclaration(t *testing.T) {
-	b := NewFileBinding(newFakeFileRefs(), nil)
-	record := store.TaskRecord{RenderConfig: json.RawMessage(`{"files":["form.docs[0]"]}`), Data: decodeMap(t, `{}`)}
+	b := NewFileBinding(newFakeFileRefs(), nil, fixedRenderConfig(`{"files":["form.docs[0]"]}`))
+	record := store.TaskRecord{Data: decodeMap(t, `{}`)}
 
-	_, err := b.ForReader(record, userPrincipal("alice"), false)
+	_, err := b.ForReader(context.Background(), record, userPrincipal("alice"), false)
 	assert.Error(t, err)
 }
 
@@ -163,8 +169,8 @@ func TestFileBinding_FromCallerResolvesTheStepsFields(t *testing.T) {
 	invoice, _ := refs.Issue(alice, "k-invoice", readSubmit...)
 	doc, _ := refs.Issue(alice, "k-doc", readSubmit...)
 	var calls int
-	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))
-	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "form-step"}
+	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(filesRenderConfig))
+	record := store.TaskRecord{ActiveTaskTemplateID: "form-step"}
 	// "certificate" is declared only under another step's namespace.
 	payload := map[string]any{"invoice": invoice, "docs": []any{map[string]any{"file": doc}}, "certificate": "ref1", "__command": "submit"}
 
@@ -186,8 +192,8 @@ func TestFileBinding_FromCallerRefuses(t *testing.T) {
 	refs.expired[expiredRef] = true
 	readOnlyRef, _ := refs.Issue(userPrincipal("bob"), "k", fileaccess.ScopeRead)
 	var calls int
-	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))
-	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "form-step"}
+	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(filesRenderConfig))
+	record := store.TaskRecord{ActiveTaskTemplateID: "form-step"}
 
 	err := b.FromCaller(context.Background(), record, map[string]any{"invoice": alicesRef}, userPrincipal("bob"))
 	assert.ErrorIs(t, err, fileaccess.ErrNotYours)
@@ -202,8 +208,8 @@ func TestFileBinding_FromCallerRefuses(t *testing.T) {
 // A raw storage key, or anything else that is not a reference, is not stored.
 func TestFileBinding_FromCallerRefusesValuesThatAreNotReferences(t *testing.T) {
 	var calls int
-	b := NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls))
-	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "form-step"}
+	b := NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(filesRenderConfig))
+	record := store.TaskRecord{ActiveTaskTemplateID: "form-step"}
 
 	err := b.FromCaller(context.Background(), record, map[string]any{"invoice": "k-raw"}, userPrincipal("alice"))
 	assert.ErrorIs(t, err, fileaccess.ErrInvalid)
@@ -215,23 +221,27 @@ func TestFileBinding_FromCallerWithoutNamespaceOrFiles(t *testing.T) {
 
 	// Core stores nothing from a step without a namespace, so nothing is resolved.
 	var calls int
-	b := NewFileBinding(refs, namespaces(map[string]string{"bare-step": ""}, &calls))
+	renderConfig := `{"files":["invoice"]}`
+	b := NewFileBinding(refs, namespaces(map[string]string{"bare-step": ""}, &calls), func(context.Context, store.TaskRecord) (json.RawMessage, error) {
+		return json.RawMessage(renderConfig), nil
+	})
 	payload := map[string]any{"invoice": ref}
-	record := store.TaskRecord{RenderConfig: json.RawMessage(`{"files":["invoice"]}`), ActiveTaskTemplateID: "bare-step"}
+	record := store.TaskRecord{ActiveTaskTemplateID: "bare-step"}
 	require.NoError(t, b.FromCaller(context.Background(), record, payload, userPrincipal("bob")))
 	assert.Equal(t, map[string]any{"invoice": ref}, payload)
 
 	// A task that declares no files needs no step template.
 	calls = 0
-	record = store.TaskRecord{RenderConfig: json.RawMessage(`{"id":"x:render"}`), ActiveTaskTemplateID: "unknown"}
+	renderConfig = `{"id":"x:render"}`
+	record = store.TaskRecord{ActiveTaskTemplateID: "unknown"}
 	require.NoError(t, b.FromCaller(context.Background(), record, payload, userPrincipal("bob")))
 	assert.Zero(t, calls)
 }
 
 func TestFileBinding_FromCallerFailsWithoutTheStepTemplate(t *testing.T) {
 	var calls int
-	b := NewFileBinding(newFakeFileRefs(), namespaces(nil, &calls))
-	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "missing"}
+	b := NewFileBinding(newFakeFileRefs(), namespaces(nil, &calls), fixedRenderConfig(filesRenderConfig))
+	record := store.TaskRecord{ActiveTaskTemplateID: "missing"}
 
 	err := b.FromCaller(context.Background(), record, map[string]any{}, userPrincipal("alice"))
 	assert.ErrorContains(t, err, `"missing"`)

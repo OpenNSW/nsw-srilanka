@@ -6,18 +6,19 @@
 // declared here instead, so an upstream API change touches only this package
 // rather than every caller.
 //
-// It also owns the IdP claim vocabulary. The names of the claims this
+// It also owns the IdP claim vocabulary. The names of the claims every
 // deployment reads are unexported constants here, declared to core/authn in
 // config.go and flattened onto Principal, so no caller ever spells a claim
-// name. Those names must stay in sync with the ThunderID token configuration
-// in idp/bootstrap/ — the same obligation internal/scopes carries for scope
-// names.
+// name. Claims that differ per deployment (for attribute-based rules) are
+// listed in config.yaml and reach callers through Principal.ExtraClaims. Both
+// sets of names must stay in sync with the ThunderID token configuration in
+// idp/bootstrap/ — the same obligation internal/scopes carries for scope names.
 package authn
 
 import "context"
 
-// IdP claim names read by this deployment. Adding one means declaring it in
-// Config.coreConfig (or core/authn never extracts it) and surfacing it on
+// IdP claim names read by every deployment. Adding one means listing it in
+// builtinUserClaims (or core/authn never extracts it) and surfacing it on
 // Principal.
 const (
 	claimEmail       = "email"
@@ -25,6 +26,24 @@ const (
 	claimOUID        = "ouId"
 	claimOUHandle    = "ouHandle"
 )
+
+// builtinUserClaims are the claims read from every user token and flattened onto
+// Principal's named fields.
+//
+// email, ouId and ouHandle are Required: a token missing one is rejected
+// outright (ouHandle in particular backs the user_records.ou_handle NOT NULL
+// constraint and the task-ownership gate, so a token without it is refused at
+// the auth boundary). phone_number is best-effort.
+//
+// They are reserved: a deployment can't also list one as an extra user claim,
+// and Principal.ExtraClaims never repeats them.
+var builtinUserClaims = ClaimSpec{
+	Required: []string{claimEmail, claimOUID, claimOUHandle},
+	Optional: []string{claimPhoneNumber},
+}
+
+// builtinUserClaimNames is every name in builtinUserClaims.
+var builtinUserClaimNames = builtinUserClaims.names()
 
 // Kind distinguishes a human caller from a machine (M2M) client.
 type Kind string
@@ -61,6 +80,44 @@ type Principal struct {
 	PhoneNumber string
 	OUID        string
 	OUHandle    string
+
+	// ExtraClaims holds the further claims the deployment configured for this
+	// kind of principal (Config.ExtraUserClaims or Config.ExtraClientClaims),
+	// keyed by claim name. A claim absent from the token is absent here. The
+	// built-in claims above are never repeated in it. Nil when none was
+	// configured or present.
+	ExtraClaims Claims
+}
+
+// Claims is a set of token claims keyed by name, with the JSON-decoded value as
+// the IdP sent it: string, []any, float64, bool or map[string]any. Treat it as
+// read-only. A nil Claims is safe to read.
+type Claims map[string]any
+
+// String returns the claim as a string, or "" if it is absent or not a string.
+func (c Claims) String(name string) string {
+	v, _ := c[name].(string)
+	return v
+}
+
+// Strings returns the claim as a string slice, or nil if it is absent or is not
+// an array of strings. A single string is not split: the claim is read as it
+// was issued, so a free-text attribute like "Customs Division" stays one value.
+// Index the map directly for any other shape.
+func (c Claims) Strings(name string) []string {
+	v, ok := c[name].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(v))
+	for _, item := range v {
+		s, ok := item.(string)
+		if !ok {
+			return nil
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // Subject returns a stable identifier for the principal: the persisted user ID

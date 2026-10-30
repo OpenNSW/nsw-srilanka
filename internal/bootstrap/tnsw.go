@@ -71,6 +71,11 @@ func mountTNSW(
 	// Same, for a node inside a task workflow, which lives in its own ID space on the task workflow
 	// manager (mirrors the two engine-status routes above).
 	mux.Handle("POST /api/v1/admin/task/{id}/steps/{stepId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(h.consignment.HandleResolveTaskWorkflowAdminIntervention))))
+	// Force-parking takes a waiting TASK node's task away from whoever is working on it and parks
+	// the node for the resolve route above, so it sits behind the same scope.
+	mux.Handle("POST /api/v1/admin/workflows/{id}/steps/{stepId}/force-park", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(h.consignment.HandleForceParkTaskNode))))
+	// Same, for one step inside a task workflow: the step parks and the task stays open.
+	mux.Handle("POST /api/v1/admin/task/{id}/steps/{stepId}/force-park", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(h.consignment.HandleForceParkTaskWorkflowStep))))
 
 	// Payment webhook endpoints. Requires valid JWT issued from nsw-srilanka's IDP with the appropriate scope. The gatewayId path param is used to resolve the correct payment gateway configuration for the webhook.
 	// Authenticating the caller as the gateway itself is the gateway's own job:

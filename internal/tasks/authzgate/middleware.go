@@ -1,6 +1,6 @@
 // Package authzgate is Layer 1 of task-step authorization: an HTTP middleware for
 // the task-write routes that reads the caller's identity and attaches an
-// authz.Input — including a lazy consignment-ownership resolver — to the request
+// authz.Input — including a lazy case-ownership resolver — to the request
 // context for the PRE_RESUME authz extension to evaluate.
 //
 // It resolves the principal eagerly (cheap) but defers ownership to a resolver
@@ -13,25 +13,20 @@ package authzgate
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
-// Logical role names ownedRolesFor resolves ownership for. The global catalog
-// must define both — NewMiddleware enforces it.
-const (
-	roleTrader = "trader"
-	roleCHA    = "cha"
-)
-
-// CaseOwnership returns the trader and CHA company ids that own a case — in TNSW, the
-// consignment whose ID is the task's case ID. *consignment.Service satisfies it via
-// GetOwnership.
-type CaseOwnership interface {
-	GetOwnership(ctx context.Context, caseID string) (traderCompanyID, chaCompanyID string, err error)
+// CaseRoles reports the logical roles any of parties holds on a case — in TNSW, the
+// consignment whose ID is the task's case ID. A case that does not exist, or that none
+// of parties is on, yields an empty map, not an error. *caseparty.Repository satisfies
+// it.
+type CaseRoles interface {
+	RolesOf(ctx context.Context, caseID string, parties ...caseparty.Ref) (map[string]bool, error)
 }
 
 // CompanyResolver resolves a user's company id from their OU handle. It must
@@ -44,19 +39,16 @@ type CompanyResolver interface {
 // Middleware attaches the authz.Input (principal facts + a lazy ownership
 // resolver) for task-write requests.
 type Middleware struct {
-	ownership CaseOwnership
-	company   CompanyResolver
+	roles   CaseRoles
+	company CompanyResolver
 }
 
-// NewMiddleware builds the middleware. ownership and company are required;
-// roles is the global catalog's Roles map, validated here so a catalog missing
-// a role ownedRolesFor depends on fails construction instead of silently
-// denying every request in that role.
-func NewMiddleware(ownership CaseOwnership, company CompanyResolver, roles map[string]string) (*Middleware, error) {
-	if err := catalog.RequireRoles(roles, roleTrader, roleCHA); err != nil {
-		return nil, err
+// NewMiddleware builds the middleware. roles and company are both required.
+func NewMiddleware(roles CaseRoles, company CompanyResolver) (*Middleware, error) {
+	if roles == nil || company == nil {
+		return nil, errors.New("authzgate: case roles and company resolver are required")
 	}
-	return &Middleware{ownership: ownership, company: company}, nil
+	return &Middleware{roles: roles, company: company}, nil
 }
 
 // Handler wraps next (the task-write handler), attaching the authz Input.
@@ -109,15 +101,7 @@ func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
 		if userCompanyID == "" {
 			return owned, nil // no company profile — owns nothing; skip ownership lookup
 		}
-		traderCompanyID, chaCompanyID, err := m.ownership.GetOwnership(ctx, caseID)
-		if err != nil {
-			return nil, err
-		}
-		// roleTrader/roleCHA are hardcoded because each maps to a specific
-		// ownership column here, not because they are arbitrary; NewMiddleware's
-		// validateCatalogRoles call enforces that the catalog defines both.
-		owned[roleTrader] = userCompanyID == traderCompanyID
-		owned[roleCHA] = chaCompanyID != "" && userCompanyID == chaCompanyID
-		return owned, nil
+		// The caller owns a case in every role their company holds on it.
+		return m.roles.RolesOf(ctx, caseID, caseparty.Company(userCompanyID))
 	}
 }

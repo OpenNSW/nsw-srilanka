@@ -16,6 +16,7 @@ export type ParkCategory =
   | 'SPLIT_DATA'
   | 'CHILD_FAILURE'
   | 'DEFINITION_ERROR'
+  | 'ADMIN_FORCED'
   | 'UNKNOWN'
 
 export interface EngineNode {

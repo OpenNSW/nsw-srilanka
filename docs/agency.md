@@ -203,11 +203,11 @@ the agency's artifacts therefore declare for every task:
 
 - the step's `authz` extension says which roles may run each command, e.g.
   `"PENDING_USER": { "submit": ["officer"] }`;
-- the render config's `read.roles` says which roles may open the task, e.g.
+- the task template's `read.roles` says which roles may open the task, e.g.
   `["officer"]`.
 
 A step without an `authz` block is refused on writes, so every step must declare one.
-A render config without a `read` block is readable by every catalog role, so a task
+A task template without a `read` block is readable by every catalog role, so a task
 that should be open to one role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
 (read authorization) and the
 [authz extension](../internal/tasks/extensions/authz/README.md).
@@ -239,9 +239,15 @@ every catalog role then owns it.
 
 `cases` is the generic grouping of the workflows that work on one real-world matter.
 One case has many workflows (`agency_workflow.case_id`). It carries the columns of
-`consignments` that are not trade-specific (`id`, `name`, `state`, `created_at`,
-`updated_at`); `flow` and the trader/CHA detail belong in their own table joined on
-case id.
+`consignments` that are not trade-specific (`id`, `name`, `state`, `created_by`,
+`created_at`, `updated_at`); `flow` belongs in its own table joined on case id.
+
+`case_parties` records who holds which logical role on a case, one party (a company or
+a user) per role. The role is a catalog role name, so a new role needs no new column.
+In TNSW a consignment's trader company holds `trader` and the CHA company it selected
+holds `cha`, and a company owns a task in every role it holds on the task's case. An
+agency writes no parties yet: every injected workflow is owned in every catalog role
+(see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
 
 `state` is `IN_PROGRESS` on creation and becomes `FINISHED` once **every** workflow of
 the case has completed. A new workflow injected into a finished case reopens it
@@ -254,7 +260,7 @@ workflow is an error, since nothing else runs parent workflows in an agency. The
 row is locked while deciding, so two workflows completing at once cannot both leave it
 `IN_PROGRESS`.
 TNSW uses the same table: a consignment is a case with the same id, and `consignments`
-holds only its trade data (`flow`, trader and CHA). TNSW starts and completes its flows
+holds only its trade data (`flow`); its trader and CHA are the case's parties. TNSW starts and completes its flows
 through `internal/caseflow` (`case_flows`), which applies the same state rule. The
 agency still records its workflows in `agency_workflow`.
 
@@ -263,6 +269,5 @@ because callers and artifacts speak trade. Internally it is the case id.
 
 ## Known simplifications
 
-- **No "next task" button for officers.** On completion `TaskDetailScreen` looks up
-  the next task via `/api/v1/consignments/{id}`, which 404s for a case, so the button
-  never appears. The detail header also shows an empty trade-flow badge.
+- **Empty trade-flow badge.** The detail header shows an empty trade-flow badge for a
+  case.

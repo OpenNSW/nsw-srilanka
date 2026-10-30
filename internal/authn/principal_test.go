@@ -2,6 +2,7 @@ package authn
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	coreauthn "github.com/OpenNSW/core/authn"
@@ -166,5 +167,216 @@ func TestScopePrincipalFromContext(t *testing.T) {
 	}
 	if len(sp.Scopes()) != 1 || sp.Scopes()[0] != "nsw:consignment:read" {
 		t.Fatalf("Scopes() = %#v", sp.Scopes())
+	}
+}
+
+// The claims a deployment lists in config.yaml reach handlers on
+// Principal.ExtraClaims, while the built-ins stay on their named fields only.
+func TestPrincipalFromAuthContext_UserCarriesExtraClaims(t *testing.T) {
+	p := principalFromAuthContext(&coreauthn.AuthContext{
+		User: &coreauthn.UserContext{
+			ID: "u1",
+			ExtraClaims: coreauthn.ExtraClaims{
+				"email":        "officer@example.com",
+				"phone_number": "+94771234567",
+				"ouId":         "OU-001",
+				"ouHandle":     "ou-001",
+				"department":   "Customs",
+				"grades":       []any{"A", "B"},
+			},
+		},
+	})
+	if p == nil {
+		t.Fatal("expected a principal")
+	}
+	if got := p.ExtraClaims.String("department"); got != "Customs" {
+		t.Errorf("department = %q, want Customs", got)
+	}
+	if got := p.ExtraClaims.Strings("grades"); !slices.Equal(got, []string{"A", "B"}) {
+		t.Errorf("grades = %v, want [A B]", got)
+	}
+	for _, name := range builtinUserClaimNames {
+		if _, dup := p.ExtraClaims[name]; dup {
+			t.Errorf("built-in claim %q must not be repeated in ExtraClaims", name)
+		}
+	}
+	if len(p.ExtraClaims) != 2 {
+		t.Errorf("expected only the two configured extras, got %v", p.ExtraClaims)
+	}
+	if p.OUHandle != "ou-001" {
+		t.Errorf("built-in OUHandle lost: %#v", p)
+	}
+}
+
+// captureProfileService records the Principal a UserProfileService is called
+// with.
+type captureProfileService struct{ got *Principal }
+
+func (c *captureProfileService) GetOrCreateUser(_ context.Context, p *Principal) (string, error) {
+	c.got = p
+	return "u1", nil
+}
+
+// UserProfileService is called with a Principal built from core's user
+// principal, which must carry the same extra claims the request's Principal
+// does, and keep the built-ins on their named fields only.
+func TestCoreProfileShim_CarriesExtraClaims(t *testing.T) {
+	svc := &captureProfileService{}
+	id, err := coreProfileShim{svc: svc}.GetOrCreateUser(context.Background(), &coreauthn.UserPrincipal{
+		Subject: "idp1",
+		Roles:   []string{"Officer"},
+		Scopes:  []string{"nsw:task:read"},
+		ExtraClaims: coreauthn.ExtraClaims{
+			"email":        "officer@example.com",
+			"phone_number": "+94771234567",
+			"ouId":         "OU-001",
+			"ouHandle":     "ou-001",
+			"department":   "Customs",
+			"grades":       []any{"A", "B"},
+		},
+	})
+	if err != nil || id != "u1" {
+		t.Fatalf("GetOrCreateUser = %q, %v", id, err)
+	}
+
+	p := svc.got
+	if p == nil {
+		t.Fatal("expected the service to be called with a principal")
+	}
+	if p.Kind != KindUser || p.IDPUserID != "idp1" || p.Email != "officer@example.com" ||
+		p.PhoneNumber != "+94771234567" || p.OUID != "OU-001" || p.OUHandle != "ou-001" {
+		t.Fatalf("named fields lost: %#v", p)
+	}
+	if got := p.ExtraClaims.String("department"); got != "Customs" {
+		t.Errorf("department = %q, want Customs", got)
+	}
+	if got := p.ExtraClaims.Strings("grades"); !slices.Equal(got, []string{"A", "B"}) {
+		t.Errorf("grades = %v, want [A B]", got)
+	}
+	for _, name := range builtinUserClaimNames {
+		if _, dup := p.ExtraClaims[name]; dup {
+			t.Errorf("built-in claim %q must not be repeated in ExtraClaims", name)
+		}
+	}
+	if len(p.ExtraClaims) != 2 {
+		t.Errorf("expected only the two extras, got %v", p.ExtraClaims)
+	}
+}
+
+func TestPrincipalFromAuthContext_ClientCarriesExtraClaims(t *testing.T) {
+	p := principalFromAuthContext(&coreauthn.AuthContext{
+		Client: &coreauthn.ClientContext{
+			ClientID:    "NSW_TO_NPQS",
+			ExtraClaims: coreauthn.ExtraClaims{"agency": "npqs"},
+		},
+	})
+	if p == nil {
+		t.Fatal("expected a principal")
+	}
+	if p.Kind != KindClient || p.ExtraClaims.String("agency") != "npqs" {
+		t.Fatalf("unexpected client principal: %#v", p)
+	}
+	// A client's claims are not subject to the user built-in reservation: they
+	// are never flattened onto fields, so every extracted name is kept.
+	p = principalFromAuthContext(&coreauthn.AuthContext{
+		Client: &coreauthn.ClientContext{ExtraClaims: coreauthn.ExtraClaims{"email": "svc@example.com"}},
+	})
+	if p.ExtraClaims.String("email") != "svc@example.com" {
+		t.Fatalf("client claim named like a user built-in was dropped: %#v", p.ExtraClaims)
+	}
+}
+
+// Nothing configured, or nothing present in the token, leaves ExtraClaims nil.
+func TestPrincipalFromAuthContext_NoExtraClaimsIsNil(t *testing.T) {
+	for name, ac := range map[string]*coreauthn.AuthContext{
+		"user without extras": {User: &coreauthn.UserContext{ID: "u1"}},
+		"user with only built-ins": {User: &coreauthn.UserContext{
+			ExtraClaims: coreauthn.ExtraClaims{"email": "a@example.com", "ouHandle": "ou-1"},
+		}},
+		"client without extras": {Client: &coreauthn.ClientContext{ClientID: "SVC"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if p := principalFromAuthContext(ac); p == nil || p.ExtraClaims != nil {
+				t.Fatalf("expected a principal with nil ExtraClaims, got %#v", p)
+			}
+		})
+	}
+}
+
+// core/authn shares its claim map with the profile-service shim and the rest of
+// the request, so the Principal must hold its own copy.
+func TestPrincipalFromAuthContext_ExtraClaimsAreCopied(t *testing.T) {
+	src := coreauthn.ExtraClaims{"department": "Customs"}
+	p := principalFromAuthContext(&coreauthn.AuthContext{User: &coreauthn.UserContext{ExtraClaims: src}})
+
+	p.ExtraClaims["department"] = "tampered"
+	p.ExtraClaims["added"] = "x"
+	delete(p.ExtraClaims, "department")
+
+	if len(src) != 1 || src["department"] != "Customs" {
+		t.Fatalf("core's claim map was changed through the Principal: %v", src)
+	}
+}
+
+func TestClaims_String(t *testing.T) {
+	c := Claims{"dept": "Customs", "level": float64(3), "grades": []any{"A"}}
+	tests := []struct {
+		name, claim, want string
+	}{
+		{"string claim", "dept", "Customs"},
+		{"number is not a string", "level", ""},
+		{"array is not a string", "grades", ""},
+		{"absent", "missing", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := c.String(tt.claim); got != tt.want {
+				t.Fatalf("String(%q) = %q, want %q", tt.claim, got, tt.want)
+			}
+		})
+	}
+	if got := Claims(nil).String("dept"); got != "" {
+		t.Fatalf("nil Claims: String = %q, want empty", got)
+	}
+}
+
+func TestClaims_Strings(t *testing.T) {
+	c := Claims{
+		"json array":  []any{"A", "B"},
+		"empty array": []any{},
+		"mixed array": []any{"A", float64(1)},
+		"free text":   "Customs Division",
+		"number":      float64(3),
+	}
+	tests := []struct {
+		claim string
+		want  []string
+	}{
+		{"json array", []string{"A", "B"}},
+		{"empty array", []string{}},
+		{"mixed array", nil},
+		// A string is not split on spaces: a free-text attribute must not
+		// turn into two values.
+		{"free text", nil},
+		{"number", nil},
+		{"missing", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.claim, func(t *testing.T) {
+			got := c.Strings(tt.claim)
+			if !slices.Equal(got, tt.want) || (tt.want == nil) != (got == nil) {
+				t.Fatalf("Strings(%q) = %#v, want %#v", tt.claim, got, tt.want)
+			}
+		})
+	}
+	if got := Claims(nil).Strings("json array"); got != nil {
+		t.Fatalf("nil Claims: Strings = %#v, want nil", got)
+	}
+
+	// The returned slice is the caller's own.
+	got := c.Strings("json array")
+	got[0] = "tampered"
+	if c.Strings("json array")[0] != "A" {
+		t.Fatal("Strings returned the claim's backing data")
 	}
 }

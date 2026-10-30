@@ -170,6 +170,139 @@ backend:
       writeTimeout: 30s
       idleTimeout: 60s
 
+    # The server's (and the otc CLI's) database connection: core/database's
+    # Config (github.com/OpenNSW/core/database). The schema migrator has its own,
+    # under migration.config below.
+    db:
+      # postgres is the only driver supported today.
+      driver: postgres
+      postgres:
+        host: nsw-db             # Postgres Service name in the cluster
+        port: 5432
+        user: postgres
+        password: "{{env:DB_PASSWORD}}"
+        name: nsw_db
+        # "disable" only for local/dev
+        sslMode: require
+        pool:
+          maxIdleConns: 10
+          maxOpenConns: 100
+          maxConnLifetimeSeconds: 3600
+
+    temporal:
+      host: temporal
+      port: 7233
+      namespace: default
+      # For a Temporal server that requires TLS or client certificates, mount
+      # the temporal-client-tls Secret (backend.volumes above) and uncomment.
+      # The files are read once at startup, so restart the backend after the
+      # certificate is renewed. serverName defaults to host.
+      # tls:
+      #   caFile: /certs/temporal/ca.crt
+      #   certFile: /certs/temporal/tls.crt
+      #   keyFile: /certs/temporal/tls.key
+      #   serverName: temporal
+
+    # Uploaded document blobs: local | s3 | proxy (see configs/config.example.yaml).
+    storage:
+      type: s3
+      presignTTLSeconds: 900
+      # What clients may upload. Not read when type is proxy: the owning service
+      # applies its own. MIME types, compared exactly with the upload's.
+      allowedUploadTypes:
+        - application/pdf
+        - image/jpeg
+        - image/png
+        - image/gif
+        - image/webp
+        # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
+        # a known malware vector.
+        - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+        # XML is data to download, not to display: it is not in inlineTypes, so a
+        # download saves it instead of opening it.
+        - text/xml
+        - application/xml
+      # What machine clients may upload on POST /api/v1/internal/storage beyond
+      # allowedUploadTypes, by the client's name in the catalog's clients. Not
+      # read when type is proxy. Unlike allowedUploadTypes it may list a type a
+      # browser opens as a document, such as text/html for the documents an
+      # agency's HTML_DOCUMENT_GENERATOR generates and stores here (the route
+      # is for files a deployment generates itself); only the clients named,
+      # holding nsw:storage:internalwrite, can store it.
+      allowedInternalUploadTypes:
+        npqs:
+          - text/html
+      # The file name extensions an upload of each type may have, on either
+      # upload route, in order of preference: a name ending in another is refused
+      # with 400, and a name without one is given the first. The stored file keeps
+      # the extension, and a download is named by it. Every type in
+      # allowedUploadTypes and allowedInternalUploadTypes needs an entry, or
+      # startup fails. Not read when type is proxy.
+      uploadTypeExtensions:
+        application/pdf: [.pdf]
+        image/jpeg: [.jpg, .jpeg, .jfif]
+        image/png: [.png]
+        image/gif: [.gif]
+        image/webp: [.webp]
+        application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: [.xlsx]
+        text/xml: [.xml]
+        application/xml: [.xml]
+        text/html: [.html]
+      # What a download opens in the browser; every other file is saved. MIME
+      # types, compared exactly with the stored type. Not read when type is
+      # proxy: the owning service applies its own. text/html is listed for the
+      # documents this service generates and stores itself, and is never in
+      # allowedUploadTypes: a type a browser interprets as a document runs script
+      # from the origin it is served on, so startup fails when a type clients may
+      # upload is listed here and is not one of the first six.
+      inlineTypes:
+        - application/pdf
+        - image/png
+        - image/jpeg
+        - image/gif
+        - image/webp
+        - text/plain
+        - text/html
+      # Largest upload, in bytes (32 MiB). Not read when type is proxy.
+      maxUploadBytes: 33554432
+      # Seals the file tokens clients hold in place of stored file keys.
+      # Required whatever the type.
+      tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
+      # How long the file tokens a user reads with last, in seconds. Optional:
+      # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
+      tokenTTLSeconds: 3600
+      s3:
+        bucket: nsw-uploads
+        region: auto
+        endpoint: "https://<accountid>.r2.cloudflarestorage.com"
+        # Static credentials, set together; leave both out to use the default
+        # AWS credential chain (e.g. IRSA). R2 needs them. Add
+        # STORAGE_S3_ACCESS_KEY / STORAGE_S3_SECRET_KEY to backend.env from a
+        # Secret first.
+        # accessKey: "{{env:STORAGE_S3_ACCESS_KEY}}"
+        # secretKey: "{{env:STORAGE_S3_SECRET_KEY}}"
+
+    # Inbound auth: tokens this backend accepts.
+    authn:
+      jwksURL: "https://idp.example.com/oauth2/jwks"
+      issuer: "https://idp.example.com"
+      audience: "https://api.nsw-srilanka.local"
+      # Further token claims this deployment reads, for attribute-based rules that
+      # differ per deployment. email, phone_number, ouId and ouHandle are always read
+      # and can't be listed here, nor can the names the token library binds (sub,
+      # scope, roles, client_id and the other registered claims); startup fails if
+      # one is. The IdP must also release a claim into the access token, or it never
+      # arrives. Top-level claim names only.
+      #
+      # "required" rejects (401) every token without the claim, so prefer "optional"
+      # and have rules deny when the attribute is missing.
+      # extraUserClaims:      # tokens issued to people (authorization_code)
+      #   required: []
+      #   optional: [department]
+      # extraClientClaims:    # tokens issued to machine clients (client_credentials)
+      #   optional: [agency]
+      insecureSkipTLSVerify: false
+
     # The global catalog: logical names used across configuration (task authz
     # rules, storage.allowedInternalUploadTypes) -> this deployment's IdP token
     # roles and OAuth2 client ids.
@@ -186,41 +319,32 @@ backend:
         slce: SLCE_TO_NSW
         govpay: GOVPAY_TO_NSW
 
-    # Payment methods: each one's gateway config, and the ids it collects
-    # every payee's (org_id/service_id) fees under. Replace the GovPay+ ids
-    # with the ones issued for this environment, quoted so they stay strings.
-    payment:
-      methods:
-        - id: govpay
-          is_active: true
-          render_info:
-            display_name: GovPay
-            description: Offline payment instructions
-            display_order: 1
-          config:
-            webhook_client_id: GOVPAY_TO_NSW
-            # Mounted from the govpay-go-private-key Secret (backend.volumes).
-            private_key: "file:/certs/govpay/go_private.pem"
-          payees:
-            fcau:
-              defaults: { subinst_id: "001" }
-              services:
-                app_fee: { service_id: "001" }
-            npqs:
-              defaults: { subinst_id: "002" }
-              services:
-                certificate_fee: { service_id: "001" }
-                treatment_fee: { service_id: "003" }
-            sltb:
-              defaults: { subinst_id: "003" }
-              services:
-                levy_fee: { service_id: "001" }
-                lab_fee: { service_id: "002" }
-            cda:
-              defaults: { subinst_id: "004" }
-              services:
-                app_fee: { service_id: "001" }
-                kcfn_fee: { service_id: "002" }
+    # Workflow/form definitions and manifest.json, fetched at startup from
+    # OpenNSW/one-trade-artifacts (tnsw/ base path) rather than baked into the
+    # image.
+    artifactLoader:
+      type: github
+      github:
+        owner: OpenNSW
+        repo: one-trade-artifacts
+        ref: main              # prefer an immutable tag/SHA in production
+        basePath: tnsw
+        # Required for a private repo (lifts the rate limit on a public one).
+        # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
+        # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
+
+    # Manifest version new flows start on (0: the highest published; see
+    # configs/config.example.yaml).
+    artifacts:
+      manifestVersion: 0
+
+    # Trader/agency portals calling this API.
+    cors:
+      allowedOrigins: ["https://trader.example.com"]
+      allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+      allowedHeaders: [Content-Type, Authorization]
+      allowCredentials: true
+      maxAge: 3600
 
     # Outbound services; replace the local endpoints for this deployment.
     services:
@@ -321,181 +445,41 @@ backend:
             endpointParams:
               resource: https://api.sltb.nsw-agency.local
 
-    # The server's (and the otc CLI's) database connection: core/database's
-    # Config (github.com/OpenNSW/core/database). The schema migrator has its own,
-    # under migration.config below.
-    db:
-      # postgres is the only driver supported today.
-      driver: postgres
-      postgres:
-        host: nsw-db             # Postgres Service name in the cluster
-        port: 5432
-        user: postgres
-        password: "{{env:DB_PASSWORD}}"
-        name: nsw_db
-        # "disable" only for local/dev
-        sslMode: require
-        pool:
-          maxIdleConns: 10
-          maxOpenConns: 100
-          maxConnLifetimeSeconds: 3600
-
-    # Workflow/form definitions and manifest.json, fetched at startup from
-    # OpenNSW/one-trade-artifacts (tnsw/ base path) rather than baked into the
-    # image.
-    artifactLoader:
-      type: github
-      github:
-        owner: OpenNSW
-        repo: one-trade-artifacts
-        ref: main              # prefer an immutable tag/SHA in production
-        basePath: tnsw
-        # Required for a private repo (lifts the rate limit on a public one).
-        # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
-        # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
-
-    # Manifest version new flows start on (0: the highest published; see
-    # configs/config.example.yaml).
-    artifacts:
-      manifestVersion: 0
-
-    # Trader/agency portals calling this API.
-    cors:
-      allowedOrigins: ["https://trader.example.com"]
-      allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
-      allowedHeaders: [Content-Type, Authorization]
-      allowCredentials: true
-      maxAge: 3600
-
-    # Uploaded document blobs: local | s3 | proxy (see configs/config.example.yaml).
-    storage:
-      type: s3
-      presignTTLSeconds: 900
-      # What clients may upload. Not read when type is proxy: the owning service
-      # applies its own. MIME types, compared exactly with the upload's.
-      allowedUploadTypes:
-        - application/pdf
-        - image/jpeg
-        - image/png
-        - image/gif
-        - image/webp
-        # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
-        # a known malware vector.
-        - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-        # XML is data to download, not to display: it is not in inlineTypes, so a
-        # download saves it instead of opening it.
-        - text/xml
-        - application/xml
-      # What machine clients may upload on POST /api/v1/internal/storage beyond
-      # allowedUploadTypes, by the client's name in the catalog's clients. Not
-      # read when type is proxy. Unlike allowedUploadTypes it may list a type a
-      # browser opens as a document, such as text/html for the documents an
-      # agency's HTML_DOCUMENT_GENERATOR generates and stores here (the route
-      # is for files a deployment generates itself); only the clients named,
-      # holding nsw:storage:internalwrite, can store it.
-      allowedInternalUploadTypes:
-        npqs:
-          - text/html
-      # The file name extensions an upload of each type may have, on either
-      # upload route, in order of preference: a name ending in another is refused
-      # with 400, and a name without one is given the first. The stored file keeps
-      # the extension, and a download is named by it. Every type in
-      # allowedUploadTypes and allowedInternalUploadTypes needs an entry, or
-      # startup fails. Not read when type is proxy.
-      uploadTypeExtensions:
-        application/pdf: [.pdf]
-        image/jpeg: [.jpg, .jpeg, .jfif]
-        image/png: [.png]
-        image/gif: [.gif]
-        image/webp: [.webp]
-        application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: [.xlsx]
-        text/xml: [.xml]
-        application/xml: [.xml]
-        text/html: [.html]
-      # What a download opens in the browser; every other file is saved. MIME
-      # types, compared exactly with the stored type. Not read when type is
-      # proxy: the owning service applies its own. text/html is listed for the
-      # documents this service generates and stores itself, and is never in
-      # allowedUploadTypes: a type a browser interprets as a document runs script
-      # from the origin it is served on, so startup fails when a type clients may
-      # upload is listed here and is not one of the first six.
-      inlineTypes:
-        - application/pdf
-        - image/png
-        - image/jpeg
-        - image/gif
-        - image/webp
-        - text/plain
-        - text/html
-      # Largest upload, in bytes (32 MiB). Not read when type is proxy.
-      maxUploadBytes: 33554432
-      # Seals the file tokens clients hold in place of stored file keys.
-      # Required whatever the type.
-      tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
-      # How long the file tokens a user reads with last, in seconds. Optional:
-      # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
-      tokenTTLSeconds: 3600
-      s3:
-        bucket: nsw-uploads
-        region: auto
-        endpoint: "https://<accountid>.r2.cloudflarestorage.com"
-        # Static credentials, set together; leave both out to use the default
-        # AWS credential chain (e.g. IRSA). R2 needs them. Add
-        # STORAGE_S3_ACCESS_KEY / STORAGE_S3_SECRET_KEY to backend.env from a
-        # Secret first.
-        # accessKey: "{{env:STORAGE_S3_ACCESS_KEY}}"
-        # secretKey: "{{env:STORAGE_S3_SECRET_KEY}}"
-
-    # Inbound auth: tokens this backend accepts.
-    authn:
-      jwksURL: "https://idp.example.com/oauth2/jwks"
-      issuer: "https://idp.example.com"
-      audience: "https://api.nsw-srilanka.local"
-      insecureSkipTLSVerify: false
-
-    temporal:
-      host: temporal
-      port: 7233
-      namespace: default
-      # For a Temporal server that requires TLS or client certificates, mount
-      # the temporal-client-tls Secret (backend.volumes above) and uncomment.
-      # The files are read once at startup, so restart the backend after the
-      # certificate is renewed. serverName defaults to host.
-      # tls:
-      #   caFile: /certs/temporal/ca.crt
-      #   certFile: /certs/temporal/tls.crt
-      #   keyFile: /certs/temporal/tls.key
-      #   serverName: temporal
-
-    # Email/SMS gateways, one settings block per channel.
-    notification:
-      providers:
-        email:
-          baseURL: "https://email.example.com"
-          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
-        sms:
-          baseURL: "https://sms.example.com"
-          userName: "nsw"
-          password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-          sidCode: "NSW"
-
-    # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
-    # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
-    # Endpoint is the base without /v1/{metrics,traces,logs}. Auth via
-    # OTEL_AUTH_HEADER in backend.env when required.
-    # otel:
-    #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
-    #   serviceName: tnsw-api
-    #   headers:
-    #     Authorization: "{{env:OTEL_AUTH_HEADER}}"
-
-    integrations:
-      slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
-
-    # Flows a trader or CHA may start on a consignment, besides the export
-    # flow; see configs/config.example.yaml.
-    consignment:
-      flows: []
+    # Payment methods: each one's gateway config, and the ids it collects
+    # every payee's (org_id/service_id) fees under. Replace the GovPay+ ids
+    # with the ones issued for this environment, quoted so they stay strings.
+    payment:
+      methods:
+        - id: govpay
+          is_active: true
+          render_info:
+            display_name: GovPay
+            description: Offline payment instructions
+            display_order: 1
+          config:
+            webhook_client_id: GOVPAY_TO_NSW
+            # Mounted from the govpay-go-private-key Secret (backend.volumes).
+            private_key: "file:/certs/govpay/go_private.pem"
+          payees:
+            fcau:
+              defaults: { subinst_id: "001" }
+              services:
+                app_fee: { service_id: "001" }
+            npqs:
+              defaults: { subinst_id: "002" }
+              services:
+                certificate_fee: { service_id: "001" }
+                treatment_fee: { service_id: "003" }
+            sltb:
+              defaults: { subinst_id: "003" }
+              services:
+                levy_fee: { service_id: "001" }
+                lab_fee: { service_id: "002" }
+            cda:
+              defaults: { subinst_id: "004" }
+              services:
+                app_fee: { service_id: "001" }
+                kcfn_fee: { service_id: "002" }
 
     # Reference ID formats for payment references and REFID_GENERATOR steps;
     # see configs/config.example.yaml. A step fails if it names a format
@@ -560,6 +544,36 @@ backend:
                 - {type: literal, value: "-"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyyMM}", padding: 5}
+
+    # Email/SMS gateways, one settings block per channel.
+    notification:
+      providers:
+        email:
+          baseURL: "https://email.example.com"
+          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+        sms:
+          baseURL: "https://sms.example.com"
+          userName: "nsw"
+          password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+          sidCode: "NSW"
+
+    integrations:
+      slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
+
+    # Flows a trader or CHA may start on a consignment, besides the export
+    # flow; see configs/config.example.yaml.
+    consignment:
+      flows: []
+
+    # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
+    # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
+    # Endpoint is the base without /v1/{metrics,traces,logs}. Auth via
+    # OTEL_AUTH_HEADER in backend.env when required.
+    # otel:
+    #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
+    #   serviceName: tnsw-api
+    #   headers:
+    #     Authorization: "{{env:OTEL_AUTH_HEADER}}"
 
   # Expose the backend API. Enable the one that matches your platform.
   #

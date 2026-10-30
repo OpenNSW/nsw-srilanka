@@ -120,8 +120,6 @@ const si: Locale = {
       goBack: 'ආපසු යන්න',
       refresh: 'නැවුම් කරන්න',
       taskId: 'කාර්ය අංකය',
-      continueTo: '{{name}} වෙත ඉදිරියට යන්න',
-      continueToNext: 'ඊළඟ කාර්යය වෙත ඉදිරියට යන්න',
       backToConsignment: 'භාණ්ඩ තොගය වෙත ආපසු',
       backToCase: 'ගොනුව වෙත ආපසු',
       draftSaved: 'කෙටුම්පත සුරකින ලදී',

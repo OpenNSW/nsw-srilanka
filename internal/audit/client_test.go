@@ -110,19 +110,18 @@ func TestLogSink_WritesCategoryAudit(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &line); err != nil {
 		t.Fatalf("unmarshal log: %v", err)
 	}
-	if line["category"] != categoryAudit {
-		t.Fatalf("category = %v, want %q", line["category"], categoryAudit)
+	if line["category"] != Category {
+		t.Fatalf("category = %v, want %q", line["category"], Category)
 	}
 	if line["eventType"] != string(EventConsignment) {
 		t.Fatalf("eventType = %v", line["eventType"])
 	}
 }
 
-func TestLogSink_NilLoggerResolvesAtWrite(t *testing.T) {
+func TestLogSink_NilLoggerDiscards(t *testing.T) {
 	sink := NewLogSink(nil)
 	var buf bytes.Buffer
 	prev := slog.Default()
-	// Installed after construction: a nil logger reads slog.Default at Write.
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() {
 		slog.SetDefault(prev)
@@ -136,9 +135,8 @@ func TestLogSink_NilLoggerResolvesAtWrite(t *testing.T) {
 		ActorID:    "u1",
 		TargetType: TargetTask,
 	})
-
-	if !bytes.Contains(buf.Bytes(), []byte(`"category":"audit"`)) {
-		t.Fatalf("audit record dropped or missing category: %s", buf.String())
+	if buf.Len() != 0 {
+		t.Fatalf("nil LogSink wrote to slog.Default: %s", buf.String())
 	}
 }
 

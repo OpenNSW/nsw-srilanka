@@ -159,7 +159,7 @@ In the agency's folder (for example `dea-v2/`), for each kind of review:
   set from the request. The decision's `command` must be one TNSW's step allows (Step 6).
 
 - On every officer step, the roles that may act: the step's `authz` extension (for example
-  `"PENDING_USER": { "submit": ["officer"] }`) and the render config's `read.roles` (for
+  `"PENDING_USER": { "submit": ["officer"] }`) and the task template's `read.roles` (for
   example `["officer"]`). A task without them is open to every role in the agency's
   catalog. See [docs/agency.md, Roles per task](../agency.md#roles-per-task).
 
@@ -232,6 +232,9 @@ as the sign-in approach. Then, in its tabs:
 - **Token**, under **Token Attributes & Response**: add `email`, `phone_number`,
   `given_name`, `family_name`, `username`, `groups`, `roles`, `ouId`, `ouHandle` and
   `ouName` to the access token, and the same except `phone_number` to the ID token.
+- If the agency's access rules use further user attributes, add each to the access token here
+  too, and list it under `authn.extraUserClaims` in the backend config (Step 4). The config only
+  reads a claim; it never makes the IdP release it.
 
 The portal is a public client with PKCE and no secret. Note its client ID from
 **Credentials**: it is the `<portal client ID>` of Step 4.

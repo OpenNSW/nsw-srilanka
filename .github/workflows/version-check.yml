@@ -5,6 +5,8 @@ name: Version Check
 # version.txt alone pass at once, so this can be a required check. In the merge
 # queue it checks the PR again against what is merged ahead of it, and drops a
 # release PR whose version isn't higher than the version ahead of it.
+# CHANGELOG.md is written only by a release PR, so a PR that changes it without
+# version.txt fails too.
 
 on:
   pull_request:
@@ -38,6 +40,10 @@ jobs:
             BASE="origin/${BASE_REF}"
           fi
           if git diff --quiet "$BASE" HEAD -- version.txt; then
+            if ! git diff --quiet "$BASE" HEAD -- CHANGELOG.md; then
+              echo "::error file=CHANGELOG.md::CHANGELOG.md changes only in a release PR, together with version.txt. Put the note for deployers in this PR's Deployment Notes; the release's CHANGELOG section is written from them."
+              exit 1
+            fi
             echo "version.txt is unchanged, so this is not a release PR."
             exit 0
           fi

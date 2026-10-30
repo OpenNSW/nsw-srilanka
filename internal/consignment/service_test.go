@@ -106,8 +106,8 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	consignmentID := uuid.NewString()
 	companyID := "company-trader"
 
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(consignmentID, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(consignmentID)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(consignmentID, "My Test Consignment", "IMPORT", "trader1", companyID, "IN_PROGRESS", time.Now(), time.Now()))
 
@@ -141,8 +141,8 @@ func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
 
 	// Row belongs to a company entirely unrelated to whoever's inspecting it — there is no
 	// caller company to even compare against here, which is the point of this path.
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(consignmentID, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(consignmentID)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(consignmentID, "Someone Else's Consignment", "IMPORT", "trader1", "some-other-company", "IN_PROGRESS", time.Now(), time.Now()))
 
@@ -170,8 +170,8 @@ func TestConsignmentService_GetConsignmentByIDForAdmin_NotFound(t *testing.T) {
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(id, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	_, err := svc.GetConsignmentByIDForAdmin(context.Background(), id)
@@ -186,8 +186,8 @@ func TestConsignmentService_GetConsignmentByID_AccessDenied(t *testing.T) {
 	id := uuid.NewString()
 	// The row belongs to other companies and the caller matches neither, so ErrAccessDenied is
 	// returned right after the single read — no workflow/task work is attempted (no WM, nil store).
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(id, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(id, "IN_PROGRESS", "trader-co", "cha-co"))
 
@@ -207,8 +207,8 @@ func TestConsignmentService_GetConsignmentByID_CompanyMatchesCHASlot_TraderRoleO
 
 	id := uuid.NewString()
 	callerCompanyID := "company-cha"
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(id, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(id, "IN_PROGRESS", "company-trader", callerCompanyID))
 
@@ -225,8 +225,8 @@ func TestConsignmentService_GetConsignmentByID_CompanyMatchesTraderSlot_CHARoleO
 
 	id := uuid.NewString()
 	callerCompanyID := "company-trader"
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(id, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(id, "IN_PROGRESS", callerCompanyID))
 
 	_, err := svc.GetConsignmentByID(context.Background(), id, callerCompanyID, []string{"CHA"})
@@ -246,8 +246,8 @@ func TestConsignmentService_GetConsignmentByID_SameCompanyBothSlots_SingleRoleGr
 
 	id := uuid.NewString()
 	companyID := "company-both"
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(id, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(id, "IN_PROGRESS", companyID, companyID))
 	mockTaskStore.On("GetAllTasks", mock.Anything, id).Return(([]store.TaskRecord)(nil))
@@ -306,7 +306,7 @@ func TestConsignmentService_ListConsignments_EmptyQuery(t *testing.T) {
 	emptyQuery := ""
 
 	// Empty query string is ignored — no LIKE clause should appear
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE trader_company_id`).
+	sqlMock.ExpectQuery(consignmentSelect + `trader_party\.party_id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{TraderCompanyID: &companyID, Query: &emptyQuery})
@@ -322,7 +322,7 @@ func TestConsignmentService_ListConsignments_TraderCompany_Empty(t *testing.T) {
 	ctx := context.Background()
 	companyID := "company-1"
 
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE trader_company_id = \$1`).
+	sqlMock.ExpectQuery(consignmentSelect + `trader_party\.party_id = \$5`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{TraderCompanyID: &companyID})
@@ -348,7 +348,7 @@ func TestConsignmentService_ListConsignments_CHACompany(t *testing.T) {
 	chaCompanyID := "cha-company-1"
 	consignmentID := uuid.NewString()
 
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE cha_company_id`).
+	sqlMock.ExpectQuery(consignmentSelect + `cha_party\.party_id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "state", "trader_id", "trader_company_id", "cha_company_id", "created_at", "updated_at"}).
 			AddRow(consignmentID, "EXPORT", "IN_PROGRESS", "trader1", "trader-co", chaCompanyID, time.Now(), time.Now()))
 
@@ -408,7 +408,7 @@ func TestConsignmentService_ListConsignments_WithFilters(t *testing.T) {
 	state := InProgress
 	flow := FlowExport
 
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE trader_company_id`).
+	sqlMock.ExpectQuery(consignmentSelect + `trader_party\.party_id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{
@@ -426,8 +426,8 @@ func TestConsignmentService_GetConsignmentByID_NotFound(t *testing.T) {
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(id, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1", nil)
@@ -489,9 +489,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
 
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
-	sqlMock.ExpectCommit()
+	expectCreateConsignment(sqlMock)
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(returnedID, "EXPORT", traderID, traderCompanyID, "IN_PROGRESS", time.Now(), time.Now()))
@@ -555,9 +553,7 @@ func TestConsignmentService_CreateAndStartConsignment_StartFlowFails(t *testing.
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(&user.Record{ID: "trader1", OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co1", Data: []byte(`{}`)}, nil)
 
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
-	sqlMock.ExpectCommit()
+	expectCreateConsignment(sqlMock)
 
 	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1", defaultExportWorkflowTemplateID)
 	assert.Error(t, err)
@@ -592,8 +588,8 @@ func TestConsignmentService_GetConsignmentByID_DBError(t *testing.T) {
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(id, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnError(errors.New("connection refused"))
 
 	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1", nil)
@@ -611,7 +607,16 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_NilStore(t *testing.T) 
 
 func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
-	svc := mustNewService(t, nil, nil, nil, nil, nil, mockTaskStore)
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"manifest_v1.json": []byte(`{"artifacts":[
+			{"id":"my-task","kind":"task_template","path":"task.json"},
+			{"id":"my-task:render","kind":"generic_template","path":"render.json"}
+		]}`),
+		"task.json":   []byte(`{"id":"my-task","type":"FORM","workflow_id":"my-task-flow","render_config_id":"my-task:render"}`),
+		"render.json": []byte(`{"title":"My Step"}`),
+	})
+	require.NoError(t, err)
+	svc := mustNewService(t, nil, set, nil, nil, nil, mockTaskStore)
 	ctx := context.Background()
 	consignmentID := "cons-1"
 	now := time.Now()
@@ -621,21 +626,25 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 		{TaskID: "t2", TaskType: "FORM", State: "FAILED", ActiveTaskTemplateID: "step-2", CreatedAt: now, UpdatedAt: now},
 		{
 			TaskID: "t3", TaskType: "FORM", State: "PENDING_USER", ActiveTaskTemplateID: "step-3", CreatedAt: now, UpdatedAt: now,
-			RenderConfig: json.RawMessage(`{"title":"My Step"}`),
+			TaskTemplateID: "my-task", ManifestVersion: 1,
 		},
 		{TaskID: "t4", TaskType: "FORM", State: "QUEUED_EXTERNALLY", ActiveTaskTemplateID: "step-4", CreatedAt: now, UpdatedAt: now},
 		{TaskID: "t5", TaskType: "SYSTEM", State: "COMPLETED", ActiveTaskTemplateID: "sys", CreatedAt: now, UpdatedAt: now},
+		{TaskID: "t6", TaskType: "FORM", State: store.StateCancelled, ActiveTaskTemplateID: "step-6", CreatedAt: now, UpdatedAt: now},
+		{TaskID: "t7", TaskType: "FORM", State: store.StateOnHold, ActiveTaskTemplateID: "step-7", CreatedAt: now, UpdatedAt: now},
 	}
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(tasks)
 
 	dtos, err := svc.buildNodeDTOsFromTaskRecords(ctx, consignmentID)
 	assert.NoError(t, err)
-	assert.Len(t, dtos, 4) // SYSTEM task filtered out
+	assert.Len(t, dtos, 6) // SYSTEM task filtered out
 	assert.Equal(t, WorkflowNodeStateCompleted, dtos[0].State)
 	assert.Equal(t, WorkflowNodeStateFailed, dtos[1].State)
 	assert.Equal(t, WorkflowNodeStateInProgress, dtos[2].State)
 	assert.Equal(t, "My Step", dtos[2].WorkflowNodeTemplate.Name)
 	assert.Equal(t, WorkflowNodeStateQueuedExternally, dtos[3].State)
+	assert.Equal(t, WorkflowNodeStateCancelled, dtos[4].State)
+	assert.Equal(t, WorkflowNodeStateOnHold, dtos[5].State)
 }
 
 func TestConsignmentService_GetConsignmentByID_BuildDTOError(t *testing.T) {
@@ -644,8 +653,8 @@ func TestConsignmentService_GetConsignmentByID_BuildDTOError(t *testing.T) {
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil) // no taskStore, no wm
 	id := uuid.NewString()
 
-	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
-		WithArgs(id, 1).
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(id, "IN_PROGRESS", "company-1"))
 
 	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1", []string{"Trader"})
@@ -705,25 +714,25 @@ func TestConsignmentService_GetAgencySummary_CompanyNotFound(t *testing.T) {
 
 func TestTaskDisplayName(t *testing.T) {
 	// nil render config → template ID
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", nil))
+	assert.Equal(t, "trade-export", titleOrFallback(nil, "trade-export"))
 
 	// root-level title present → use title
 	rcRootTitle := json.RawMessage(`{"title":"My Root Title"}`)
-	assert.Equal(t, "My Root Title", taskDisplayName("trade-export", rcRootTitle))
+	assert.Equal(t, "My Root Title", titleOrFallback(rcRootTitle, "trade-export"))
 
 	// root-level title empty → template ID
 	rcEmptyTitle := json.RawMessage(`{"title":""}`)
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcEmptyTitle))
+	assert.Equal(t, "trade-export", titleOrFallback(rcEmptyTitle, "trade-export"))
 
 	// root-level title missing → template ID
 	rcNoTitle := json.RawMessage("{}")
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcNoTitle))
+	assert.Equal(t, "trade-export", titleOrFallback(rcNoTitle, "trade-export"))
 
 	// JSON null render config → template ID
 	rcNull := json.RawMessage("null")
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcNull))
+	assert.Equal(t, "trade-export", titleOrFallback(rcNull, "trade-export"))
 
 	// invalid JSON → template ID
 	rc4 := json.RawMessage(`invalid`)
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rc4))
+	assert.Equal(t, "trade-export", titleOrFallback(rc4, "trade-export"))
 }

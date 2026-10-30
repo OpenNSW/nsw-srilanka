@@ -184,3 +184,36 @@ func TestHscodeSplitBuilderFunc_InvalidInputs(t *testing.T) {
 		})
 	}
 }
+
+func TestHscodeSplitBuilderFunc_CarriesTheChaIntoEveryItem(t *testing.T) {
+	config := []byte(`{"mappings": {"0902.30.11": ["fcau-health-certificate-reg", "customs-workflow"]}}`)
+	ctx := newTestContext(map[string]any{
+		"hs_codes": []any{"0902.30.11"},
+		"company":  map[string]any{"id": "adam-pvt-ltd"},
+		"cha":      map[string]any{"id": "cha-1", "data": map[string]any{"tin_no": "134256789"}},
+	})
+
+	require.NoError(t, HscodeSplitBuilderFunc(ctx, config))
+
+	splitItems := ctx.Record.Data["split_items"].([]map[string]any)
+	require.Len(t, splitItems, 2)
+	for _, item := range splitItems {
+		payload := item["payload"].(map[string]any)
+		assert.Equal(t, "adam-pvt-ltd", payload["company"].(map[string]any)["id"])
+		cha := payload["cha"].(map[string]any)
+		assert.Equal(t, "cha-1", cha["id"])
+	}
+}
+
+func TestHscodeSplitBuilderFunc_NoChaLeavesThePayloadAsItWas(t *testing.T) {
+	config := []byte(`{"mappings": {"0902.30.11": ["customs-workflow"]}}`)
+	ctx := newTestContext(map[string]any{
+		"hs_codes": []any{"0902.30.11"},
+		"company":  map[string]any{"id": "adam-pvt-ltd"},
+	})
+
+	require.NoError(t, HscodeSplitBuilderFunc(ctx, config))
+
+	payload := ctx.Record.Data["split_items"].([]map[string]any)[0]["payload"].(map[string]any)
+	assert.NotContains(t, payload, "cha")
+}

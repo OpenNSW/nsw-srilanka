@@ -48,5 +48,6 @@ func principalFromUserPrincipal(up *coreauthn.UserPrincipal) *Principal {
 		PhoneNumber: up.ExtraClaims.String(claimPhoneNumber),
 		OUID:        up.ExtraClaims.String(claimOUID),
 		OUHandle:    up.ExtraClaims.String(claimOUHandle),
+		ExtraClaims: extraClaims(up.ExtraClaims, builtinUserClaimNames),
 	}
 }

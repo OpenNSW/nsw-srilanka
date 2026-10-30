@@ -154,7 +154,7 @@ export function PreconsignmentScreen() {
                       {item.description}
                     </Text>
                   </Box>
-                  <FileTextIcon width="24" height="24" className="text-foreground-subtle" />
+                  <FileTextIcon width="24" height="24" className="text-foreground-muted" />
                 </Flex>
 
                 <Flex justify="between" align="center" mt="4">

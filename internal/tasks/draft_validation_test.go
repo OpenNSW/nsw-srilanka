@@ -74,6 +74,12 @@ func (s *memTaskStore) WriteRenderState(context.Context, string, string, int64, 
 func (s *memTaskStore) CompleteTask(context.Context, string, int64) (int64, error) {
 	panic("not used")
 }
+func (s *memTaskStore) CancelTask(context.Context, string) (int64, error) {
+	panic("not used")
+}
+func (s *memTaskStore) HoldTask(context.Context, string, int64) (int64, error) {
+	panic("not used")
+}
 func (s *memTaskStore) ClaimTask(context.Context, string, string, time.Time) (int64, error) {
 	panic("not used")
 }
@@ -139,7 +145,7 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 	h := &HTTPHandler{
 		Manager:         orchestrator.NewTaskManager(db, set, nil, extReg, wf, nil, nil),
 		Store:           db,
-		Files:           NewFileBinding(newFakeFileRefs(), nil),
+		Files:           NewFileBinding(newFakeFileRefs(), nil, fixedRenderConfig(`{}`)),
 		MaxRequestBytes: 1024,
 	}
 	return h, db, wf

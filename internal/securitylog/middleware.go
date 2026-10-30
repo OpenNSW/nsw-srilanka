@@ -1,38 +1,40 @@
 // Package securitylog records every inbound HTTP request as a slog line with
-// category=security, except GET /health. The line names who called, and carries
-// the request payload and the response. The slog timestamp is when.
+// category=security, except GET /health. The line names who called (caller
+// kind and id), the route, status, and duration. Request and response
+// payloads are not logged: forms are JSON Schema–driven (jsonforms), so field-
+// level redaction cannot list every PII key. RemoteAddr is omitted: behind
+// ingress it is the proxy, and a real client IP would be PII in the pod log.
 //
-// Authorization headers are not logged. Credential fields (signed storage URLs,
-// tokens, passwords, signatures) are redacted. The callback token in
-// /api/v1/callbacks/{token} is replaced in the path. Non-text bodies, and
-// responses copied with io.ReaderFrom (file downloads), record their size only.
-// Text bodies are capped at maxLoggedBodyBytes. The body is copied as the
-// handler reads it, so a request rejected before any read does not have its
-// body pulled in. The handler still receives the full request body.
+// Authorization headers are not logged. The callback token in
+// /api/v1/callbacks/{token} is replaced in the path.
 package securitylog
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/felixge/httpsnoop"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
-// maxLoggedBodyBytes is the most request or response body text copied onto
-// the security line. Kept small so a task-view poll does not emit a line large
-// enough for a log shipper to split.
-const maxLoggedBodyBytes = 4 << 10
+// callbacksPathPrefix is the path prefix of POST /api/v1/callbacks/{token}.
+// Redaction uses the prefix rather than PathValue("token"): otelhttp copies
+// the request before the mux runs, so path values never appear on the
+// request Middleware holds.
+const callbacksPathPrefix = "/api/v1/callbacks/"
 
 // Middleware logs one security line after next returns, including when next
 // panics. logger nil uses slog.Default. The logger must already be the process
 // handler so the line picks up the request trace id. GET /health is served and
 // not logged.
+//
+// Wrap the mux with CaptureRoute so pattern is recorded when Middleware sits
+// outside otelhttp (which copies the request before ServeMux sets Pattern).
 func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
@@ -47,10 +49,16 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			}
 
 			caller := &authn.RequestCaller{}
-			r = r.WithContext(authn.WithRequestCaller(r.Context(), caller))
+			route := &matchedRoute{}
+			ctx := authn.WithRequestCaller(r.Context(), caller)
+			ctx = withMatchedRoute(ctx, route)
+			r = r.WithContext(ctx)
 
-			body := captureRequestBody(r, maxLoggedBodyBytes)
-			resp := &responseLog{max: maxLoggedBodyBytes}
+			// Count bytes as the handler reads. Declared Content-Length wins;
+			// chunked / unknown length uses the count. Nothing is buffered.
+			reqBody := wrapRequestBody(r)
+
+			resp := &responseLog{}
 			wrapped := httpsnoop.Wrap(w, resp.hooks())
 			start := time.Now()
 
@@ -74,19 +82,10 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 						status = http.StatusOK
 					}
 				}
-				read := int64(0)
-				var reqPrefix []byte
-				reqTruncated := false
-				if body != nil {
-					read = body.n
-					reqPrefix = body.prefix
-					reqTruncated = body.truncated
-				}
-				reqSize := requestSize(r.ContentLength, read)
 
 				attrs := []any{
 					"method", r.Method,
-					"path", loggedPath(r),
+					"path", loggedPath(r.URL.Path),
 					"callerKind", kind,
 					"callerID", id,
 					"status", status,
@@ -95,20 +94,15 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				if origin := r.Header.Get("Origin"); origin != "" {
 					attrs = append(attrs, "origin", origin)
 				}
-				if q := loggedQuery(r.URL.RawQuery); q != "" {
-					attrs = append(attrs, "query", q)
+				if n := requestBytes(r.ContentLength, reqBody); n > 0 {
+					attrs = append(attrs, "requestBytes", n)
 				}
-				if reqSize > 0 {
-					attrs = append(attrs, "requestBytes", reqSize)
+				pattern := r.Pattern
+				if pattern == "" {
+					pattern = route.pattern
 				}
-				if r.Pattern != "" {
-					attrs = append(attrs, "pattern", r.Pattern)
-				}
-				attrs = append(attrs, bodyAttrs("request", r.Header.Get("Content-Type"), reqPrefix, reqTruncated)...)
-				if resp.streamed && len(resp.prefix) == 0 {
-					attrs = append(attrs, "responseBodyOmitted", true)
-				} else {
-					attrs = append(attrs, bodyAttrs("response", wrapped.Header().Get("Content-Type"), resp.prefix, resp.truncated)...)
+				if pattern != "" {
+					attrs = append(attrs, "pattern", pattern)
 				}
 				if resp.n > 0 {
 					attrs = append(attrs, "responseBytes", resp.n)
@@ -125,95 +119,87 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// loggedPath hides the callback token. The mux records it as the {token} path
-// value on this request; the raw path would otherwise keep the secret.
-func loggedPath(r *http.Request) string {
-	token := r.PathValue("token")
-	if token == "" {
-		return r.URL.Path
-	}
-	return strings.Replace(r.URL.Path, token, "{token}", 1)
+// CaptureRoute records the ServeMux pattern onto the matchedRoute slot that
+// Middleware put in the context. Place it next to the mux so Middleware
+// outside otelhttp still sees pattern after the handler returns.
+func CaptureRoute(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		if m := matchedRouteFrom(r.Context()); m != nil {
+			m.pattern = r.Pattern
+		}
+	})
 }
 
-// requestSize is the request body size to log. A declared Content-Length wins.
-// A chunked body has no length, so the size is however much the handler read.
-func requestSize(contentLength, read int64) int {
-	if contentLength >= 0 {
-		return int(contentLength)
-	}
-	return int(read)
+// matchedRoute is a slot Middleware allocates before ServeHTTP. CaptureRoute
+// fills pattern after the mux runs.
+type matchedRoute struct {
+	pattern string
 }
 
-// captureRequestBody records up to max bytes as the handler reads r.Body.
-// Nothing is read here: authentication can reject the request without pulling
-// a slow or chunked body onto the connection.
-func captureRequestBody(r *http.Request, max int) *capturedBody {
+type matchedRouteKey struct{}
+
+func withMatchedRoute(ctx context.Context, slot *matchedRoute) context.Context {
+	return context.WithValue(ctx, matchedRouteKey{}, slot)
+}
+
+func matchedRouteFrom(ctx context.Context) *matchedRoute {
+	slot, _ := ctx.Value(matchedRouteKey{}).(*matchedRoute)
+	return slot
+}
+
+// wrapRequestBody installs a counter on r.Body when present. It does not read.
+func wrapRequestBody(r *http.Request) *countingBody {
 	if r.Body == nil || r.Body == http.NoBody {
 		return nil
 	}
-	body := &capturedBody{
-		ReadCloser: r.Body,
-		max:        max,
-		prefix:     make([]byte, 0, prefixCap(r.ContentLength, max)),
-	}
+	body := &countingBody{ReadCloser: r.Body}
 	r.Body = body
 	return body
 }
 
-func prefixCap(contentLength int64, max int) int {
-	if contentLength <= 0 || max <= 0 {
+// requestBytes prefers a declared Content-Length. Otherwise it is how much
+// the handler actually read (chunked / unknown length).
+func requestBytes(contentLength int64, body *countingBody) int64 {
+	if contentLength >= 0 {
+		return contentLength
+	}
+	if body == nil {
 		return 0
 	}
-	if contentLength < int64(max) {
-		return int(contentLength)
-	}
-	return max
+	return body.n
 }
 
-type capturedBody struct {
+// countingBody counts bytes the handler reads without retaining them.
+type countingBody struct {
 	io.ReadCloser
-	max       int
-	prefix    []byte
-	truncated bool
-	n         int64
+	n int64
 }
 
-func (c *capturedBody) Read(p []byte) (int, error) {
+func (c *countingBody) Read(p []byte) (int, error) {
 	n, err := c.ReadCloser.Read(p)
 	if n > 0 {
 		c.n += int64(n)
-		c.add(p[:n])
 	}
 	return n, err
 }
 
-func (c *capturedBody) add(b []byte) {
-	if len(c.prefix) >= c.max {
-		c.truncated = true
-		return
+// loggedPath hides the callback token by path prefix. PathValue is empty on
+// Middleware's request when otelhttp (or any WithContext copy) sits between
+// this middleware and the mux.
+func loggedPath(path string) string {
+	if after, ok := strings.CutPrefix(path, callbacksPathPrefix); ok && after != "" {
+		return callbacksPathPrefix + "{token}"
 	}
-	room := c.max - len(c.prefix)
-	if len(b) > room {
-		b = b[:room]
-		c.truncated = true
-	}
-	c.prefix = append(c.prefix, b...)
-	if c.n > int64(len(c.prefix)) {
-		c.truncated = true
-	}
+	return path
 }
 
-// responseLog records the status and a prefix of bytes passed to Write or
-// WriteString. ReadFrom is delegated unchanged so a file download can still
-// use sendfile; those bytes are counted and not copied onto the log line.
+// responseLog records the status and response size. Bodies are not copied.
+// ReadFrom is delegated unchanged so a file download can still use sendfile.
 type responseLog struct {
-	status    int
-	wroteHdr  bool
-	max       int
-	n         int
-	prefix    []byte
-	truncated bool
-	streamed  bool
+	status   int
+	wroteHdr bool
+	n        int
 }
 
 func (rec *responseLog) hooks() httpsnoop.Hooks {
@@ -238,7 +224,10 @@ func (rec *responseLog) hooks() httpsnoop.Hooks {
 		Write: func(next httpsnoop.WriteFunc) httpsnoop.WriteFunc {
 			return func(p []byte) (int, error) {
 				n, err := next(p)
-				rec.add(p[:n])
+				if n > 0 {
+					rec.n += n
+					rec.wroteHdr = true
+				}
 				return n, err
 			}
 		},
@@ -246,7 +235,8 @@ func (rec *responseLog) hooks() httpsnoop.Hooks {
 			return func(s string) (int, error) {
 				n, err := next(s)
 				if n > 0 {
-					rec.add([]byte(s[:n]))
+					rec.n += n
+					rec.wroteHdr = true
 				}
 				return n, err
 			}
@@ -256,75 +246,10 @@ func (rec *responseLog) hooks() httpsnoop.Hooks {
 				n, err := next(src)
 				if n > 0 {
 					rec.n += int(n)
-					rec.streamed = true
 					rec.wroteHdr = true
 				}
 				return n, err
 			}
 		},
 	}
-}
-
-func (rec *responseLog) add(b []byte) {
-	if len(b) == 0 {
-		return
-	}
-	rec.n += len(b)
-	rec.wroteHdr = true
-	if len(rec.prefix) >= rec.max {
-		rec.truncated = true
-		return
-	}
-	room := rec.max - len(rec.prefix)
-	if len(b) > room {
-		b = b[:room]
-		rec.truncated = true
-	}
-	rec.prefix = append(rec.prefix, b...)
-}
-
-func bodyAttrs(prefix, contentType string, body []byte, truncated bool) []any {
-	if len(body) == 0 {
-		return nil
-	}
-	if !loggableText(contentType, body) {
-		attrs := []any{prefix + "BodyOmitted", true}
-		if truncated {
-			attrs = append(attrs, prefix+"BodyTruncated", true)
-		}
-		return attrs
-	}
-	logged := redactLogged(contentType, body)
-	attrs := []any{prefix + "Body", string(logged)}
-	if truncated {
-		attrs = append(attrs, prefix+"BodyTruncated", true)
-	}
-	return attrs
-}
-
-func loggableText(contentType string, body []byte) bool {
-	ct := mediaType(contentType)
-	switch {
-	case strings.HasPrefix(ct, "text/"):
-		return true
-	case ct == "application/json" || strings.HasSuffix(ct, "+json"):
-		return true
-	case ct == "application/xml" || strings.HasSuffix(ct, "+xml"):
-		return true
-	case ct == "application/x-www-form-urlencoded":
-		return true
-	case ct == "":
-		return utf8.Valid(body) && !bytesContainsNUL(body)
-	default:
-		return false
-	}
-}
-
-func bytesContainsNUL(b []byte) bool {
-	for _, c := range b {
-		if c == 0 {
-			return true
-		}
-	}
-	return false
 }

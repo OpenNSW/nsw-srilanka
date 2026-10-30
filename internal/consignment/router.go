@@ -96,15 +96,9 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !slices.Contains(p.Roles, c.roles["trader"]) {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionCreate,
-			TargetType: nswaudit.TargetConsignment,
-			Failure:    true,
-			Metadata: map[string]any{
-				"error": "trader role not held",
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionCreate, "", true, map[string]any{
+			"error": "trader role not held",
+		}))
 		httputil.Error(w, r, http.StatusForbidden, errTraderRoleRequired)
 		return
 	}
@@ -112,44 +106,25 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	traderID := p.UserID
 	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID, defaultExportWorkflowTemplateID)
 	if err != nil {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionCreate,
-			TargetType: nswaudit.TargetConsignment,
-			Failure:    true,
-			Metadata: map[string]any{
-				"error": err.Error(),
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionCreate, "", true, map[string]any{
+			"error": err.Error(),
+		}))
 		httputil.InternalServerError(w, r, "failed to create and start consignment", err)
 		return
 	}
 	if consignment == nil {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionCreate,
-			TargetType: nswaudit.TargetConsignment,
-			Failure:    true,
-			Metadata: map[string]any{
-				"error": "consignment is nil after successful creation",
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionCreate, "", true, map[string]any{
+			"error": "consignment is nil after successful creation",
+		}))
 		httputil.InternalServerError(w, r, "consignment is nil after successful creation", nil)
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionCreate,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignment.ID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"flow":            consignment.Flow,
-			"traderCompanyId": consignment.TraderCompanyID,
-			"chaCompanyId":    consignment.ChaCompanyID,
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionCreate, consignment.ID, false, map[string]any{
+		"flow":            consignment.Flow,
+		"traderCompanyId": consignment.TraderCompanyID,
+		"chaCompanyId":    consignment.ChaCompanyID,
+	}))
 	httputil.JSON(w, http.StatusCreated, consignment)
 }
 
@@ -207,15 +182,9 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	asTrader := slices.Contains(p.Roles, c.roles["trader"])
 	asCHA := slices.Contains(p.Roles, c.roles["cha"])
 	if !asTrader && !asCHA {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionRead,
-			TargetType: nswaudit.TargetConsignment,
-			Failure:    true,
-			Metadata: map[string]any{
-				"error": "role not held",
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, "", true, map[string]any{
+			"error": "role not held",
+		}))
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
 		return
 	}
@@ -223,15 +192,9 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	userCompany, err := c.company.GetCompanyByOUHandle(ctx, p.OUHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
-			c.auditEvent(ctx, nswaudit.Event{
-				EventType:  nswaudit.EventConsignment,
-				Action:     nswaudit.ActionRead,
-				TargetType: nswaudit.TargetConsignment,
-				Failure:    true,
-				Metadata: map[string]any{
-					"error": "company not found",
-				},
-			})
+			c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, "", true, map[string]any{
+				"error": "company not found",
+			}))
 			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
@@ -286,17 +249,10 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAccessDenied):
-			c.auditEvent(ctx, nswaudit.Event{
-				EventType:  nswaudit.EventConsignment,
-				Action:     nswaudit.ActionRead,
-				TargetType: nswaudit.TargetConsignment,
-				TargetID:   consignmentID,
-				Failure:    true,
-				Metadata: map[string]any{
-					"error":           "consignment access denied",
-					"callerCompanyId": userCompany.ID,
-				},
-			})
+			c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, true, map[string]any{
+				"error":           "consignment access denied",
+				"callerCompanyId": userCompany.ID,
+			}))
 			// Respond with ErrConsignmentNotFound's text, not ErrAccessDenied's, and
 			// 404 (not 403), so a denied read — whether cross-company or company-matched
 			// with the wrong role — is indistinguishable from a non-existent consignment
@@ -312,16 +268,9 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignmentID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"callerCompanyId": userCompany.ID,
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{
+		"callerCompanyId": userCompany.ID,
+	}))
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
@@ -381,14 +330,7 @@ func (c *Router) HandleStartConsignmentFlow(w http.ResponseWriter, r *http.Reque
 	auditEvent := func(failure bool, metadata map[string]any) {
 		metadata["view"] = "start-flow"
 		metadata["templateId"] = req.TemplateID
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionUpdate,
-			TargetType: nswaudit.TargetConsignment,
-			TargetID:   consignmentID,
-			Failure:    failure,
-			Metadata:   metadata,
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, consignmentID, failure, metadata))
 	}
 
 	flow, err := c.cs.StartConsignmentFlow(ctx, consignmentID, req.TemplateID, userCompany.ID, p.Roles)
@@ -439,13 +381,7 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignmentID,
-		Metadata:   map[string]any{"view": "admin"},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{"view": "admin"}))
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
@@ -468,17 +404,10 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 	dto, err := c.cs.GetAgencySummary(ctx, consignmentID)
 	if err != nil {
 		if errors.Is(err, ErrConsignmentNotFound) {
-			c.auditEvent(ctx, nswaudit.Event{
-				EventType:  nswaudit.EventConsignment,
-				Action:     nswaudit.ActionRead,
-				TargetType: nswaudit.TargetConsignment,
-				TargetID:   consignmentID,
-				Failure:    true,
-				Metadata: map[string]any{
-					"view":  "agency",
-					"error": errConsignmentNotFound,
-				},
-			})
+			c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, true, map[string]any{
+				"view":  "agency",
+				"error": errConsignmentNotFound,
+			}))
 			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
 			return
 		}
@@ -486,16 +415,9 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignmentID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"view": "agency",
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{
+		"view": "agency",
+	}))
 	httputil.JSON(w, http.StatusOK, dto)
 }
 
@@ -511,7 +433,7 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 // check, so any caller holding the admin scope can view any workflow's engine state
 // by design.
 func (c *Router) HandleGetWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
-	c.handleEngineStatus(w, r, "engine-status", c.cs.GetEngineStatus)
+	c.handleEngineStatus(w, r, "engine-status", true, c.cs.GetEngineStatus)
 }
 
 // HandleGetTaskWorkflowEngineStatus handles GET /api/v1/admin/task/{id}/engine-status.
@@ -520,15 +442,17 @@ func (c *Router) HandleGetWorkflowEngineStatus(w http.ResponseWriter, r *http.Re
 // workflow.Manager from the flow/child-workflow IDs HandleGetWorkflowEngineStatus
 // queries. Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go).
 func (c *Router) HandleGetTaskWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
-	c.handleEngineStatus(w, r, "task-workflow-engine-status", c.cs.GetTaskWorkflowEngineStatus)
+	c.handleEngineStatus(w, r, "task-workflow-engine-status", false, c.cs.GetTaskWorkflowEngineStatus)
 }
 
 // handleEngineStatus is the common request/response handling shared by
 // HandleGetWorkflowEngineStatus and HandleGetTaskWorkflowEngineStatus — they differ only in
-// which Service method resolves {id} into an *EngineStatusDTO and the audit "view" label.
+// which Service method resolves {id} into an *EngineStatusDTO, the audit "view" label, and
+// whether the target comes from the flow variables.
 func (c *Router) handleEngineStatus(
 	w http.ResponseWriter, r *http.Request,
 	view string,
+	flowAudit bool,
 	fetch func(ctx context.Context, id string) (*EngineStatusDTO, error),
 ) {
 	ctx := r.Context()
@@ -557,16 +481,13 @@ func (c *Router) handleEngineStatus(
 	// TargetConsignment. Fixing it needs a TaskStore lookup (task-workflow ID ->
 	// TaskRecord.CaseID) that doesn't exist yet; see the issue for why the obvious
 	// GlobalVariables[VarCaseID] shortcut doesn't work here.
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   id,
-		Failure:    false,
-		Metadata: map[string]any{
-			"view": view,
-		},
-	})
+	event := nswaudit.ConsignmentEvent(nswaudit.ActionRead, id, false, map[string]any{"view": view})
+	if flowAudit {
+		caseID, _ := status.GlobalVariables[workflow.VarCaseID].(string)
+		c.auditFlowEventWithCaseID(ctx, event, caseID)
+	} else {
+		c.auditEvent(ctx, event)
+	}
 	httputil.JSON(w, http.StatusOK, status)
 }
 
@@ -593,7 +514,7 @@ type ResolveAdminInterventionRequest struct {
 // Requires scopes.ConsignmentAdminWrite (see bootstrap/app.go): resolving can change workflow data
 // (GlobalVariablesPatch) or force a path the interpreter didn't choose (Complete/Abort).
 func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.Request) {
-	c.handleResolveAdminIntervention(w, r, "admin-resolve", c.cs.ResolveAdminIntervention)
+	c.handleResolveAdminIntervention(w, r, "admin-resolve", c.cs.ResolveAdminIntervention, c.auditFlowEvent)
 }
 
 // HandleResolveTaskWorkflowAdminIntervention handles
@@ -602,17 +523,16 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 // flow/child-workflow IDs HandleResolveAdminIntervention takes, the same split as the two
 // engine-status routes. Otherwise identical, and gated on the same scope.
 func (c *Router) HandleResolveTaskWorkflowAdminIntervention(w http.ResponseWriter, r *http.Request) {
-	c.handleResolveAdminIntervention(w, r, "task-workflow-admin-resolve", c.cs.ResolveTaskWorkflowAdminIntervention)
+	c.handleResolveAdminIntervention(w, r, "task-workflow-admin-resolve", c.cs.ResolveTaskWorkflowAdminIntervention, c.auditEvent)
 }
 
 // handleResolveAdminIntervention is the request handling the two resolve routes share; they differ
-// only in which Service method resolves {id} and the audit "view" label. As in handleEngineStatus,
-// the audit TargetID is the workflow ID, which for the task route is a task-workflow ID rather than
-// a consignment ID (see TODO(#477) there).
+// in which Service method resolves {id}, the audit "view" label, and the audit target resolver.
 func (c *Router) handleResolveAdminIntervention(
 	w http.ResponseWriter, r *http.Request,
 	view string,
 	resolve func(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) (nodeID string, err error),
+	recordAudit func(context.Context, nswaudit.Event),
 ) {
 	ctx := r.Context()
 	if _, ok := authn.FromContext(ctx); !ok {
@@ -662,19 +582,12 @@ func (c *Router) handleResolveAdminIntervention(
 	}
 
 	auditFail := func(errMsg string) {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionUpdate,
-			TargetType: nswaudit.TargetConsignment,
-			TargetID:   workflowID,
-			Failure:    true,
-			Metadata: map[string]any{
-				"view":   view,
-				"stepId": stepID,
-				"action": req.Action,
-				"error":  errMsg,
-			},
-		})
+		recordAudit(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, true, map[string]any{
+			"view":   view,
+			"stepId": stepID,
+			"action": req.Action,
+			"error":  errMsg,
+		}))
 	}
 
 	sig := workflow.AdminResolutionSignal{
@@ -702,21 +615,155 @@ func (c *Router) handleResolveAdminIntervention(
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionUpdate,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   workflowID,
-		Failure:    false,
-		Metadata: map[string]any{
+	recordAudit(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, false, map[string]any{
+		"view":   view,
+		"stepId": stepID,
+		"nodeId": nodeID,
+		"action": req.Action,
+		"reason": req.Reason,
+	}))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ForceParkRequest is the request body for HandleForceParkTaskNode.
+type ForceParkRequest struct {
+	Reason string `json:"reason"`
+}
+
+// HandleForceParkTaskNode handles POST /api/v1/admin/workflows/{id}/steps/{stepId}/force-park.
+// {id} is the workflow instance containing the node, one of a consignment's flows or a
+// child-branch workflow, and {stepId} is the node's step_id from that workflow's engine status. The
+// node must be a TASK waiting on its task; the task is closed and the node moved to AWAITING_ADMIN
+// (see Service.ForceParkTaskNode), after which the resolve route applies.
+//
+// Requires scopes.ConsignmentAdminWrite, like resolve: it takes a task away from the trader or
+// officer working on it.
+func (c *Router) HandleForceParkTaskNode(w http.ResponseWriter, r *http.Request) {
+	c.handleForcePark(w, r, "admin-force-park", c.cs.ForceParkTaskNode, c.auditFlowEvent)
+}
+
+// HandleForceParkTaskWorkflowStep handles POST /api/v1/admin/task/{id}/steps/{stepId}/force-park.
+// {id} is a task workflow's own workflow ID (a TASK node's task_workflow_id) and {stepId} is one of
+// its steps. The step is moved to AWAITING_ADMIN and the task stays open (see
+// Service.ForceParkTaskWorkflowStep); the task workflow's resolve route applies after. Gated on the
+// same scope as HandleForceParkTaskNode.
+func (c *Router) HandleForceParkTaskWorkflowStep(w http.ResponseWriter, r *http.Request) {
+	c.handleForcePark(w, r, "task-workflow-admin-force-park", c.cs.ForceParkTaskWorkflowStep, c.auditEvent)
+}
+
+// handleForcePark is the request handling the two force-park routes share; they differ only in
+// which Service method parks the step, the audit "view" label, and the audit target resolver.
+func (c *Router) handleForcePark(
+	w http.ResponseWriter, r *http.Request,
+	view string,
+	forcePark func(ctx context.Context, workflowID, stepID, reason string) (nodeID string, err error),
+	recordAudit func(context.Context, nswaudit.Event),
+) {
+	ctx := r.Context()
+	if _, ok := authn.FromContext(ctx); !ok {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	workflowID := r.PathValue("id")
+	stepID := r.PathValue("stepId")
+	if workflowID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+	if stepID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errStepIDRequired)
+		return
+	}
+
+	var req ForceParkRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		msg := errInvalidRequestBody
+		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
+			msg += ": unknown field " + field
+		}
+		httputil.Error(w, r, http.StatusBadRequest, msg)
+		return
+	}
+	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		return
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errReasonRequired)
+		return
+	}
+
+	auditFail := func(errMsg string) {
+		recordAudit(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, true, map[string]any{
 			"view":   view,
 			"stepId": stepID,
-			"nodeId": nodeID,
-			"action": req.Action,
-			"reason": req.Reason,
-		},
-	})
+			"error":  errMsg,
+		}))
+	}
+
+	nodeID, err := forcePark(ctx, workflowID, stepID, req.Reason)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrEngineWorkflowNotFound):
+			auditFail(errWorkflowNotFound)
+			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
+		case errors.Is(err, ErrNodeNotWaiting):
+			auditFail(err.Error())
+			httputil.Error(w, r, http.StatusConflict, ErrNodeNotWaiting.Error())
+		case errors.Is(err, ErrForceParkUnsupportedNodeType):
+			auditFail(err.Error())
+			httputil.Error(w, r, http.StatusBadRequest, err.Error())
+		default:
+			auditFail(err.Error())
+			httputil.InternalServerError(w, r, "failed to force-park node; please retry", err)
+		}
+		return
+	}
+
+	recordAudit(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, false, map[string]any{
+		"view":   view,
+		"stepId": stepID,
+		"nodeId": nodeID,
+		"reason": req.Reason,
+	}))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// auditFlowEvent resolves the case for a flow/child-workflow mutation audit. The extra
+// status read is best-effort: the mutation's result must survive a lookup failure or a
+// workflow that has already closed. Engine-status reads reuse their existing snapshot instead.
+func (c *Router) auditFlowEvent(ctx context.Context, e nswaudit.Event) {
+	if c.audit == nil {
+		return
+	}
+	caseID := ""
+	if c.cs.wm != nil {
+		if instance, err := c.cs.wm.GetStatus(ctx, e.TargetID); err == nil && instance != nil {
+			caseID, _ = instance.WorkflowVariables[workflow.VarCaseID].(string)
+		}
+	}
+	c.auditFlowEventWithCaseID(ctx, e, caseID)
+}
+
+// auditFlowEventWithCaseID keeps the workflow address in metadata and targets the case.
+// An unknown case stays empty rather than being mislabeled with a flow/child-workflow ID.
+func (c *Router) auditFlowEventWithCaseID(ctx context.Context, e nswaudit.Event, caseID string) {
+	if c.audit == nil {
+		return
+	}
+	workflowID := e.TargetID
+	e.TargetID = caseID
+	if e.Metadata == nil {
+		e.Metadata = make(map[string]any)
+	}
+	e.Metadata["workflowId"] = workflowID
+	if caseID == "" {
+		e.Metadata["targetResolutionError"] = "workflow consignment could not be resolved"
+		slog.WarnContext(ctx, "workflow audit target could not be resolved", "workflowId", workflowID)
+	}
+	c.auditEvent(ctx, e)
 }
 
 func (c *Router) auditEvent(ctx context.Context, e nswaudit.Event) {

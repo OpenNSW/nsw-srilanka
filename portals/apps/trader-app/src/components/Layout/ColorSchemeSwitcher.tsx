@@ -25,7 +25,7 @@ export function ColorSchemeSwitcher() {
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" side="top" className="min-w-64">
-        <DropdownMenu.Label className="text-foreground-subtle">{t('common.colorScheme')}</DropdownMenu.Label>
+        <DropdownMenu.Label className="text-foreground-muted">{t('common.colorScheme')}</DropdownMenu.Label>
         {COLOR_SCHEMES.map((s) => (
           <DropdownMenu.Item key={s.id} onSelect={() => setSchemeId(s.id)} className="items-start py-2">
             <span
@@ -38,7 +38,7 @@ export function ColorSchemeSwitcher() {
                 <span className="font-medium">{s.label}</span>
                 {s.id === scheme.id && <CheckIcon className="w-3.5 h-3.5 text-primary" />}
               </span>
-              <span className="block text-xs text-foreground-subtle leading-snug">{s.description}</span>
+              <span className="block text-xs text-foreground-muted leading-snug">{s.description}</span>
             </span>
           </DropdownMenu.Item>
         ))}

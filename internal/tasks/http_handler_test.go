@@ -10,8 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OpenNSW/core/artifact"
+	"github.com/OpenNSW/core/artifact/testutil"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
+	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
@@ -193,10 +196,10 @@ const (
 
 // hsCodeTaskRenderConfig mirrors the shipped trade/2-hscode_selection render config:
 // the same PENDING_USER state offers the CHA an interactive workspace and the
-// trader a read-only notice, each gated on that role's ownership claim.
+// trader a read-only notice, each gated on that role's ownership claim. Its task
+// template reads hsCodeTaskReadRoles.
 const hsCodeTaskRenderConfig = `{
   "id": "trade-hscode-selection-flow:render",
-  "read": { "roles": ["cha", "trader"] },
   "sections": {
     "status_message": {
       "templateId": "waiting",
@@ -213,10 +216,44 @@ const hsCodeTaskRenderConfig = `{
   "states": { "PENDING_USER": { "actions": [{ "command": "submit" }] } }
 }`
 
+// hsCodeTaskReadRoles is the shipped trade/2-hscode_selection task template's read.roles.
+const hsCodeTaskReadRoles = `["cha", "trader"]`
+
 type fakeTaskFetcher struct {
 	record store.TaskRecord
 	found  bool
 	calls  int
+	// renderConfig is the render config of record's task template, testTaskTemplateID.
+	renderConfig string
+	// readRoles is that task template's read.roles, as a JSON array, or "" for none.
+	readRoles string
+}
+
+// testTaskTemplateID is the task template of the test tasks, in manifest version 1.
+const testTaskTemplateID = "test-task"
+
+// renderConfigOf resolves record's render config through manifest version 1 of an
+// artifact set holding the task template testTaskTemplateID, which renders as
+// f.renderConfig and is read by f.readRoles. It also returns the set, for the zone
+// view assembler and the task template resolver.
+func (f *fakeTaskFetcher) renderConfigOf(t *testing.T) (RenderConfigOf, *artifact.Set) {
+	t.Helper()
+	read := ""
+	if f.readRoles != "" {
+		read = `,"read":{"roles":` + f.readRoles + `}`
+	}
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"manifest_v1.json": []byte(`{"artifacts":[
+			{"id":"` + testTaskTemplateID + `","kind":"task_template","path":"task_template.json"},
+			{"id":"` + testTaskTemplateID + `:render","kind":"generic_template","path":"render.json"}
+		]}`),
+		"task_template.json": []byte(`{"id":"` + testTaskTemplateID + `","type":"APPLICATION","workflow_id":"test-task-flow","render_config_id":"` + testTaskTemplateID + `:render"` + read + `}`),
+		"render.json":        []byte(f.renderConfig),
+	})
+	require.NoError(t, err)
+	return func(ctx context.Context, record store.TaskRecord) (json.RawMessage, error) {
+		return renderconfig.Load(ctx, set, record)
+	}, set
 }
 
 func (f *fakeTaskFetcher) GetTask(context.Context, string) (store.TaskRecord, bool) {
@@ -239,11 +276,13 @@ func getTaskHandler(t *testing.T, fetcher *fakeTaskFetcher, templates *stubTempl
 	if err != nil {
 		t.Fatalf("build ui assembler: %v", err)
 	}
+	renderConfigOf, set := fetcher.renderConfigOf(t)
 	return &HTTPHandler{
-		Store:        fetcher,
-		Assembler:    zoneview.NewZoneViewAssembler(zoneview.NewTaskRenderer(asm)),
-		AuthzCatalog: taskauthz.Catalog{Roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
-		Files:        NewFileBinding(newFakeFileRefs(), nil),
+		Store:          fetcher,
+		Assembler:      zoneview.NewZoneViewAssembler(zoneview.NewTaskRenderer(asm), set),
+		AuthzCatalog:   taskauthz.Catalog{Roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
+		Files:          NewFileBinding(newFakeFileRefs(), nil, renderConfigOf),
+		TaskTemplateOf: TaskTemplates(set),
 	}
 }
 
@@ -251,12 +290,16 @@ func pendingHSCodeTask() *fakeTaskFetcher {
 	return &fakeTaskFetcher{
 		found: true,
 		record: store.TaskRecord{
-			TaskID:       testTaskID,
-			TaskType:     "APPLICATION",
-			State:        "PENDING_USER",
-			CaseID:       testConsignmentID,
-			RenderConfig: json.RawMessage(hsCodeTaskRenderConfig),
+			TaskID:   testTaskID,
+			TaskType: "APPLICATION",
+			State:    "PENDING_USER",
+			CaseID:   testConsignmentID,
+			// The task template's render config is the fetcher's renderConfig.
+			TaskTemplateID:  testTaskTemplateID,
+			ManifestVersion: 1,
 		},
+		renderConfig: hsCodeTaskRenderConfig,
+		readRoles:    hsCodeTaskReadRoles,
 	}
 }
 
@@ -472,7 +515,7 @@ func TestHandleGetTask_DeniedNilAuditDoesNotPanic(t *testing.T) {
 // The read.roles allowlist narrows access even for a genuine owner.
 func TestHandleGetTask_OwnedRoleNotAdmittedByReadPolicy(t *testing.T) {
 	fetcher := pendingHSCodeTask()
-	fetcher.record.RenderConfig = json.RawMessage(`{"read":{"roles":["cha"]},"sections":{}}`)
+	fetcher.readRoles = `["cha"]`
 	in := ownerInput("Trader", "trader")
 
 	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
@@ -603,9 +646,7 @@ func TestHandleGetTask_DualRoleUserGetsOneViewNotBoth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fetcher := pendingHSCodeTask()
-			fetcher.record.RenderConfig = json.RawMessage(
-				strings.Replace(hsCodeTaskRenderConfig, `["cha", "trader"]`, tt.readRoles, 1),
-			)
+			fetcher.readRoles = tt.readRoles
 			in := bothRoles()
 
 			recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
@@ -630,8 +671,8 @@ func TestHandleGetTask_DualRoleUserGetsOneViewNotBoth(t *testing.T) {
 // It must surface as a 500, not quietly hide the section.
 func TestHandleGetTask_UnknownClaimInConfigIsAnError(t *testing.T) {
 	fetcher := pendingHSCodeTask()
-	fetcher.record.RenderConfig = json.RawMessage(`{
-	  "read": { "roles": ["trader"] },
+	fetcher.readRoles = `["trader"]`
+	fetcher.renderConfig = `{
 	  "sections": {
 	    "workspace": {
 	      "templateId": "form",
@@ -639,7 +680,7 @@ func TestHandleGetTask_UnknownClaimInConfigIsAnError(t *testing.T) {
 	      "visibleWhen": { "requireClaim": "role:chaa" }
 	    }
 	  }
-	}`)
+	}`
 	in := ownerInput("Trader", "trader")
 
 	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
@@ -667,11 +708,13 @@ func pendingFileTask() *fakeTaskFetcher {
 			TaskType:             "APPLICATION",
 			State:                "PENDING_USER",
 			CaseID:               testConsignmentID,
-			RenderConfig:         json.RawMessage(fileTaskRenderConfig),
+			TaskTemplateID:       testTaskTemplateID,
+			ManifestVersion:      1,
 			ActiveTaskTemplateID: "form-step",
 			ActiveStepID:         "step-1",
 			Data:                 map[string]any{"form": map[string]any{"invoice": "stored-invoice-key"}},
 		},
+		renderConfig: fileTaskRenderConfig,
 	}
 }
 
@@ -696,7 +739,8 @@ func TestHandleGetTask_GivesFileReferences(t *testing.T) {
 			refs := newFakeFileRefs()
 			fetcher := pendingFileTask()
 			h := getTaskHandler(t, fetcher, &stubTemplates{})
-			h.Files = NewFileBinding(refs, nil)
+			renderConfigOf, _ := fetcher.renderConfigOf(t)
+			h.Files = NewFileBinding(refs, nil, renderConfigOf)
 			var asked taskauthz.Input
 			if tt.canAct != nil {
 				h.CanAct = func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error) {
@@ -731,7 +775,7 @@ func TestHandleGetTask_GivesFileReferences(t *testing.T) {
 
 func TestHandleGetTask_BadFileDeclarationIsAnError(t *testing.T) {
 	fetcher := pendingFileTask()
-	fetcher.record.RenderConfig = json.RawMessage(`{"id":"x:render","files":["form.invoice[0]"],"sections":{}}`)
+	fetcher.renderConfig = `{"id":"x:render","files":["form.invoice[0]"],"sections":{}}`
 	in := ownerInput("Trader", "trader")
 	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
 
@@ -745,7 +789,7 @@ func submitStep(t *testing.T, fetcher *fakeTaskFetcher, refs *fakeFileRefs, step
 	var calls int
 	h := &HTTPHandler{
 		Store:           fetcher,
-		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls)),
+		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fetcher.renderConfig)),
 		MaxRequestBytes: 1024,
 	}
 	body, err := json.Marshal(map[string]any{"command": "submit", "payload": payload})
@@ -797,7 +841,7 @@ func TestHandleCompleteTaskStep_AuditsFileDenial(t *testing.T) {
 	var calls int
 	h := &HTTPHandler{
 		Store:           pendingFileTask(),
-		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls)),
+		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig)),
 		MaxRequestBytes: 1024,
 		Audit:           client,
 	}
@@ -825,7 +869,7 @@ func TestHandleCompleteTaskStep_AuditsStaleStepWithCommand(t *testing.T) {
 	var calls int
 	h := &HTTPHandler{
 		Store:           pendingFileTask(),
-		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls)),
+		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig)),
 		MaxRequestBytes: 1024,
 		Audit:           client,
 	}
@@ -853,7 +897,7 @@ func TestHandleSaveDraft_AuditsStaleStepAsDraft(t *testing.T) {
 	var calls int
 	h := &HTTPHandler{
 		Store:           pendingFileTask(),
-		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls)),
+		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig)),
 		MaxRequestBytes: 1024,
 		Audit:           client,
 	}
@@ -880,7 +924,7 @@ func TestResolveFiles_StoresTheValues(t *testing.T) {
 	refs := newFakeFileRefs()
 	ref, _ := refs.Issue(userPrincipal("alice"), "stored-invoice-key", readSubmit...)
 	var calls int
-	h := &HTTPHandler{Store: pendingFileTask(), Files: NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))}
+	h := &HTTPHandler{Store: pendingFileTask(), Files: NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig))}
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("alice")))
 	payload := map[string]any{"invoice": ref, "__command": "submit"}
@@ -900,7 +944,7 @@ func saveDraft(t *testing.T, fetcher *fakeTaskFetcher, refs *fakeFileRefs, stepI
 	var calls int
 	h := &HTTPHandler{
 		Store:           fetcher,
-		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls)),
+		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fetcher.renderConfig)),
 		MaxRequestBytes: 1024,
 	}
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/"+stepID+"/draft", strings.NewReader(body))

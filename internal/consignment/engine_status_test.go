@@ -148,6 +148,7 @@ func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T)
 	ctx := context.Background()
 	caseID := uuid.NewString()
 	childWorkflowID := uuid.NewString()
+	stepID := uuid.NewString()
 
 	instance := &workflow.WorkflowInstance{
 		ID:     childWorkflowID,
@@ -156,20 +157,20 @@ func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T)
 			workflow.VarCaseID: caseID,
 		},
 		NodeInfo: map[string]*workflow.NodeInfo{
-			"officer_review": {ID: "officer_review", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
-			"gateway_node":   {ID: "gateway_node", Type: workflow.NodeTypeGateway, Status: workflow.NodeStatusCompleted},
+			"officer_review": {ID: "officer_review", ActivationID: stepID, Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+			"gateway_node":   {ID: "gateway_node", ActivationID: stepID, Type: workflow.NodeTypeGateway, Status: workflow.NodeStatusCompleted},
 		},
 	}
 	mockWM.On("GetStatus", ctx, childWorkflowID).Return(instance, nil)
 	mockTaskStore.On("GetAllTasks", ctx, caseID).Return([]store.TaskRecord{
-		{TaskID: "officer_review", TaskWorkflowID: "task-wf-officer_review"},
+		{TaskID: stepID, TaskWorkflowID: "task-wf-" + stepID},
 	})
 
 	result, err := svc.GetEngineStatus(ctx, childWorkflowID)
 	require.NoError(t, err)
 	require.Len(t, result.Nodes, 2)
 	byID := map[string]EngineNodeDTO{result.Nodes[0].ID: result.Nodes[0], result.Nodes[1].ID: result.Nodes[1]}
-	assert.Equal(t, "task-wf-officer_review", byID["officer_review"].TaskWorkflowID)
+	assert.Equal(t, "task-wf-"+stepID, byID["officer_review"].TaskWorkflowID)
 	// Not a TASK node — must not get a TaskWorkflowID even though nothing prevents the map
 	// lookup from matching by coincidence.
 	assert.Empty(t, byID["gateway_node"].TaskWorkflowID)
