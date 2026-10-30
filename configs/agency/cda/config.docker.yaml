@@ -46,9 +46,11 @@ temporal:
 # CDA keeps no files of its own: it serves TNSW's storage, calling TNSW as
 # CDA_TO_NSW (services entry tnsw), so officers open the documents
 # traders uploaded there. Officers' uploads go to TNSW's upload route
-# (scope nsw:storage:write), so TNSW checks them like a trader's. The files this
-# agency generates itself go to TNSW's internal upload route (scope
-# nsw:storage:internalwrite), which accepts the types TNSW grants this client.
+# (scope nsw:storage:write), so TNSW checks them like a trader's. CDA
+# generates no files itself, so CDA_TO_NSW doesn't hold
+# nsw:storage:internalwrite, the scope of TNSW's internal upload route
+# (internalUploadPath). A step that stores a generated file needs it granted
+# in the IdP and added to the tnsw service's scopes.
 storage:
   type: proxy
   # Seals the file tokens officers hold in place of stored file keys (here,
@@ -133,7 +135,6 @@ services:
           - nsw:task:write
           - nsw:storage:read
           - nsw:storage:write
-          - nsw:storage:internalwrite
         endpointParams:
           resource: https://api.nsw-srilanka.local
 

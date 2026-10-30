@@ -91,9 +91,14 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 // InternalUpload is Upload for the files a machine client generates and stores
 // itself, such as an agency's documents, which may be of types users may not
-// upload. Its reference opens the file as well as being submittable. Which
-// callers reach it is the route's scope: it does not check the kind of principal.
+// upload. Its reference opens the file as well as being submittable. Only a
+// machine client may call it, so a user granted the route's scope by mistake
+// is still refused; the scope decides which clients reach it.
 func (h *FileHandler) InternalUpload(w http.ResponseWriter, r *http.Request) {
+	if p, ok := authn.FromContext(r.Context()); ok && p.Kind != authn.KindClient {
+		httputil.Error(w, r, http.StatusForbidden, "only a machine client can upload on this route")
+		return
+	}
 	h.serveUpload(w, r, h.machine)
 }
 
