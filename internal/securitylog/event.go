@@ -3,6 +3,12 @@
 // called, which route, the status, and a short reason. Request and response
 // payloads are never logged: forms are JSON Schema–driven (jsonforms), so
 // field-level redaction cannot list every PII key.
+//
+// Handlers do not write security lines themselves. systemlog.Middleware puts
+// an Annotation slot on the request context; handlers call Annotate to add
+// reason and partner. Middleware then writes the only category=security line
+// when the status is 401/403 or the slot was annotated, so each denial is
+// logged exactly once.
 package securitylog
 
 import (
@@ -14,8 +20,68 @@ import (
 // filter on this string; keep a single definition here.
 const Category = "security"
 
+// Annotation is a request-scoped slot systemlog.Middleware allocates before
+// ServeHTTP. Handlers call Annotate to fill Msg, Reason, and Partner; the
+// middleware reads them when writing the security line.
+type Annotation struct {
+	Msg     string
+	Reason  string
+	Partner string
+	set     bool
+}
+
+type annotationKey struct{}
+
+// WithAnnotation returns ctx carrying slot.
+func WithAnnotation(ctx context.Context, slot *Annotation) context.Context {
+	return context.WithValue(ctx, annotationKey{}, slot)
+}
+
+// FromContext returns the slot on ctx, or nil when none was allocated.
+func FromContext(ctx context.Context) *Annotation {
+	slot, _ := ctx.Value(annotationKey{}).(*Annotation)
+	return slot
+}
+
+// Annotated reports whether Annotate was called on this slot.
+func (a *Annotation) Annotated() bool {
+	return a != nil && a.set
+}
+
+// Annotate records msg, reason, and partner on the request's Annotation slot
+// for Middleware to include on the security line. attrs may include the keys
+// "reason" and "partner" (string values); other keys are ignored. No-op when
+// no slot is on ctx (handler ran outside Middleware).
+func Annotate(ctx context.Context, msg string, attrs ...any) {
+	slot := FromContext(ctx)
+	if slot == nil {
+		return
+	}
+	slot.set = true
+	if msg != "" {
+		slot.Msg = msg
+	}
+	for i := 0; i+1 < len(attrs); i += 2 {
+		key, ok := attrs[i].(string)
+		if !ok {
+			continue
+		}
+		val, ok := attrs[i+1].(string)
+		if !ok {
+			continue
+		}
+		switch key {
+		case "reason":
+			slot.Reason = val
+		case "partner":
+			slot.Partner = val
+		}
+	}
+}
+
 // Event writes one security line at warn. logger nil uses slog.Default.
-// Callers must not pass request or response bodies.
+// Callers must not pass request or response bodies. Prefer Annotate from
+// handlers; Middleware is the intended caller of Event.
 func Event(ctx context.Context, logger *slog.Logger, msg string, attrs ...any) {
 	if logger == nil {
 		logger = slog.Default()

@@ -248,10 +248,7 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	taskID, stepID, err := callbacktoken.Decode(token)
 	if err != nil {
 		slog.WarnContext(r.Context(), "tasks: invalid callback token", "error", err)
-		securitylog.Event(r.Context(), nil, "invalid callback token",
-			"method", r.Method,
-			"path", "/api/v1/callbacks/{token}",
-			"status", http.StatusBadRequest,
+		securitylog.Annotate(r.Context(), "invalid callback token",
 			"reason", "invalid_callback_token",
 		)
 		h.auditTaskUpdate(r.Context(), "", true, taskAuditMeta(http.StatusBadRequest, "invalid_callback_token"))

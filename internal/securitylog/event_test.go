@@ -38,3 +38,32 @@ func TestEventWritesCategorySecurity(t *testing.T) {
 		t.Fatalf("level = %v, want WARN", line["level"])
 	}
 }
+
+func TestAnnotateFillsSlot(t *testing.T) {
+	ann := &Annotation{}
+	ctx := WithAnnotation(context.Background(), ann)
+
+	Annotate(ctx, "webhook auth failed",
+		"reason", "webhook_auth_failed",
+		"partner", "slpa",
+		"ignored", "x",
+		"status", 401, // non-string value ignored
+	)
+
+	if !ann.Annotated() {
+		t.Fatal("expected Annotated")
+	}
+	if ann.Msg != "webhook auth failed" {
+		t.Fatalf("Msg = %q", ann.Msg)
+	}
+	if ann.Reason != "webhook_auth_failed" {
+		t.Fatalf("Reason = %q", ann.Reason)
+	}
+	if ann.Partner != "slpa" {
+		t.Fatalf("Partner = %q", ann.Partner)
+	}
+}
+
+func TestAnnotateNoopWithoutSlot(t *testing.T) {
+	Annotate(context.Background(), "webhook auth failed", "reason", "webhook_auth_failed")
+}
