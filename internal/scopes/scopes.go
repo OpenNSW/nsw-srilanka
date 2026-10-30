@@ -12,8 +12,12 @@ package scopes
 
 const (
 	// Consignment resource.
-	ConsignmentRead  = "nsw:consignment:read"
+	ConsignmentRead = "nsw:consignment:read"
+	// ConsignmentWrite grants creating a consignment, which only traders do.
 	ConsignmentWrite = "nsw:consignment:write"
+	// ConsignmentFlow grants starting a configured flow on a consignment, which
+	// its trader and its CHA both do.
+	ConsignmentFlow = "nsw:consignment:flow"
 	// ConsignmentAdminRead grants ops/admin visibility into any consignment's raw
 	// workflow-engine state, unlike ConsignmentRead which is scoped to the caller's
 	// own trader/CHA-owned consignments.

@@ -49,9 +49,11 @@ flowchart LR
   equals it (`internal/tasks/authzgate`, `internal/profile/handler.go`). If no company has
   that handle, the user can sign in but owns nothing.
 - **What a user may do comes from the groups.** `Traders` grants the `Trader` role and
-  `CHA` grants the `CHA` role (`idp/bootstrap/10-nsw-platform.yaml`). Both carry
-  the `traderNsw` scope set. The `catalog` section of `config.yaml` maps the role names
-  the backend expects (`trader`, `cha`) to these IdP role names.
+  `CHA` grants the `CHA` role (`idp/bootstrap/10-nsw-platform.yaml`). Each role grants
+  `nsw:*` scopes on the NSW API: both get `nsw:consignment:flow` to start a flow on a
+  consignment, and only `Trader` gets `nsw:consignment:write` to create one. The `catalog`
+  section of `config.yaml` maps the role names the backend expects (`trader`, `cha`) to
+  these IdP role names.
 - **Whether traders can pick a company as their CHA comes from `has_cha`.** The CHA picker
   in the trader portal lists companies with `has_cha = true`, and the `cha_persist` plugin
   refuses to assign a company without it.

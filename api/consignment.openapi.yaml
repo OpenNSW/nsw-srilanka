@@ -24,7 +24,8 @@ paths:
         immediately starts its workflow — no CHA company or HS code is
         collected up front; the workflow's own tasks collect those later.
 
-        Requires scope `nsw:consignment:write`.
+        Requires scope `nsw:consignment:write`, which only traders hold, and
+        the trader role.
       operationId: createConsignment
       requestBody:
         required: false
@@ -56,6 +57,14 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized. Missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >-
+            The bearer token lacks scope `nsw:consignment:write`, or the caller
+            does not hold the trader role.
           content:
             application/json:
               schema:
@@ -213,7 +222,7 @@ paths:
         consignment the caller's company/role does not own is reported as
         not found.
 
-        Requires scope `nsw:consignment:write`.
+        Requires scope `nsw:consignment:flow`, which traders and CHAs hold.
       operationId: startConsignmentFlow
       parameters:
         - $ref: '#/components/parameters/ConsignmentID'
@@ -246,7 +255,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: The caller has no resolvable company profile.
+          description: >-
+            The bearer token lacks scope `nsw:consignment:flow`, or the caller has
+            no resolvable company profile.
           content:
             application/json:
               schema:

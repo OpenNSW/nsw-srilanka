@@ -91,6 +91,7 @@ inboundAuthConfig:
         - ou
         - nsw:consignment:read
         - nsw:consignment:write
+        - nsw:consignment:flow
         - nsw:task:read
         - nsw:task:write
         - nsw:hscode:read
@@ -343,7 +344,10 @@ resources:
         description: Read action
       - name: Write
         handle: write
-        description: Write action
+        description: Create a consignment
+      - name: Flow
+        handle: flow
+        description: Start a flow on a consignment
       - name: Admin Read
         handle: adminread
         description: Admin Read action
@@ -418,6 +422,7 @@ permissions:
     permissions:
       - nsw:cha:read
       - nsw:company:read
+      - nsw:consignment:flow
       - nsw:consignment:read
       - nsw:consignment:write
       - nsw:hscode:read
@@ -441,8 +446,8 @@ permissions:
     permissions:
       - nsw:cha:read
       - nsw:company:read
+      - nsw:consignment:flow
       - nsw:consignment:read
-      - nsw:consignment:write
       - nsw:hscode:read
       - nsw:profile:read
       - nsw:storage:read

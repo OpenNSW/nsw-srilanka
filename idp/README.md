@@ -248,14 +248,14 @@ M2M (client-credentials) apps (auth method: `client_secret_basic`):
 Each protected backend is registered as a **resource server** whose `identifier`
 becomes the access-token **audience** (`aud`):
 
-| `identifier` (= token `aud`)        | Backend                                                            | Scopes (`<resource>:<action>`)                                                                                                                          |
-| ----------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `https://api.nsw-srilanka.local`    | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`           | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,internalwrite}` |
-| `https://api.cda.nsw-agency.local`  | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)   | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
-| `https://api.efc.nsw-agency.local`  | this backend as EFC (`mode: agency`, `efc-api` in `compose.yml`)   | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
-| `https://api.npqs.nsw-agency.local` | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
-| `https://api.sltb.nsw-agency.local` | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
-| `https://api.fcau.nsw-agency.local` | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
+| `identifier` (= token `aud`)        | Backend                                                            | Scopes (`<resource>:<action>`)                                                                                                                               |
+| ----------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `https://api.nsw-srilanka.local`    | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`           | `nsw:consignment:{read,write,flow,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,internalwrite}` |
+| `https://api.cda.nsw-agency.local`  | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)   | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                       |
+| `https://api.efc.nsw-agency.local`  | this backend as EFC (`mode: agency`, `efc-api` in `compose.yml`)   | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                       |
+| `https://api.npqs.nsw-agency.local` | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                       |
+| `https://api.sltb.nsw-agency.local` | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                       |
+| `https://api.fcau.nsw-agency.local` | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                       |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
@@ -295,21 +295,21 @@ are the same backend; that is safe because every caller names its target with `r
 not from the app's requestable `scopes` list. So every caller is granted the relevant
 scopes via a role:
 
-| Caller                 | Grant                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
-| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes                                                          |
-| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite`         |
-| `*_TO_NSW` M2M clients | **`<Agency>ToNswM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                      |
-| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                                |
-| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the CDA API   |
-| EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                                |
-| `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the EFC API   |
-| NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                             |
-| SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                             |
-| `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the NPQS API |
-| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the SLTB API |
-| FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                             |
-| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the FCAU API |
+| Caller                 | Grant                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes. Both get `nsw:consignment:flow` (start a flow on a consignment); only `Trader` gets `nsw:consignment:write` (create one) |
+| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite`                                                                          |
+| `*_TO_NSW` M2M clients | **`<Agency>ToNswM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                                                                                       |
+| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                                                                                                 |
+| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the CDA API                                                                    |
+| EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                                                                                                 |
+| `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the EFC API                                                                    |
+| NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                                                                                              |
+| SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                                                                                              |
+| `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the NPQS API                                                                  |
+| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the SLTB API                                                                  |
+| FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                                                                                              |
+| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the FCAU API                                                                  |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to
