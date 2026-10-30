@@ -3,12 +3,7 @@ import type {
   ConsignmentListResult,
   ConsignmentState,
   CreateConsignmentResponse,
-  CreatePreConsignmentRequest,
-  PreConsignmentInstance,
-  PreConsignmentListApiResponse,
   TradeFlow,
-  TraderPreConsignmentItem,
-  TraderPreConsignmentsResponse,
   Workflow,
   WorkflowQueryParams,
   WorkflowResponse,
@@ -16,8 +11,6 @@ import type {
 } from './types'
 import { http, HttpError } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
-import { sendTaskCommand } from '@/features/task/service'
-import type { TaskCommandRequest, TaskCommandResponse } from '@/features/task/types'
 
 // Workflow functions
 export async function getWorkflowsByHSCode(
@@ -136,73 +129,4 @@ export async function getAllConsignments(
     signal,
   })
   return data
-}
-
-// PreConsignment functions
-export async function getTraderPreConsignments(
-  offset: number = 0,
-  limit: number = 50,
-  signal?: AbortSignal,
-): Promise<TraderPreConsignmentsResponse> {
-  const { data } = await http.request<PreConsignmentListApiResponse>({
-    url: `${API_BASE_URL}/api/v1/pre-consignments`,
-    params: { offset, limit },
-    attachToken: true,
-    signal,
-  })
-
-  if (Array.isArray(data)) {
-    const items: TraderPreConsignmentItem[] = data.map((instance) => ({
-      id: instance.preConsignmentTemplate.id,
-      name: instance.preConsignmentTemplate.name,
-      description: instance.preConsignmentTemplate.description,
-      state: instance.state,
-      dependsOn: instance.preConsignmentTemplate.dependsOn,
-      preConsignment: instance,
-      preConsignmentTemplate: instance.preConsignmentTemplate,
-    }))
-
-    return {
-      total: items.length,
-      items,
-      offset: 0,
-      limit: items.length,
-    }
-  }
-  return data
-}
-
-export async function getPreConsignment(id: string, signal?: AbortSignal): Promise<PreConsignmentInstance> {
-  const { data } = await http.request<PreConsignmentInstance>({
-    url: `${API_BASE_URL}/api/v1/pre-consignments/${id}`,
-    attachToken: true,
-    signal,
-  })
-  return data
-}
-
-export async function createPreConsignment(templateId: string, signal?: AbortSignal): Promise<PreConsignmentInstance> {
-  const { data } = await http.request<PreConsignmentInstance>({
-    url: `${API_BASE_URL}/api/v1/pre-consignments`,
-    method: 'POST',
-    data: { preConsignmentTemplateId: templateId } satisfies CreatePreConsignmentRequest,
-    attachToken: true,
-    signal,
-  })
-  return data
-}
-
-export async function submitPreConsignmentTask(
-  request: TaskCommandRequest,
-  signal?: AbortSignal,
-): Promise<TaskCommandResponse> {
-  return sendTaskCommand(
-    {
-      command: request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMISSION',
-      taskId: request.taskId,
-      workflowId: request.workflowId,
-      data: request.data || {},
-    },
-    signal,
-  )
 }
