@@ -64,9 +64,9 @@ func TestCDNResultsCollector_FlattensEveryBranch(t *testing.T) {
 func TestCDNResultsCollector_SkipsBranchesCancelledFromTheForm(t *testing.T) {
 	cancelled := branch("unused", "", false)
 	delete(cancelled["userform"].(map[string]any), "registeredCdnNumber")
-	cancelled["cdn_action"] = map[string]any{"command": "cancel"}
+	cancelled["userform"].(map[string]any)["cancel_cdn"] = true
 	submitted := branch("CDN-2", "edge-2", true)
-	submitted["cdn_action"] = map[string]any{"command": "submit"}
+	submitted["userform"].(map[string]any)["cancel_cdn"] = false
 
 	ctx := splitCtx(map[string]any{"cdn_results": []any{cancelled, submitted}})
 	require.NoError(t, CDNResultsCollectorFunc(ctx, nil))
