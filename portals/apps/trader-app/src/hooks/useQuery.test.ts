@@ -142,6 +142,31 @@ describe('useQuery', () => {
     expect(result.current.isFetching).toBe(false)
   })
 
+  it('keeps the last data while a new key loads when keepPreviousData is set', async () => {
+    const second = createDeferred<string>()
+    const fetcher = vi.fn<(_signal: AbortSignal) => Promise<string>>(() => Promise.resolve('page-1'))
+
+    const { result, rerender } = renderHook(
+      ({ page }) => useQuery(['list', page], fetcher, { keepPreviousData: true }),
+      { initialProps: { page: 1 } },
+    )
+    await waitFor(() => expect(result.current.data).toBe('page-1'))
+
+    fetcher.mockImplementationOnce(() => second.promise)
+    rerender({ page: 2 })
+
+    expect(result.current.status).toBe('success')
+    expect(result.current.data).toBe('page-1')
+    expect(result.current.isFetching).toBe(true)
+
+    await act(async () => {
+      second.resolve('page-2')
+      await second.promise
+    })
+    expect(result.current.data).toBe('page-2')
+    expect(result.current.isFetching).toBe(false)
+  })
+
   it('polls according to refetchInterval and stops when it returns false', async () => {
     vi.useFakeTimers()
 
