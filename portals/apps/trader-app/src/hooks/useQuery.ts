@@ -164,14 +164,12 @@ export function useQuery<T>(
   useEffect(() => {
     if (!enabled) {
       cancelActive()
-      return
+      return cancelActive
     }
 
     void execute(1)
 
-    return () => {
-      cancelActive()
-    }
+    return cancelActive
   }, [serializedKey, enabled, cancelActive])
 
   const refetch = useCallback(async (): Promise<T | undefined> => {
@@ -179,7 +177,7 @@ export function useQuery<T>(
     setIsFetching(true)
     setPolling(false)
     setError(null)
-    setStatus((prev) => (dataRef.current === undefined ? 'pending' : prev))
+    setStatus(dataRef.current === undefined ? 'pending' : 'success')
     return runRef.current ? runRef.current(1) : undefined
   }, [serializedKey])
 

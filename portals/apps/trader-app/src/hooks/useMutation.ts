@@ -20,24 +20,26 @@ export function useMutation<TArgs extends unknown[], TResult>(
     fnRef.current = fn
   })
   const callIdRef = useRef(0)
+  const pendingCountRef = useRef(0)
 
   const mutate = useCallback(async (...args: TArgs): Promise<TResult> => {
     const callId = ++callIdRef.current
+    pendingCountRef.current += 1
     setIsPending(true)
     setError(null)
     try {
-      const result = await fnRef.current(...args)
-      if (callId === callIdRef.current) {
-        setIsPending(false)
-      }
-      return result
+      return await fnRef.current(...args)
     } catch (err) {
       const normalized = toError(err)
       if (callId === callIdRef.current) {
         setError(normalized)
-        setIsPending(false)
       }
       throw err
+    } finally {
+      pendingCountRef.current -= 1
+      if (pendingCountRef.current === 0) {
+        setIsPending(false)
+      }
     }
   }, [])
 

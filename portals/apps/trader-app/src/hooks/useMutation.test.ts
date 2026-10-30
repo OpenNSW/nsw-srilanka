@@ -92,4 +92,36 @@ describe('useMutation', () => {
     expect(fn1).not.toHaveBeenCalled()
     expect(fn2).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps isPending true when overlapping calls settle out of order', async () => {
+    const first = createDeferred<string>()
+    const second = createDeferred<string>()
+    let call = 0
+    const fn = vi.fn(() => (++call === 1 ? first.promise : second.promise))
+
+    const { result } = renderHook(() => useMutation(fn))
+
+    let firstPromise!: Promise<string>
+    let secondPromise!: Promise<string>
+    act(() => {
+      firstPromise = result.current.mutate()
+      secondPromise = result.current.mutate()
+    })
+
+    expect(result.current.isPending).toBe(true)
+
+    // Newer call finishes first; older call is still in flight
+    await act(async () => {
+      second.resolve('second-done')
+      await secondPromise
+    })
+    expect(result.current.isPending).toBe(true)
+
+    // Older call finishes; now all calls have settled
+    await act(async () => {
+      first.resolve('first-done')
+      await firstPromise
+    })
+    expect(result.current.isPending).toBe(false)
+  })
 })

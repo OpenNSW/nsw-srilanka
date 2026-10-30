@@ -302,11 +302,13 @@ describe('useQuery', () => {
     expect(result.current.polling).toBe(false)
   })
 
-  it('keeps the last data when a subsequent refetch fails', async () => {
+  it('keeps the last data when a subsequent refetch fails, and restores status to success on the next refetch', async () => {
+    const thirdFetch = createDeferred<string>()
     const fetcher = vi
       .fn<(_signal: AbortSignal) => Promise<string>>()
       .mockResolvedValueOnce('initial-data')
       .mockRejectedValueOnce(new Error('refetch failed'))
+      .mockImplementationOnce(() => thirdFetch.promise)
 
     const { result } = renderHook(() => useQuery('keep-data', fetcher))
 
@@ -323,6 +325,57 @@ describe('useQuery', () => {
     expect(result.current.error?.message).toBe('refetch failed')
     expect(result.current.data).toBe('initial-data')
     expect(result.current.isFetching).toBe(false)
+
+    let refetchPromise!: Promise<string | undefined>
+    act(() => {
+      refetchPromise = result.current.refetch()
+    })
+
+    expect(result.current.status).toBe('success')
+    expect(result.current.error).toBeNull()
+    expect(result.current.data).toBe('initial-data')
+    expect(result.current.isFetching).toBe(true)
+
+    await act(async () => {
+      thirdFetch.resolve('updated-data')
+      await refetchPromise
+    })
+
+    expect(result.current.status).toBe('success')
+    expect(result.current.data).toBe('updated-data')
+    expect(result.current.isFetching).toBe(false)
+  })
+
+  it('cancels active work on unmount when disabled query was started via refetch', async () => {
+    vi.useFakeTimers()
+
+    const signals: AbortSignal[] = []
+    const fetcher = vi.fn((signal: AbortSignal) => {
+      signals.push(signal)
+      return Promise.resolve('manual')
+    })
+
+    const { result, unmount } = renderHook(() =>
+      useQuery('disabled-unmount', fetcher, {
+        enabled: false,
+        refetchInterval: () => 1000,
+      }),
+    )
+
+    await act(async () => {
+      await result.current.refetch()
+    })
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(result.current.polling).toBe(true)
+
+    unmount()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
   it('reads the latest fetcher and refetchInterval without re-running the effect', async () => {
