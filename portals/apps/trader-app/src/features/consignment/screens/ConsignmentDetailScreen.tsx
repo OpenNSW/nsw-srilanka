@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Badge, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
@@ -9,28 +8,17 @@ import { isAgencyMode } from '@/features/case/mode'
 import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
 import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
-import { getConsignment } from '@/features/consignment/service.ts'
+import { useConsignment } from '@/features/consignment/hooks.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { ROUTES } from '@/constants'
 
-type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
-
-// A freshly created consignment can be returned before its workflow has been
-// provisioned (workflowNodes still empty). Rather than flashing the empty
-// "no workflow" state, re-fetch a bounded number of times with exponential
-// backoff until the nodes appear or the consignment reaches a terminal state. The same
-// backoff waits for a newly started flow's first step to appear.
-const PROVISION_MAX_ATTEMPTS = 5
-const PROVISION_BASE_DELAY_MS = 1000
-const PROVISION_MAX_DELAY_MS = 5000
-
-type FetchMode = 'initial' | 'refresh' | 'poll'
-
 interface ConsignmentDetailScreenProps {
+  // Keeps this view's results apart from other views of the same consignment.
+  scope?: string
   // Defaults to the trader/CHA-facing, ownership-checked getConsignment. Pass
   // getConsignmentForAdmin (features/admin/service.ts) to reuse this screen for the
   // ConsignmentAdminRead-gated admin view instead.
-  fetcher?: (consignmentId: string) => Promise<ConsignmentDetail | null>
+  fetcher?: (consignmentId: string, signal?: AbortSignal) => Promise<ConsignmentDetail | null>
   // The page above this one, first in the breadcrumb and where the error state's
   // buttons go. Defaults to the trader/CHA consignments list.
   parent?: BreadcrumbItem
@@ -40,7 +28,8 @@ interface ConsignmentDetailScreenProps {
 }
 
 export function ConsignmentDetailScreen({
-  fetcher = getConsignment,
+  scope,
+  fetcher,
   parent,
   canStartFlows = true,
 }: ConsignmentDetailScreenProps = {}) {
@@ -51,169 +40,10 @@ export function ConsignmentDetailScreen({
   const up = parent ?? { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: ROUTES.CONSIGNMENTS }
   const untitled = t(isAgencyMode ? 'cases.detail.title' : 'consignments.detail.title')
   const backTo = up.to ?? ROUTES.CONSIGNMENTS
-  const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
-  const [loading, setLoading] = useState(!!consignmentId)
-  const [refreshing, setRefreshing] = useState(false)
-  const [provisioning, setProvisioning] = useState(false)
-  const [error, setError] = useState<ConsignmentErrorKey | null>(consignmentId ? null : 'idRequired')
-  const provisionAttemptsRef = useRef(0)
-  const provisionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const requestCountRef = useRef(0)
-  // The step IDs shown when a flow was started, or null when no start is pending. Fetches
-  // keep polling until a step outside this set (the new flow's first) appears.
-  const stepsBeforeStartRef = useRef<Set<string> | null>(null)
-
-  const clearProvisionTimer = useCallback(() => {
-    if (provisionTimerRef.current) {
-      clearTimeout(provisionTimerRef.current)
-      provisionTimerRef.current = null
-    }
-  }, [])
-
-  const stopAwaitingStartedFlow = useCallback(() => {
-    if (stepsBeforeStartRef.current !== null) {
-      stepsBeforeStartRef.current = null
-      setRefreshing(false)
-    }
-  }, [])
-
-  // Defined before fetchConsignment so the callback can schedule polls without
-  // a self-reference, which would be a temporal dead zone access.
-  const fetchConsignmentRef = useRef<((mode: FetchMode) => Promise<void>) | null>(null)
-
-  const fetchConsignment = useCallback(
-    async (mode: FetchMode = 'initial') => {
-      if (!consignmentId) return
-
-      clearProvisionTimer()
-      // Track this request so stale responses (e.g. a manual refresh fired
-      // while a poll is still pending) can be ignored, preventing duplicate
-      // concurrent polling loops.
-      const requestId = ++requestCountRef.current
-
-      // A poll continuation keeps the attempt counter and the current view; an
-      // initial load or a manual refresh starts a fresh provisioning cycle.
-      if (mode !== 'poll') {
-        provisionAttemptsRef.current = 0
-      }
-
-      try {
-        const result = await fetcher(consignmentId)
-        if (requestId !== requestCountRef.current) return
-
-        if (!result) {
-          setError('notFound')
-          setProvisioning(false)
-          return
-        }
-        setConsignment(result)
-        setError(null)
-
-        const nodes = result.workflowNodes ?? []
-        const awaitingProvisioning = nodes.length === 0 && result.state === 'IN_PROGRESS'
-        const stepsBeforeStart = stepsBeforeStartRef.current
-        const awaitingStartedFlow = stepsBeforeStart !== null && nodes.every((node) => stepsBeforeStart.has(node.id))
-
-        if ((awaitingProvisioning || awaitingStartedFlow) && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
-          const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
-          provisionAttemptsRef.current += 1
-          // A started flow is awaited on the current view, under the refresh spinner, not
-          // the full-page set-up spinner.
-          setProvisioning(awaitingProvisioning && !awaitingStartedFlow)
-          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
-        } else {
-          setProvisioning(false)
-          stopAwaitingStartedFlow()
-        }
-      } catch (err) {
-        if (requestId !== requestCountRef.current) return
-        console.error('Failed to fetch consignment:', err)
-
-        // A transient failure mid-provisioning should keep retrying with
-        // backoff rather than dropping the user onto a misleading
-        // "no workflow" or error screen. Only surface the error once retries
-        // are exhausted.
-        if (mode === 'poll' && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
-          const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
-          provisionAttemptsRef.current += 1
-          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
-        } else {
-          setProvisioning(false)
-          stopAwaitingStartedFlow()
-          setError('loadFailed')
-        }
-      } finally {
-        if (requestId === requestCountRef.current) {
-          if (mode === 'initial') setLoading(false)
-          // While a started flow is awaited, the refresh spinner stays until the wait ends.
-          if (mode === 'refresh' && stepsBeforeStartRef.current === null) setRefreshing(false)
-        }
-      }
-    },
-    [consignmentId, fetcher, clearProvisionTimer, stopAwaitingStartedFlow],
-  )
-
-  const handleRefresh = () => {
-    // Update ref in event handler (not render / not useEffect body) so polls
-    // fired during or after this refresh always call the latest callback.
-    fetchConsignmentRef.current = fetchConsignment
-    setRefreshing(true)
-    setError(null)
-    void fetchConsignment('refresh')
-  }
-
-  // A started flow's first step is created a moment after the start returns, so reload until
-  // a step that was not shown before appears.
-  const handleFlowStarted = () => {
-    stepsBeforeStartRef.current = new Set((consignment?.workflowNodes ?? []).map((node) => node.id))
-    handleRefresh()
-  }
-
-  useEffect(() => {
-    if (!consignmentId) return
-    clearProvisionTimer()
-    let cancelled = false
-    void fetcher(consignmentId)
-      .then((result) => {
-        if (cancelled) return
-        provisionAttemptsRef.current = 0
-        if (!result) {
-          setError('notFound')
-          setProvisioning(false)
-          setLoading(false)
-          return
-        }
-        setConsignment(result)
-        setError(null)
-
-        const awaitingProvisioning = (result.workflowNodes?.length ?? 0) === 0 && result.state === 'IN_PROGRESS'
-
-        if (awaitingProvisioning && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
-          const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
-          provisionAttemptsRef.current += 1
-          setProvisioning(true)
-          // Set ref inside async callback — satisfies react-hooks/refs and
-          // react-hooks/immutability which only check the effect body, not
-          // async continuations.
-          fetchConsignmentRef.current = fetchConsignment
-          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
-        } else {
-          setProvisioning(false)
-        }
-        setLoading(false)
-      })
-      .catch((err) => {
-        if (cancelled) return
-        console.error('Failed to fetch consignment:', err)
-        setError('loadFailed')
-        setProvisioning(false)
-        setLoading(false)
-      })
-    return () => {
-      cancelled = true
-      clearProvisionTimer()
-    }
-  }, [consignmentId, fetcher, fetchConsignment, clearProvisionTimer])
+  const { consignment, error, loading, provisioning, refreshing, refetch, startFlow } = useConsignment(consignmentId, {
+    scope,
+    fetcher,
+  })
 
   if (loading || provisioning) {
     const message = provisioning
@@ -262,18 +92,7 @@ export function ConsignmentDetailScreen({
               <ArrowLeftIcon />
               {t(isAgencyMode ? 'cases.detail.backToList' : 'consignments.detail.backToList')}
             </Button>
-            {isLoadFailed && (
-              <Button
-                onClick={() => {
-                  fetchConsignmentRef.current = fetchConsignment
-                  setLoading(true)
-                  setError(null)
-                  void fetchConsignment('initial')
-                }}
-              >
-                {t('consignments.detail.tryAgain')}
-              </Button>
-            )}
+            {isLoadFailed && <Button onClick={refetch}>{t('consignments.detail.tryAgain')}</Button>}
           </div>
         </div>
       </div>
@@ -291,7 +110,7 @@ export function ConsignmentDetailScreen({
             type="button"
             variant="soft"
             color="gray"
-            onClick={handleRefresh}
+            onClick={refetch}
             disabled={refreshing}
             aria-label={t('consignments.detail.refresh')}
           >
@@ -326,13 +145,7 @@ export function ConsignmentDetailScreen({
             </span>
           </p>
         </div>
-        {canStartFlows && (
-          <StartFlowButtons
-            consignmentId={consignment.id}
-            flows={consignment.startableFlows ?? []}
-            onStarted={handleFlowStarted}
-          />
-        )}
+        {canStartFlows && <StartFlowButtons flows={consignment.startableFlows ?? []} onStart={startFlow} />}
       </div>
 
       <div className="bg-app-surface rounded-2xl shadow-md relative">
