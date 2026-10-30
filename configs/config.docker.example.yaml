@@ -90,10 +90,6 @@ storage:
     # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
     # a known malware vector.
     - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-    # XML is data to download, not to display: it is not in inlineTypes, so a
-    # download saves it instead of opening it.
-    - text/xml
-    - application/xml
   # What machine clients may upload on POST /api/v1/internal/storage beyond
   # allowedUploadTypes, by the client's name in catalog.clients. That
   # route is for the files a deployment generates itself, such as the documents
@@ -118,8 +114,6 @@ storage:
     image/gif: [.gif]
     image/webp: [.webp]
     application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: [.xlsx]
-    text/xml: [.xml]
-    application/xml: [.xml]
     text/html: [.html]
   # What a download opens in the browser; every other file is saved. MIME
   # types, compared exactly with the stored type. Not read when type is proxy:

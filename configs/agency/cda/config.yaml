@@ -75,8 +75,6 @@ storage:
       - image/webp
       # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls.
       - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-      - text/xml
-      - application/xml
 
 # Officers sign in through the CDA portal client, and NSW injects and replies as NSW_TO_CDA.
 # The audience is the CDA API resource server in
