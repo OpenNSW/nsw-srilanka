@@ -4,7 +4,7 @@ This guide is for whoever writes the forms in [`one-trade-artifacts`](https://gi
 
 A form is checked twice:
 
-- **In the browser**, as the user fills it in. The portal won't send a form that breaks a rule.
+- **In the browser**, as the user fills it in. On a button that submits the form, the portal won't send one that breaks a rule.
 - **On the server**, when the submission arrives, against the same form's schema. This holds a call that skips the browser to the same rules.
 
 Both read the schema as JSON Schema draft-07. The server's exact rules are in the [payload schema extension's README](../../internal/tasks/extensions/payloadschema/README.md).
@@ -218,7 +218,7 @@ A file field is a string with `"format": "file"`, or a list of them, with its ru
 ```
 
 - `accept` lists file name extensions (`.pdf`), or `*` for any file. Don't use types such as `application/pdf` or `image/*`: the server matches a file by its extension, so a type matches no file there. List only extensions the deployment accepts for upload (`storage.allowedUploadTypes`).
-- `maxFiles` is the most files a list holds. A list needs `maxFiles` above 1; without it the field keeps one file.
+- `maxFiles` is the most files a list holds. A list needs `maxFiles` above 1; without it the file control keeps one file.
 - `maxSize` (in bytes) limits a file's size in the browser, before upload; it defaults to 5 MiB. Every upload is also held to the deployment's `storage.maxUploadBytes`.
 - To require at least one file in a list, add `"minItems": 1`.
 
@@ -230,7 +230,7 @@ The rest of draft-07 works the same on both sides, so a form can use it as JSON 
 
 Keep to those. In particular:
 
-- **Other formats** (`url`, `byte`, `int32`, `iri`, …) are checked by only one of the two.
+- **Other formats** (`url`, `byte`, `int32`, `iri`, …) are checked by only one of the two. `format: file` marks a file field, whose rules are in `x-file` (see [Files](#files)).
 - **Keywords from later drafts** (`dependentRequired`, `unevaluatedProperties`, `prefixItems`, …) are ignored by both: a form doesn't declare its draft, and both read it as draft-07.
 - **Next to a `$ref`**, write nothing else: put the extra rules in an `allOf` with the `$ref`. The server drops a rule written beside a `$ref`. In a form with any `readOnly` value, a `default` beside a `$ref`, or a keyword that holds a `readOnly` (such as `properties` or `allOf`), makes it refuse every submission on the step.
 - **`readOnly`** is followed (the server checks the value) on properties and list items, and through `allOf`, `$ref` targets, `additionalProperties` and `patternProperties`. Inside `if`/`then`/`else`, `oneOf`, `anyOf`, `not`, `contains`, `propertyNames`, the schema form of `dependencies` (`"dependencies": {"a": {…}}`), `items` given as a list, or `additionalItems`, the server can't tell whether the value applies, so it refuses every submission on the step.
