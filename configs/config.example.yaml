@@ -592,6 +592,10 @@ consignment:
   # e.g. the SLPA sundry (add-on) order and its payment:
   #   - templateId: slpa-sundry-payment
   #     label: SLPA sundry payment
+  # the Customs dispatch note for a container whose note Customs cancelled (the
+  # boat note waits until every container has one):
+  #   - templateId: customs-additional-cdn
+  #     label: Add a Cargo Dispatch Note
 
 # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
 # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.

@@ -1017,9 +1017,11 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
+	declarations := cusdec.NewDeclarationRepository(db)
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
-		Declarations:  cusdec.NewDeclarationRepository(db),
+		Declarations:  declarations,
 		DispatchNotes: cdn.NewDispatchNoteRepository(db),
+		Cases:         declarations,
 	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}

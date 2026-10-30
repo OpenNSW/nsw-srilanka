@@ -197,6 +197,32 @@ func RetrievedCDNRefs(resp map[string]any) []map[string]any {
 	return Objects(raw)
 }
 
+// CancelledCDNStatus is ASYCUDA World's status for a cancelled dispatch note
+// (§7.7), the only one listed against a declaration that is not live: a note
+// whose integration failed is never registered, so it is never listed (§7.2).
+const CancelledCDNStatus = "Cancelled"
+
+// ActiveCDNRefs reads the dispatch notes listed against a declaration
+// (cdnRefs), leaving out any Customs cancelled and any whose reference is
+// unreadable.
+func ActiveCDNRefs(cdnRefs []map[string]any) []Reference {
+	var refs []Reference
+	for _, r := range cdnRefs {
+		if strings.EqualFold(Str(r, "status"), CancelledCDNStatus) {
+			continue
+		}
+		n, err := WholeNumber(r["number"])
+		if err != nil {
+			continue
+		}
+		ref := Reference{Office: Text(r, "office"), Year: Text(r, "year"), Serial: Text(r, "serial"), Number: n}
+		if ref.IsValid() {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
+}
+
 // FirstObject finds the object under one of keys in an SLC Edge answer, which
 // the specification shows under payload but not consistently (§6.7, §7.8).
 func FirstObject(resp map[string]any, keys ...string) map[string]any {
