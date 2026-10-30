@@ -10,6 +10,8 @@ import { useConsignment } from '@/features/consignment/hooks.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { ROUTES } from '@/constants'
 import { Breadcrumb, type BreadcrumbItem, CopyableId } from '@portals/ui'
+import { ACCESS_SCOPES } from '@/constants/scopes'
+import { RequireScope } from '@/components/RequireScope'
 
 interface ConsignmentDetailScreenProps {
   // Keeps this view's results apart from other views of the same consignment.
@@ -144,7 +146,11 @@ export function ConsignmentDetailScreen({
             </span>
           </p>
         </div>
-        {canStartFlows && <StartFlowButtons flows={consignment.startableFlows ?? []} onStart={startFlow} />}
+        {canStartFlows && (
+          <RequireScope scope={ACCESS_SCOPES.CONSIGNMENT_FLOWS}>
+            <StartFlowButtons flows={consignment.startableFlows ?? []} onStart={startFlow} />
+          </RequireScope>
+        )}
       </div>
 
       <div className="bg-app-surface rounded-2xl shadow-md relative">

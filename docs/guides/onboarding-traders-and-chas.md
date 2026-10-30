@@ -54,6 +54,10 @@ flowchart LR
   consignment, and only `Trader` gets `nsw:consignment:write` to create one. The `catalog`
   section of `config.yaml` maps the role names the backend expects (`trader`, `cha`) to
   these IdP role names.
+- **What the portal shows comes from the scopes.** The portal's runtime config (`config.js`,
+  or `frontend.config` in the Helm values) names the scope each screen, menu item and button
+  needs (below), and the portal shows it only to a user whose token carries that scope. A
+  signed-in user whose scopes reach none of its screens sees **Access Restricted**.
 - **Whether traders can pick a company as their CHA comes from `has_cha`.** The CHA picker
   in the trader portal lists companies with `has_cha = true`, and the `cha_persist` plugin
   refuses to assign a company without it.
@@ -61,6 +65,21 @@ flowchart LR
 A consignment belongs to the trader's company, plus the CHA company the trader picks.
 A user acts as trader on consignments their company owns, and as CHA on consignments that
 name their company as CHA.
+
+| The portal shows...                                                            | To a user granted the scope in | Usually                      |
+| ------------------------------------------------------------------------------ | ------------------------------ | ---------------------------- |
+| Consignments (Cases in an agency portal) and their pages                       | `SCOPE_CONSIGNMENTS_VIEW`      | `nsw:consignment:read`       |
+| **New consignment**                                                            | `SCOPE_CONSIGNMENTS_CREATE`    | `nsw:consignment:write`      |
+| A consignment's flow buttons                                                   | `SCOPE_CONSIGNMENT_FLOWS`      | `nsw:consignment:flow`       |
+| A task                                                                         | `SCOPE_TASKS_VIEW`             | `nsw:task:read`              |
+| **Submit**, **Save draft**, **Claim**, **Release** and **Take over** on a task | `SCOPE_TASKS_ACTIONS`          | `nsw:task:write`             |
+| The admin consignment views                                                    | `SCOPE_ADMIN_VIEW`             | `nsw:consignment:adminread`  |
+| **Resolve** and **Force park** in the admin views                              | `SCOPE_ADMIN_ACTIONS`          | `nsw:consignment:adminwrite` |
+| The company name in the top bar                                                | `SCOPE_PROFILE_VIEW`           | `nsw:profile:read`           |
+
+A key left unset hides its screen or action from everyone, so a portal sets only the keys of
+what it shows; an agency portal leaves out the create, flow and admin keys. "Usually" is the
+scope the matching API call checks; a different value only changes what the portal shows.
 
 ## Before you start
 
@@ -281,7 +300,8 @@ Confirm that `OU Handle` matches the handle from Step 1 character for character.
 
 1. The user signs in to the trader portal. The profile shows **ACME EXPORTS (PVT) LTD**.
    If no company shows, the `ouHandle` in the token and the record's `ou_handle` differ.
-2. A **trader** can create a consignment.
+2. A **trader** sees **New consignment** and can create a consignment. A CHA-only user
+   doesn't see it.
 3. If `hasCha` is true, a trader from **another** company sees ACME in the CHA picker,
    and a CHA user from ACME sees consignments assigned to ACME once one is.
 4. A user in both groups sees, in one list, the consignments ACME is the trader on and
@@ -306,16 +326,17 @@ ThunderID.
 
 ## Troubleshooting
 
-| Symptom                                                   | Likely cause                                                                                                                          |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| User signs in, but no company on the profile              | No `company_records` row with this `ou_handle`. Check `otc company view` against the token's `ouHandle`                               |
-| `403` on consignments or tasks                            | User not in `Traders` / `CHA`, or `catalog.roles` in `config.yaml` doesn't match the IdP role names                                   |
-| Token has no `nsw:*` scopes / `invalid_target` at sign-in | The portal isn't sending `resource=https://api.nsw-srilanka.local`; see [idp/README.md](../../idp/README.md#api-authorization-oauth2) |
-| Company missing from the CHA picker                       | `hasCha` is `false`                                                                                                                   |
-| `cha_persist: company "…" is not enabled as a CHA`        | Same: a trader picked a company whose `hasCha` was turned off since                                                                   |
-| `ou_handle "…" is already used by another company`        | Two records claim the same OU. Each OU maps to exactly one company                                                                    |
-| `otc`: `Failed to load configuration`                     | Running outside the pod without `CONFIG_PATH`, or a `{{env:…}}` placeholder in `config.yaml` is unset                                 |
-| User created but can't sign in to the trader portal       | Wrong user type. `TraderApp` only admits `Private_User`                                                                               |
+| Symptom                                                   | Likely cause                                                                                                                                                |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User signs in, but no company on the profile              | No `company_records` row with this `ou_handle`. Check `otc company view` against the token's `ouHandle`                                                     |
+| **Access Restricted** after sign-in                       | The screen's `SCOPE_*` key is unset, or names a scope the token lacks: the user isn't in `Traders` / `CHA`, or the portal's `IDP_SCOPES` doesn't request it |
+| `403` on consignments or tasks                            | User not in `Traders` / `CHA`, or `catalog.roles` in `config.yaml` doesn't match the IdP role names                                                         |
+| Token has no `nsw:*` scopes / `invalid_target` at sign-in | The portal isn't sending `resource=https://api.nsw-srilanka.local`; see [idp/README.md](../../idp/README.md#api-authorization-oauth2)                       |
+| Company missing from the CHA picker                       | `hasCha` is `false`                                                                                                                                         |
+| `cha_persist: company "…" is not enabled as a CHA`        | Same: a trader picked a company whose `hasCha` was turned off since                                                                                         |
+| `ou_handle "…" is already used by another company`        | Two records claim the same OU. Each OU maps to exactly one company                                                                                          |
+| `otc`: `Failed to load configuration`                     | Running outside the pod without `CONFIG_PATH`, or a `{{env:…}}` placeholder in `config.yaml` is unset                                                       |
+| User created but can't sign in to the trader portal       | Wrong user type. `TraderApp` only admits `Private_User`                                                                                                     |
 
 ## Local development
 

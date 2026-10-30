@@ -88,8 +88,14 @@ consignment's `workflowNodes` shape. Opening a task uses the normal
 `/api/v1/tasks/{id}`, authorized by the officer gate. The screens keep the
 `/consignments` paths because task cards and the task screen link there directly.
 
-The app has no roles of its own: it admits every signed-in user, and the backend
-checks the token's catalog roles on each call.
+The app has no roles of its own. The runtime config names the scope each screen and button
+needs, and the app shows it only to a user whose token carries that scope: for example
+`SCOPE_CONSIGNMENTS_VIEW` for the cases and `SCOPE_TASKS_VIEW` for a task. Anyone else sees
+**Access Restricted**. A key left unset hides its screen or action from everyone, so an
+agency portal sets only the keys officers use, `SCOPE_TASKS_ACTIONS` for working on a task
+among them (see `configs/agency/cda/portal-config.js`). To give one role a different view
+than another (a supervisor, say), grant the two IdP roles different scopes on the agency's
+API. The backend still checks the token's catalog roles on each call.
 
 ## Flow
 

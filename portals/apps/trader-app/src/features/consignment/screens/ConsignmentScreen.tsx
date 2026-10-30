@@ -11,6 +11,8 @@ import { createConsignment, getAllConsignments } from '@/features/consignment/se
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { ROUTES } from '@/constants'
 import { PaginationControl, LoadError, LinkRow, RowLink } from '@portals/ui'
+import { ACCESS_SCOPES } from '@/constants/scopes'
+import { RequireScope } from '@/components/RequireScope'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -73,17 +75,19 @@ export function ConsignmentScreen() {
             </span>
           )}
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
-            <PlusIcon />
-            {creating ? t('consignments.list.creating') : t('consignments.list.create')}
-          </Button>
-          {createError && (
-            <Text size="2" color="red">
-              {t('consignments.list.error.createFailed')}
-            </Text>
-          )}
-        </div>
+        <RequireScope scope={ACCESS_SCOPES.CONSIGNMENTS_CREATE}>
+          <div className="flex flex-col items-end gap-2">
+            <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
+              <PlusIcon />
+              {creating ? t('consignments.list.creating') : t('consignments.list.create')}
+            </Button>
+            {createError && (
+              <Text size="2" color="red">
+                {t('consignments.list.error.createFailed')}
+              </Text>
+            )}
+          </div>
+        </RequireScope>
       </div>
 
       <div className="rounded-2xl bg-app-surface shadow-md overflow-hidden">

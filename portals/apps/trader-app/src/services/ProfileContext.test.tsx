@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProfileProvider } from '@/services/ProfileContext'
 import { getProfile, type UserProfile } from '@/services/profile'
 import { useProfile } from '@/services/useProfile'
 
 vi.mock('@/services/profile', () => ({ getProfile: vi.fn() }))
+
+const auth = vi.hoisted(() => ({ scope: '' }))
+vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { scope: auth.scope } }) }))
 
 const mockGetProfile = vi.mocked(getProfile)
 
@@ -25,6 +28,10 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe('ProfileProvider', () => {
+  beforeEach(() => {
+    auth.scope = 'openid nsw:profile:read'
+  })
+
   afterEach(() => {
     mockGetProfile.mockReset()
   })
@@ -42,6 +49,16 @@ describe('ProfileProvider', () => {
     expect(result.current.profile).toEqual(makeProfile('user-1'))
     expect(result.current.error).toBeNull()
     expect(mockGetProfile).toHaveBeenCalledTimes(1)
+  })
+
+  it('loads no profile for a user not granted to read it', () => {
+    auth.scope = 'openid nsw:consignment:adminread'
+
+    const { result } = renderHook(() => useProfile(), { wrapper })
+
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.profile).toBeNull()
+    expect(mockGetProfile).not.toHaveBeenCalled()
   })
 
   it('exposes a failed load as an error', async () => {

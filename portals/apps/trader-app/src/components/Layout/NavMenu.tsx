@@ -1,50 +1,22 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { DashboardIcon, ChevronDownIcon, HamburgerMenuIcon } from '@radix-ui/react-icons'
-import { type ReactNode, useMemo } from 'react'
+import { ChevronDownIcon, HamburgerMenuIcon } from '@radix-ui/react-icons'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DropdownMenu } from '@radix-ui/themes'
-import { isAgencyMode } from '@/features/case/mode'
-import { ROUTES } from '@/constants'
+import { useScopes } from '@/hooks/useScopes'
+import { NAV_STRUCTURE, isNavGroup, permittedNav, type NavItem } from '@/components/Layout/navItems'
 
-interface NavItem {
-  name: string
-  path: string
-  icon: ReactNode
-}
-
-interface NavGroup {
-  name: string
-  icon: ReactNode
-  items: NavItem[]
-}
-
-type NavItemOrGroup = NavItem | NavGroup
-
-function isNavGroup(item: NavItemOrGroup): item is NavGroup {
-  return 'items' in item
-}
-
-// The app's one primary nav destination, surfaced as a menu in the TopBar
-// rather than a permanent side rail — kept as an items/groups structure
-// (not just a single link) so a second destination or a grouped section
-// slots in without a redesign, the same shape the old Sidebar used.
-// onNavigate fires when the person picks a destination, so a menu holding
-// this one (the TopBar's small-screen menu) can close.
+// The app's nav destinations the user's scopes reach, surfaced as a menu in
+// the TopBar rather than a permanent side rail. onNavigate fires when the
+// person picks a destination, so a menu holding this one (the TopBar's
+// small-screen menu) can close.
 export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
+  const { hasScope } = useScopes()
 
-  const navStructure = useMemo(
-    (): NavItemOrGroup[] => [
-      {
-        name: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'),
-        path: ROUTES.CONSIGNMENTS,
-        icon: <DashboardIcon className="w-4 h-4" />,
-      },
-    ],
-    [t],
-  )
+  const navStructure = useMemo(() => permittedNav(NAV_STRUCTURE, hasScope), [hasScope])
 
   const isItemActive = (item: NavItem) =>
     location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
@@ -53,9 +25,9 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     for (const item of navStructure) {
       if (isNavGroup(item)) {
         const active = item.items.find(isItemActive)
-        if (active) return active.name
+        if (active) return t(active.labelKey)
       } else if (isItemActive(item)) {
-        return item.name
+        return t(item.labelKey)
       }
     }
     return t('nav.menu')
@@ -83,7 +55,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
         }`}
       >
         <span className={isItemActive(target) ? '' : 'text-foreground-muted'}>{target.icon}</span>
-        <span>{target.name}</span>
+        <span>{t(target.labelKey)}</span>
       </Link>
     )
   }
@@ -100,11 +72,11 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
       <DropdownMenu.Content align="start" className="min-w-56">
         {navStructure.map((item) =>
           isNavGroup(item) ? (
-            <DropdownMenu.Sub key={item.name}>
+            <DropdownMenu.Sub key={item.labelKey}>
               <DropdownMenu.SubTrigger>
                 <span className="flex items-center gap-2">
                   {item.icon}
-                  {item.name}
+                  {t(item.labelKey)}
                 </span>
               </DropdownMenu.SubTrigger>
               <DropdownMenu.SubContent>
@@ -119,7 +91,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
                   >
                     <span className="flex items-center gap-2">
                       {child.icon}
-                      {child.name}
+                      {t(child.labelKey)}
                     </span>
                   </DropdownMenu.Item>
                 ))}
@@ -136,7 +108,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
             >
               <span className="flex items-center gap-2">
                 {item.icon}
-                {item.name}
+                {t(item.labelKey)}
               </span>
             </DropdownMenu.Item>
           ),

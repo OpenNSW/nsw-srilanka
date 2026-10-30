@@ -15,6 +15,8 @@ import {
   type AdminResolutionTarget,
 } from '@/features/admin/components/engine/shared'
 import { useExpandableWorkflow } from '@/features/admin/components/engine/useExpandableWorkflow'
+import { ACCESS_SCOPES } from '@/constants/scopes'
+import { useScopes } from '@/hooks/useScopes'
 
 const NODE_STATUS_COLOR: Record<EngineNodeStatus, 'gray' | 'orange' | 'green' | 'red' | 'amber'> = {
   NOT_STARTED: 'gray',
@@ -67,9 +69,11 @@ export function NodeRow({
   const childIds = node.child_workflow_ids ?? []
   const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task', expandSignal)
   const [forceParkOpen, setForceParkOpen] = useState(false)
+  // Resolving and force-parking take the admin actions scope; without it the row only reports.
+  const canAdminWrite = useScopes().hasScope(ACCESS_SCOPES.ADMIN_ACTIONS)
   // Only a TASK node that is waiting can be force-parked: on a consignment workflow that closes its
   // task, in a task workflow it parks just that step (see forceParkNode).
-  const canForcePark = node.type === 'TASK' && node.status === 'RUNNING' && !!node.step_id
+  const canForcePark = canAdminWrite && node.type === 'TASK' && node.status === 'RUNNING' && !!node.step_id
 
   // Indentation lives only on the Node cell's own padding, never on the grid row/container
   // itself — the grid's own column tracks (Type/Status/Updated/Last error) are fixed-width, so
@@ -111,7 +115,7 @@ export function NodeRow({
         </div>
         <div className="px-3 flex flex-col items-start gap-1">
           <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
-          {node.status === 'AWAITING_ADMIN' && (
+          {canAdminWrite && node.status === 'AWAITING_ADMIN' && (
             <Button
               variant="soft"
               color="amber"

@@ -19,6 +19,11 @@ import { uploadFile, getDownloadUrl } from './services/storage'
 import { searchServices } from './services/searchService'
 import { useAuthContext } from './hooks/useAuthContext'
 import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
+import { AccessRestrictedScreen } from '@/screens/AccessRestrictedScreen'
+import { RequireScope } from '@/components/RequireScope'
+import { NAV_STRUCTURE, firstPermittedPath } from '@/components/Layout/navItems'
+import { ACCESS_SCOPES } from '@/constants/scopes'
+import { useScopes } from '@/hooks/useScopes'
 import { appConfig, displayName } from './config'
 import { useEffect } from 'react'
 
@@ -38,8 +43,8 @@ function ProtectedLayout() {
   if (isLoading) return null
   if (!isSignedIn) return <Navigate to="/login" replace />
 
-  // Every signed-in user is admitted; the backend authorizes each request by the
-  // token's roles.
+  // Every signed-in user gets the layout; each route shows its screen only to a
+  // user granted the scope that screen needs (see restrictTo).
   return (
     <ProfileProvider>
       <UploadWrapper>
@@ -47,6 +52,22 @@ function ProtectedLayout() {
       </UploadWrapper>
     </ProfileProvider>
   )
+}
+
+// A route's screen, shown only to a user granted scope.
+function restrictTo(scope: string | undefined, screen: ReactNode) {
+  return (
+    <RequireScope scope={scope} fallback={<AccessRestrictedScreen />}>
+      {screen}
+    </RequireScope>
+  )
+}
+
+// Sends / to the first nav destination the user's scopes reach.
+function HomeRedirect() {
+  const { hasScope } = useScopes()
+  const path = firstPermittedPath(NAV_STRUCTURE, hasScope)
+  return path ? <Navigate to={path} replace /> : <AccessRestrictedScreen />
 }
 
 function SignedOutRoute() {
@@ -81,23 +102,39 @@ function App() {
         <Route path="/login" element={<SignedOutRoute />} />
 
         <Route element={<ProtectedLayout />}>
-          <Route path="/" element={<Navigate to={ROUTES.CONSIGNMENTS} replace />} />
-          <Route path={ROUTES.CONSIGNMENTS} element={isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />} />
+          <Route path="/" element={<HomeRedirect />} />
+          <Route
+            path={ROUTES.CONSIGNMENTS}
+            element={restrictTo(
+              ACCESS_SCOPES.CONSIGNMENTS_VIEW,
+              isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />,
+            )}
+          />
           <Route
             path={ROUTES.CONSIGNMENT_DETAIL_PATTERN}
-            element={isAgencyMode ? <CaseDetailScreen /> : <ConsignmentDetailScreen />}
+            element={restrictTo(
+              ACCESS_SCOPES.CONSIGNMENTS_VIEW,
+              isAgencyMode ? <CaseDetailScreen /> : <ConsignmentDetailScreen />,
+            )}
           />
           <Route
             path={ROUTES.TASK_FORM_PATTERN}
-            element={
+            element={restrictTo(
+              ACCESS_SCOPES.TASKS_VIEW,
               <UnsavedChangesGuard>
                 <TaskDetailScreen />
-              </UnsavedChangesGuard>
-            }
+              </UnsavedChangesGuard>,
+            )}
           />
           {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
-          <Route path="/admin/consignments/:consignmentId" element={<AdminConsignmentEngineStatusScreen />} />
-          <Route path="/admin/consignments/:consignmentId/view" element={<AdminConsignmentDetailScreen />} />
+          <Route
+            path="/admin/consignments/:consignmentId"
+            element={restrictTo(ACCESS_SCOPES.ADMIN_VIEW, <AdminConsignmentEngineStatusScreen />)}
+          />
+          <Route
+            path="/admin/consignments/:consignmentId/view"
+            element={restrictTo(ACCESS_SCOPES.ADMIN_VIEW, <AdminConsignmentDetailScreen />)}
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

@@ -10,6 +10,8 @@ import { humanizeStatus } from '@/utils/formatStatus'
 import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
 import { Breadcrumb, type BreadcrumbItem, LoadError } from '@portals/ui'
+import { ACCESS_SCOPES } from '@/constants/scopes'
+import { useScopes } from '@/hooks/useScopes'
 
 export function TaskDetailScreen() {
   const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()
@@ -22,6 +24,9 @@ export function TaskDetailScreen() {
     void navigate(-1)
   }
   const { t } = useTranslation()
+  // Submitting, saving a draft and changing the claim take the task actions scope;
+  // without it the task is read-only.
+  const canAct = useScopes().hasScope(ACCESS_SCOPES.TASKS_ACTIONS)
   const {
     zoneView,
     consignment,
@@ -143,6 +148,7 @@ export function TaskDetailScreen() {
           <ClaimBanner
             claim={zoneView.claim}
             completed={zoneView.state === 'COMPLETED'}
+            canChange={canAct}
             busy={claimBusy}
             error={claimError && claimErrorMessages[claimError]}
             onClaim={() => void changeClaim('claim')}
@@ -155,7 +161,9 @@ export function TaskDetailScreen() {
         title={title}
         formEpoch={formEpoch}
         onSubmitForm={
-          submitted ? undefined : (command, data, options) => (options?.draft ? saveDraft(data) : submit(command, data))
+          submitted || !canAct
+            ? undefined
+            : (command, data, options) => (options?.draft ? saveDraft(data) : submit(command, data))
         }
       />
       {zoneView.state === 'COMPLETED' && (

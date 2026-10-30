@@ -4,7 +4,8 @@
 // `docker compose` (bind-mounted into the container — see compose.yml).
 // A real deployment supplies its own values via Helm (see
 // deployments/helm/values-example.yaml). IDP_SCOPES must include the
-// nsw:* API scopes, or the backend rejects the resulting token.
+// nsw:* API scopes: the backend checks them on every call, and the portal
+// shows a screen or action only to a user the IdP granted its scope.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8080',
   IDP_BASE_URL: 'http://localhost:8090',
@@ -13,8 +14,17 @@ window.__APP_CONFIG__ = {
   APP_URL: 'http://localhost:5173',
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:consignment:flow,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite',
-  // ID-token claim holding the roles (an array), and the role names in it. For an
-  // IdP that models roles as groups, set the claim to 'groups' and use the group names.
+  // The scope each screen and action needs: the portal shows it only to a user
+  // the IdP granted that scope. A SCOPE_* key left unset hides its screen or
+  // action from everyone.
+  SCOPE_CONSIGNMENTS_VIEW: 'nsw:consignment:read',
+  SCOPE_CONSIGNMENTS_CREATE: 'nsw:consignment:write',
+  SCOPE_CONSIGNMENT_FLOWS: 'nsw:consignment:flow',
+  SCOPE_TASKS_VIEW: 'nsw:task:read',
+  SCOPE_TASKS_ACTIONS: 'nsw:task:write',
+  SCOPE_ADMIN_VIEW: 'nsw:consignment:adminread',
+  SCOPE_ADMIN_ACTIONS: 'nsw:consignment:adminwrite',
+  SCOPE_PROFILE_VIEW: 'nsw:profile:read',
   SHOW_AUTOFILL_BUTTON: 'true',
   // Shows the demo color-scheme picker in the footer. Off unless 'true'.
   SHOW_COLOR_SCHEME_SWITCHER: 'true',
