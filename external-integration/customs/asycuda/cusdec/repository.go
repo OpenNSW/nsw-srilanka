@@ -14,6 +14,10 @@ type DeclarationRepository interface {
 	GetByEdgeID(ctx context.Context, edgeID string) (*CusdecDeclaration, error)
 	GetByCusdecRef(ctx context.Context, ref DocumentReference) (*CusdecDeclaration, error)
 	Update(ctx context.Context, decl *CusdecDeclaration) error
+	// GetRegisteredByCase returns the declaration of case caseID that ASYCUDA
+	// registered (it has a reference), the most recently updated if there is
+	// more than one, or nil when there is none.
+	GetRegisteredByCase(ctx context.Context, caseID string) (*CusdecDeclaration, error)
 	// RecordSubmitted records that SLC Edge accepted a submission as edgeID,
 	// from workflow workflowID of case caseID, so its callbacks can find the
 	// task that workflow parks. It is the only writer that creates the row: SLC
@@ -48,6 +52,21 @@ func (r *declarationRepository) GetByCusdecRef(ctx context.Context, ref Document
 	err := r.db.WithContext(ctx).
 		Where("cusdec_year = ? AND cusdec_office = ? AND cusdec_serial = ? AND cusdec_number = ?",
 			ref.Year, ref.Office, ref.Serial, ref.Number).
+		First(&decl).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &decl, nil
+}
+
+func (r *declarationRepository) GetRegisteredByCase(ctx context.Context, caseID string) (*CusdecDeclaration, error) {
+	var decl CusdecDeclaration
+	err := r.db.WithContext(ctx).
+		Where("case_id = ? AND cusdec_number > 0", caseID).
+		Order("updated_at DESC").
 		First(&decl).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
