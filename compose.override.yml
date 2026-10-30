@@ -59,7 +59,7 @@ services:
   # -------------------------------------------------------------------
   trader-portal:
     build: !reset null
-    image: node:22-alpine3.24
+    image: node:24-alpine3.24
     working_dir: /workspace
     volumes:
       # Live source mount of the pnpm workspace root.

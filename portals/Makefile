@@ -36,7 +36,7 @@ setup:
 		corepack enable pnpm; \
 		echo "✅ pnpm available via corepack"; \
 	else \
-		echo "❌ pnpm and corepack not found — install Node.js 22.18.0+ or pnpm 11.1.2"; \
+		echo "❌ pnpm and corepack not found — install Node.js 24.15.0+ or pnpm 11.1.2"; \
 		exit 1; \
 	fi
 	@pnpm --version
