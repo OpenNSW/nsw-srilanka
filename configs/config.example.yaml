@@ -281,6 +281,9 @@ artifacts:
   # Pin the version new flows start on, e.g. to roll back. 0 takes the highest
   # published one.
   manifestVersion: 0
+  # Bytes of artifact files kept in memory once loaded (versioned manifests
+  # only). 0 keeps the default, 64 MiB; a negative value turns the cache off.
+  fileCacheBytes: 0
 
 # Agency portals are listed too: they call the storage service directly.
 cors:

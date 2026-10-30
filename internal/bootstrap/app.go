@@ -1122,7 +1122,11 @@ func initArtifacts(ctx context.Context, cfg *config.Config) (*artifact.Set, erro
 		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
 	}
 
-	artifacts, err := artifact.LoadSet(ctx, artifactLoader, artifact.WithPinnedVersion(cfg.Artifacts.ManifestVersion))
+	opts := []artifact.SetOption{artifact.WithPinnedVersion(cfg.Artifacts.ManifestVersion)}
+	if cfg.Artifacts.FileCacheBytes != 0 {
+		opts = append(opts, artifact.WithFileCacheBytes(cfg.Artifacts.FileCacheBytes))
+	}
+	artifacts, err := artifact.LoadSet(ctx, artifactLoader, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load artifact manifests: %w", err)
 	}

@@ -333,10 +333,12 @@ backend:
         # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
         # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
 
-    # Manifest version new flows start on (0: the highest published; see
-    # configs/config.example.yaml).
+    # Manifest version new flows start on (0: the highest published) and bytes
+    # of artifact files kept in memory (0: 64 MiB; negative: off); see
+    # configs/config.example.yaml.
     artifacts:
       manifestVersion: 0
+      fileCacheBytes: 0
 
     # Trader/agency portals calling this API.
     cors:
