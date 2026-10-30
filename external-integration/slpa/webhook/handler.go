@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
 
 const (
@@ -69,6 +70,10 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	// and the signature is over the bytes as received.
 	if err := VerifySignature(r.Header.Get(SignatureHeader), body, h.secret); err != nil {
 		slog.WarnContext(r.Context(), "slpa webhook: rejected an unauthenticated call", "error", err)
+		securitylog.Annotate(r.Context(), "webhook auth failed",
+			"reason", "webhook_auth_failed",
+			"partner", "slpa",
+		)
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}

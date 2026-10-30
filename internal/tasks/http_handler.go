@@ -18,6 +18,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
@@ -247,6 +248,9 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	taskID, stepID, err := callbacktoken.Decode(token)
 	if err != nil {
 		slog.WarnContext(r.Context(), "tasks: invalid callback token", "error", err)
+		securitylog.Annotate(r.Context(), "invalid callback token",
+			"reason", "invalid_callback_token",
+		)
 		h.auditTaskUpdate(r.Context(), "", true, taskAuditMeta(http.StatusBadRequest, "invalid_callback_token"))
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidCallbackToken)
 		return

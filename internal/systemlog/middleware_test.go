@@ -1,4 +1,4 @@
-package securitylog
+package systemlog
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/core/trace/logging"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
 
 func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
@@ -42,7 +43,7 @@ func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
 	assertLogOmits(t, raw,
 		"super-secret-token", "a@example.com", "+94111", payload, response, "203.0.113.10")
 	line := decodeLine(t, buf.Bytes())
-	assertEqual(t, "category", line["category"], "security")
+	assertEqual(t, "category", line["category"], "system")
 	assertEqual(t, "msg", line["msg"], "http request")
 	assertEqual(t, "method", line["method"], "POST")
 	assertEqual(t, "path", line["path"], "/api/v1/tasks/abc")
@@ -124,16 +125,85 @@ func TestMiddlewareAnonymousWhenUnauthenticated(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
-	line := decodeLine(t, buf.Bytes())
-	assertEqual(t, "callerKind", line["callerKind"], "anonymous")
-	assertEqual(t, "callerID", line["callerID"], "")
-	assertEqual(t, "status", line["status"], float64(http.StatusUnauthorized))
-	if _, ok := line["requestBody"]; ok {
-		t.Fatalf("requestBody logged: %v", line["requestBody"])
+	systemLine, securityLine := decodeSystemAndSecurity(t, buf.Bytes())
+	assertEqual(t, "system.category", systemLine["category"], "system")
+	assertEqual(t, "system.callerKind", systemLine["callerKind"], "anonymous")
+	assertEqual(t, "system.callerID", systemLine["callerID"], "")
+	assertEqual(t, "system.status", systemLine["status"], float64(http.StatusUnauthorized))
+	if _, ok := systemLine["requestBody"]; ok {
+		t.Fatalf("requestBody logged: %v", systemLine["requestBody"])
 	}
-	if _, ok := line["responseBody"]; ok {
-		t.Fatalf("responseBody logged: %v", line["responseBody"])
+	if _, ok := systemLine["responseBody"]; ok {
+		t.Fatalf("responseBody logged: %v", systemLine["responseBody"])
 	}
+
+	assertEqual(t, "security.category", securityLine["category"], "security")
+	assertEqual(t, "security.msg", securityLine["msg"], "http denied")
+	assertEqual(t, "security.reason", securityLine["reason"], "unauthenticated")
+	assertEqual(t, "security.status", securityLine["status"], float64(http.StatusUnauthorized))
+	assertEqual(t, "security.path", securityLine["path"], "/webhooks/slpa")
+	assertKeysAbsent(t, securityLine, "requestBody", "responseBody", "query")
+}
+
+func TestMiddlewareEmitsSecurityOnForbidden(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if slot := authn.RequestCallerFrom(r.Context()); slot != nil {
+			slot.Principal = &authn.Principal{Kind: authn.KindUser, UserID: "user-9"}
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/tasks/abc", nil))
+
+	systemLine, securityLine := decodeSystemAndSecurity(t, buf.Bytes())
+	assertEqual(t, "system.category", systemLine["category"], "system")
+	assertEqual(t, "security.reason", securityLine["reason"], "forbidden")
+	assertEqual(t, "security.callerID", securityLine["callerID"], "user-9")
+	assertEqual(t, "security.status", securityLine["status"], float64(http.StatusForbidden))
+}
+
+func TestMiddlewareEmitsOneSecurityLineWhenAnnotated(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		securitylog.Annotate(r.Context(), "webhook auth failed",
+			"reason", "webhook_auth_failed",
+			"partner", "slpa",
+		)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/webhooks/slpa", nil))
+
+	systemLine, securityLine := decodeSystemAndSecurity(t, buf.Bytes())
+	assertEqual(t, "system.status", systemLine["status"], float64(http.StatusUnauthorized))
+	assertEqual(t, "security.msg", securityLine["msg"], "webhook auth failed")
+	assertEqual(t, "security.reason", securityLine["reason"], "webhook_auth_failed")
+	assertEqual(t, "security.partner", securityLine["partner"], "slpa")
+	assertEqual(t, "security.status", securityLine["status"], float64(http.StatusUnauthorized))
+	assertEqual(t, "security.path", securityLine["path"], "/webhooks/slpa")
+}
+
+func TestMiddlewareEmitsSecurityWhenAnnotatedWithoutDenialStatus(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		securitylog.Annotate(r.Context(), "invalid callback token",
+			"reason", "invalid_callback_token",
+		)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/bad", nil))
+
+	systemLine, securityLine := decodeSystemAndSecurity(t, buf.Bytes())
+	assertEqual(t, "system.status", systemLine["status"], float64(http.StatusBadRequest))
+	assertEqual(t, "security.msg", securityLine["msg"], "invalid callback token")
+	assertEqual(t, "security.reason", securityLine["reason"], "invalid_callback_token")
+	assertEqual(t, "security.path", securityLine["path"], "/api/v1/callbacks/{token}")
+	assertKeysAbsent(t, securityLine, "partner")
 }
 
 func TestMiddlewareIgnoresInterimStatus(t *testing.T) {
@@ -249,12 +319,12 @@ func TestMiddlewareDoesNotReadBody(t *testing.T) {
 	if body.n != 0 {
 		t.Fatalf("middleware read %d bytes the handler never asked for", body.n)
 	}
-	line := decodeLine(t, buf.Bytes())
-	if _, ok := line["requestBody"]; ok {
-		t.Fatalf("logged a body: %v", line["requestBody"])
+	systemLine, _ := decodeSystemAndSecurity(t, buf.Bytes())
+	if _, ok := systemLine["requestBody"]; ok {
+		t.Fatalf("logged a body: %v", systemLine["requestBody"])
 	}
-	if _, ok := line["requestBytes"]; ok {
-		t.Fatalf("requestBytes logged when the handler did not read: %v", line["requestBytes"])
+	if _, ok := systemLine["requestBytes"]; ok {
+		t.Fatalf("requestBytes logged when the handler did not read: %v", systemLine["requestBytes"])
 	}
 }
 
@@ -414,6 +484,20 @@ func decodeLine(t *testing.T, raw []byte) map[string]any {
 		t.Fatalf("decode log line %q: %v", raw, err)
 	}
 	return line
+}
+
+func decodeSystemAndSecurity(t *testing.T, raw []byte) (system, security map[string]any) {
+	t.Helper()
+	parts := bytes.Split(bytes.TrimSpace(raw), []byte("\n"))
+	if len(parts) != 2 {
+		t.Fatalf("want system + security lines, got %d: %s", len(parts), raw)
+	}
+	system = decodeLine(t, parts[0])
+	security = decodeLine(t, parts[1])
+	if system["category"] != "system" || security["category"] != "security" {
+		t.Fatalf("line categories = %v, %v", system["category"], security["category"])
+	}
+	return system, security
 }
 
 func assertEqual(t *testing.T, name string, got, want any) {

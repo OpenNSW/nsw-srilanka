@@ -1,5 +1,5 @@
-// Package securitylog records every inbound HTTP request as a slog line with
-// category=security, except GET /health. The line names who called (caller
+// Package systemlog records every inbound HTTP request as a slog line with
+// category=system, except GET /health. The line names who called (caller
 // kind and id), the route, status, and duration. Request and response
 // payloads are not logged: forms are JSON Schema–driven (jsonforms), so field-
 // level redaction cannot list every PII key. RemoteAddr is omitted: behind
@@ -7,7 +7,10 @@
 //
 // Authorization headers are not logged. The callback token in
 // /api/v1/callbacks/{token} is replaced in the path.
-package securitylog
+//
+// 401 and 403 responses also emit a sparse category=security line (see
+// package securitylog) for alerting; every other status is system-only.
+package systemlog
 
 import (
 	"context"
@@ -20,7 +23,11 @@ import (
 	"github.com/felixge/httpsnoop"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
+
+// Category is the slog attribute value on every request line.
+const Category = "system"
 
 // callbacksPathPrefix is the path prefix of POST /api/v1/callbacks/{token}.
 // Redaction uses the prefix rather than PathValue("token"): otelhttp copies
@@ -28,7 +35,7 @@ import (
 // request Middleware holds.
 const callbacksPathPrefix = "/api/v1/callbacks/"
 
-// Middleware logs one security line after next returns, including when next
+// Middleware logs one system line after next returns, including when next
 // panics. logger nil uses slog.Default. The logger must already be the process
 // handler so the line picks up the request trace id. GET /health is served and
 // not logged.
@@ -39,7 +46,8 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	logger = logger.With(slog.String("category", "security"))
+	base := logger
+	logger = logger.With(slog.String("category", Category))
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +58,9 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			caller := &authn.RequestCaller{}
 			route := &matchedRoute{}
+			ann := &securitylog.Annotation{}
 			ctx := authn.WithRequestCaller(r.Context(), caller)
+			ctx = securitylog.WithAnnotation(ctx, ann)
 			ctx = withMatchedRoute(ctx, route)
 			r = r.WithContext(ctx)
 
@@ -64,51 +74,23 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			defer func() {
 				panicked := recover()
-
-				kind, id := "anonymous", ""
-				if caller.Principal != nil {
-					kind = string(caller.Principal.Kind)
-					id = caller.Principal.Subject()
-				}
+				kind, id := callerKindAndID(caller)
 				// A handler that returns without writing is answered 200 by
 				// net/http. A panic before any write is not: the server aborts
 				// the connection. Log that as 500, then re-panic so the server
 				// still handles it.
-				status := resp.status
-				if status == 0 {
-					if panicked != nil {
-						status = http.StatusInternalServerError
-					} else {
-						status = http.StatusOK
-					}
-				}
-
-				attrs := []any{
-					"method", r.Method,
-					"path", loggedPath(r.URL.Path),
-					"callerKind", kind,
-					"callerID", id,
-					"status", status,
-					"durationMs", time.Since(start).Milliseconds(),
-				}
-				if origin := r.Header.Get("Origin"); origin != "" {
-					attrs = append(attrs, "origin", origin)
-				}
-				if n := requestBytes(r.ContentLength, reqBody); n > 0 {
-					attrs = append(attrs, "requestBytes", n)
-				}
+				status := responseStatus(resp.status, panicked)
+				path := loggedPath(r.URL.Path)
 				pattern := r.Pattern
 				if pattern == "" {
 					pattern = route.pattern
 				}
-				if pattern != "" {
-					attrs = append(attrs, "pattern", pattern)
-				}
-				if resp.n > 0 {
-					attrs = append(attrs, "responseBytes", resp.n)
-				}
-				logger.InfoContext(r.Context(), "http request", attrs...)
-
+				logger.InfoContext(r.Context(), "http request", systemAttrs(
+					r, path, pattern, kind, id, status,
+					time.Since(start).Milliseconds(),
+					requestBytes(r.ContentLength, reqBody), int64(resp.n),
+				)...)
+				emitSecurityDenial(r.Context(), base, r, path, kind, id, status, ann)
 				if panicked != nil {
 					panic(panicked)
 				}
@@ -117,6 +99,86 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(wrapped, r)
 		})
 	}
+}
+
+func callerKindAndID(caller *authn.RequestCaller) (kind, id string) {
+	kind, id = "anonymous", ""
+	if caller != nil && caller.Principal != nil {
+		kind = string(caller.Principal.Kind)
+		id = caller.Principal.Subject()
+	}
+	return kind, id
+}
+
+func responseStatus(written int, panicked any) int {
+	if written != 0 {
+		return written
+	}
+	if panicked != nil {
+		return http.StatusInternalServerError
+	}
+	return http.StatusOK
+}
+
+func systemAttrs(
+	r *http.Request, path, pattern, kind, id string,
+	status int, durationMs, reqN, respN int64,
+) []any {
+	attrs := []any{
+		"method", r.Method,
+		"path", path,
+		"callerKind", kind,
+		"callerID", id,
+		"status", status,
+		"durationMs", durationMs,
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		attrs = append(attrs, "origin", origin)
+	}
+	if reqN > 0 {
+		attrs = append(attrs, "requestBytes", reqN)
+	}
+	if pattern != "" {
+		attrs = append(attrs, "pattern", pattern)
+	}
+	if respN > 0 {
+		attrs = append(attrs, "responseBytes", respN)
+	}
+	return attrs
+}
+
+// emitSecurityDenial writes one security line for a 401/403, or when a handler
+// Annotate'd (e.g. invalid callback token at 400). Handlers only fill the slot;
+// they never call Event themselves.
+func emitSecurityDenial(
+	ctx context.Context, base *slog.Logger, r *http.Request,
+	path, kind, id string, status int, ann *securitylog.Annotation,
+) {
+	if status != http.StatusUnauthorized && status != http.StatusForbidden && !ann.Annotated() {
+		return
+	}
+	msg, reason := "http denied", "forbidden"
+	if status == http.StatusUnauthorized {
+		reason = "unauthenticated"
+	}
+	if ann.Msg != "" {
+		msg = ann.Msg
+	}
+	if ann.Reason != "" {
+		reason = ann.Reason
+	}
+	attrs := []any{
+		"method", r.Method,
+		"path", path,
+		"callerKind", kind,
+		"callerID", id,
+		"status", status,
+		"reason", reason,
+	}
+	if ann.Partner != "" {
+		attrs = append(attrs, "partner", ann.Partner)
+	}
+	securitylog.Event(ctx, base, msg, attrs...)
 }
 
 // CaptureRoute records the ServeMux pattern onto the matchedRoute slot that
