@@ -7,7 +7,7 @@
   `FROM --platform=$BUILDPLATFORM`, which the legacy builder cannot parse. Docker
   23 or later and Compose v2 default to BuildKit, so this only bites if you have
   exported `DOCKER_BUILDKIT=0`.
-- pnpm 11.1.2+ (for frontend work only)
+- pnpm 12.16+ (for frontend work only; see `packageManager` in `portals/package.json`)
 - Node.js 24.15.0+ (see `portals/.nvmrc`)
 
 ## First-time setup
