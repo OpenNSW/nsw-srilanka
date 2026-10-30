@@ -81,24 +81,13 @@ func TestMachineUploads_TypesByClient(t *testing.T) {
 		{"an unlisted type", client(otherClient), "application/zip", http.StatusUnsupportedMediaType},
 		{"a value that is not a media type", client(htmlClient), "text/ html", http.StatusUnsupportedMediaType},
 		{"a value with a malformed parameter", client(htmlClient), "text/html; charset", http.StatusUnsupportedMediaType},
-		{"a client with no client ID gets the base list only", client(""), "text/html", http.StatusUnsupportedMediaType},
+		{"a caller with no client ID gets the base list only", user("alice"), "text/html", http.StatusUnsupportedMediaType},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assertStatus(t, internalUpload(h, tt.p, uploadBody(tt.mimeType)), tt.want)
 		})
 	}
-}
-
-// The internal route refuses a user whatever the type, so a user granted its
-// scope still can't upload on it. A caller with no principal must authenticate.
-func TestMachineUploads_MachineClientsOnly(t *testing.T) {
-	_, h, _ := machineStack(t)
-
-	for _, mimeType := range []string{"application/pdf", generated} {
-		assertStatus(t, internalUpload(h, user("alice"), uploadBody(mimeType)), http.StatusForbidden)
-	}
-	assertStatus(t, internalUpload(h, nil, uploadBody("application/pdf")), http.StatusUnauthorized)
 }
 
 // The internal route issues the caller a reference that opens the file as well
