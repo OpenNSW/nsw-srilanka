@@ -142,6 +142,8 @@ type CustomsSubmissions struct {
 	DispatchNotes cdn.Submissions
 	// Cases finds a case's registered declaration (CUSTOMS_CASE_DECLARATION).
 	Cases CaseDeclarations
+	// Notes reads and updates dispatch notes (CUSTOMS_CDN_CANCEL).
+	Notes CDNNotes
 }
 
 // Register installs the taskv2 plugins on reg.
@@ -184,6 +186,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter(customs.DispatchNotes))},
 		{TaskTypeCustomsBoatNotePrefill, NewBoatNotePrefillPlugin(mgr)},
 		{TaskTypeCustomsCaseDeclaration, NewCaseDeclarationPlugin(customs.Cases)},
+		{TaskTypeCustomsCDNCancel, NewCDNCancelPlugin(customs.Notes)},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeSLPASundryOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},

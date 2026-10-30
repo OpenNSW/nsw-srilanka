@@ -59,6 +59,24 @@ func TestCDNResultsCollector_FlattensEveryBranch(t *testing.T) {
 	require.NotNil(t, d["cdn_userform"])
 }
 
+// A branch the trader cancelled from the CDN form never raised a note, so it is
+// neither collected nor quoted.
+func TestCDNResultsCollector_SkipsBranchesCancelledFromTheForm(t *testing.T) {
+	cancelled := branch("unused", "", false)
+	delete(cancelled["userform"].(map[string]any), "registeredCdnNumber")
+	cancelled["cdn_action"] = map[string]any{"command": "cancel"}
+	submitted := branch("CDN-2", "edge-2", true)
+	submitted["cdn_action"] = map[string]any{"command": "submit"}
+
+	ctx := splitCtx(map[string]any{"cdn_results": []any{cancelled, submitted}})
+	require.NoError(t, CDNResultsCollectorFunc(ctx, nil))
+
+	d := ctx.Record.Data
+	assert.Equal(t, []any{"CDN-2"}, d["cdn_numbers"])
+	require.Len(t, d["containers"], 1)
+	assert.Equal(t, "CDN-2", d["cdn_userform"].(map[string]any)["registeredCdnNumber"])
+}
+
 // COLLECT_ALL lets a container's note fail without abandoning the others, so
 // the first *accepted* note is the one downstream steps act on.
 // A note Customs cancelled (§7.7) is registered but will not carry its

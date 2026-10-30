@@ -15,6 +15,10 @@ const TaskTypeCDNResultsCollector = "CDN_RESULTS_COLLECTOR"
 // cancelled its dispatch note (§7.7) instead of acknowledging it.
 const cdnAckStatusCancelled = "CANCELLED"
 
+// cdnCommandCancel is the command a trader ends a container's dispatch note
+// branch with, from the CDN form or while the note waits to be acknowledged.
+const cdnCommandCancel = "cancel"
+
 // CDNResultsCollectorFunc reduces the aggregated output of the per-container CDN
 // fan-out into the variables the steps after it read.
 //
@@ -54,6 +58,11 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 		// A branch whose note Customs cancelled finished without an
 		// acknowledgment, and its note must not be quoted downstream.
 		if status, _ := branch["ack_status"].(string); status == cdnAckStatusCancelled {
+			continue
+		}
+		// Nor is a branch the trader cancelled from the CDN form, before
+		// sending it: it never raised a note.
+		if action, _ := branch["cdn_action"].(map[string]any); action["command"] == cdnCommandCancel {
 			continue
 		}
 

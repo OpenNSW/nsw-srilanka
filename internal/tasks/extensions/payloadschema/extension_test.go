@@ -118,6 +118,24 @@ func TestExtension_Execute_MatchesErrInvalidPayloadWhenWrapped(t *testing.T) {
 	}
 }
 
+// A step's unchecked command ends it without submitting the form, so what it
+// sends is not held to the form; any other command still is.
+func TestExtension_Execute_UncheckedCommands(t *testing.T) {
+	ext := NewExtension(fakeForms{"review-form": reviewForm}.form, namespace("reviewform"))
+	props := json.RawMessage(`{"form": "review-form", "unchecked_commands": ["cancel"]}`)
+	record := &store.TaskRecord{ActiveTaskTemplateID: "review-step"}
+
+	if err := ext.Execute(context.Background(), record, decode(t, `{"__command": "cancel"}`), props); err != nil {
+		t.Errorf("cancel = %v; want nil", err)
+	}
+	if err := ext.Execute(context.Background(), record, decode(t, `{"__command": "submit"}`), props); !errors.Is(err, ErrInvalidPayload) {
+		t.Errorf("submit = %v; want ErrInvalidPayload", err)
+	}
+	if err := ext.Execute(context.Background(), record, decode(t, `{"__command": "cancel"}`), naming("review-form")); !errors.Is(err, ErrInvalidPayload) {
+		t.Errorf("cancel on a step without unchecked commands = %v; want ErrInvalidPayload", err)
+	}
+}
+
 func TestDraftMarker(t *testing.T) {
 	if IsDraft(context.Background()) {
 		t.Error("IsDraft on a plain context = true")
