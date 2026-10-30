@@ -399,7 +399,7 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Single ID:** use one entry, e.g. `{"path": "/reference_id", ...}`. The node maps it on with `"output_mapping": {"refid.reference_id": "reference_id"}`. It reaches the parent workflow only through the parent TASK node's own `output_mapping`.
 - **Order:** entries are filled in the order listed, and elements in index order.
 - **Existing values are kept:** a field that already holds an ID keeps it. A resubmission that loops back through the step numbers only the fields that have none yet, such as a newly added line.
-- **`overwrite`:** use it for an ID that must always come from the system. Every run then takes new numbers, and with `each` every element is renumbered, so don't use it for an ID another system has already seen. `readOnly` is only enforced by the form, so without `overwrite` a value sent straight to the API is kept.
+- **`overwrite`:** use it for an ID that must always come from the system. Every run then takes new numbers, and with `each` every element is renumbered, so don't use it for an ID another system has already seen. Where the form the ID comes back through marks it `readOnly`, the server holds it to what that step stored (see [Adding validation to a form](guides/form-validation.md#a-value-the-server-fills-in)), so a value sent straight to the API can't replace it; where the field is editable, such a value is kept unless `overwrite` is set.
 - **Shape errors fail first:** the step fails before any number is used if:
   - a field to fill holds a non-string value (`null` counts as empty);
   - `each` isn't an array, or an element isn't an object;
