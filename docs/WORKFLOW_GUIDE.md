@@ -253,6 +253,12 @@ In the same `PENDING_USER` state the CHA gets the form and its submit button, wh
 > [!IMPORTANT]
 > This is presentation-layer scoping and the read gate — it does not authorize _writes_. Who may run a command is a separate, deny-by-default rule in the subtask template's `authz` extension (see [`internal/tasks/extensions/authz/README.md`](../internal/tasks/extensions/authz/README.md)). A section hidden here still needs its command denied there.
 
+### Claiming a task
+
+A user can claim a task, so others see who is working it, when its task template sets `"claimable": true`. A claim is a hint, never a lock: submitting a step does not check it. Any user who can read the task may claim it, release their own claim, or take over another user's. Without `claimable` the task has no claims: the task view carries no `claim`, and `POST /api/v1/tasks/{id}/claim` and `/release` answer `404`. The agency task templates set it, since every officer of an agency can read every injected task; the TNSW ones leave it out.
+
+(This claim, on a task, is unrelated to the `role:<key>` read claims above.)
+
 ### File fields
 
 `files` (top level) lists the values in the task's data that are stored files, such as the value a form's file upload puts in a field. Each entry is a path into the task's data, starting at the top-level key, which is usually a step's output namespace:

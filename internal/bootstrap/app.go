@@ -473,10 +473,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), renderConfigOf(artifacts))
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
-	// An agency uses task claims: every officer owns every injected workflow, so a
-	// claim shows the others who is working a task. TNSW does not: a step is already
-	// limited to the trader or CHA company that owns the consignment.
-	taskHandler.ClaimsEnabled = agencyMode
+	// A task's template decides who may read it and whether it can be claimed.
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz

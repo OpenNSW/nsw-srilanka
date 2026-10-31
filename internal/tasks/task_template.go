@@ -15,8 +15,21 @@ import (
 var errNoTaskTemplate = errors.New("task has no task template")
 
 // TaskTemplateOf returns record's task template as raw JSON, in the manifest version
-// it runs on. Its read policy decides who may read the task (see readauthz).
+// it runs on. Its read policy decides who may read the task (see readauthz), and its
+// claimable field whether the task has claims.
 type TaskTemplateOf func(ctx context.Context, record store.TaskRecord) (json.RawMessage, error)
+
+// claimable reports whether taskTemplate's tasks can be claimed: its "claimable" field.
+// A template without one has no claims.
+func claimable(taskTemplate json.RawMessage) (bool, error) {
+	var t struct {
+		Claimable bool `json:"claimable"`
+	}
+	if err := json.Unmarshal(taskTemplate, &t); err != nil {
+		return false, fmt.Errorf("decode task template's claimable: %w", err)
+	}
+	return t.Claimable, nil
+}
 
 // rawTaskTemplate is a task template kept as its raw JSON, for the fields core's
 // types.TaskTemplate does not carry.

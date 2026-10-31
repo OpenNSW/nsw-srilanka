@@ -8,8 +8,8 @@ info:
     derived from the caller's role-tied ownership of the task's consignment.
 
     A claim records which user is working a task. Any user who can read a
-    task may claim it. Claims are on in an agency and off in TNSW, where
-    claim and release answer 404.
+    task may claim it, where its task template sets `claimable: true`.
+    Elsewhere claim and release answer 404.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -38,7 +38,7 @@ paths:
         expires after the deployment's `storage.tokenTTLSeconds`; refetch
         the task for fresh ones.
 
-        Where claims are on, the response says who holds the task's claim
+        Where the task can be claimed, the response says who holds its claim
         (`claim`).
 
         Requires scope `nsw:task:read`.
@@ -423,8 +423,8 @@ paths:
         '404':
           description: |
             No such task, the caller may not read it (indistinguishable from
-            "not found" by design), or this deployment does not use task
-            claims.
+            "not found" by design), or the task can't be claimed: its task
+            template doesn't set `claimable: true`.
           content:
             application/json:
               schema:
@@ -485,8 +485,8 @@ paths:
         '404':
           description: |
             No such task, the caller may not read it (indistinguishable from
-            "not found" by design), or this deployment does not use task
-            claims.
+            "not found" by design), or the task can't be claimed: its task
+            template doesn't set `claimable: true`.
           content:
             application/json:
               schema:
@@ -655,7 +655,7 @@ components:
     TaskResponse:
       description: |
         The task's zone view plus its claim, as the caller sees it. `claim` is
-        present only where claims are on.
+        present only where the task can be claimed.
       allOf:
         - $ref: '#/components/schemas/ZoneView'
         - type: object
