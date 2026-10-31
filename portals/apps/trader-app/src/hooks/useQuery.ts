@@ -6,6 +6,9 @@ export type QueryStatus = 'pending' | 'success' | 'error'
 
 export interface UseQueryOptions<T> {
   enabled?: boolean
+  // Keeps the last result while a new key loads, e.g. the current page of a list while the
+  // next one is fetched, instead of resetting to no data.
+  keepPreviousData?: boolean
   refetchInterval?: (data: T | undefined, fetchCount: number) => number | false
 }
 
@@ -35,6 +38,7 @@ export function useQuery<T>(
 ): UseQueryResult<T> {
   const serializedKey = serializeKey(key)
   const enabled = (options?.enabled ?? true) && serializedKey !== null
+  const keepPreviousData = options?.keepPreviousData ?? false
 
   const [prevKey, setPrevKey] = useState(serializedKey)
   const [prevEnabled, setPrevEnabled] = useState(enabled)
@@ -47,8 +51,12 @@ export function useQuery<T>(
   if (serializedKey !== prevKey) {
     setPrevKey(serializedKey)
     setPrevEnabled(enabled)
-    setStatus('pending')
-    setData(undefined)
+    if (keepPreviousData && data !== undefined) {
+      setStatus('success')
+    } else {
+      setStatus('pending')
+      setData(undefined)
+    }
     setError(null)
     setIsFetching(enabled)
     setPolling(false)
@@ -158,8 +166,10 @@ export function useQuery<T>(
   })
 
   useEffect(() => {
-    dataRef.current = undefined
-  }, [serializedKey])
+    if (!keepPreviousData) {
+      dataRef.current = undefined
+    }
+  }, [serializedKey, keepPreviousData])
 
   useEffect(() => {
     if (!enabled) {
