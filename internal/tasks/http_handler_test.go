@@ -227,6 +227,8 @@ type fakeTaskFetcher struct {
 	renderConfig string
 	// readRoles is that task template's read.roles, as a JSON array, or "" for none.
 	readRoles string
+	// claimable is that task template's claimable.
+	claimable bool
 }
 
 // testTaskTemplateID is the task template of the test tasks, in manifest version 1.
@@ -234,13 +236,16 @@ const testTaskTemplateID = "test-task"
 
 // renderConfigOf resolves record's render config through manifest version 1 of an
 // artifact set holding the task template testTaskTemplateID, which renders as
-// f.renderConfig and is read by f.readRoles. It also returns the set, for the zone
-// view assembler and the task template resolver.
+// f.renderConfig, is read by f.readRoles and is claimable when f.claimable. It also
+// returns the set, for the zone view assembler and the task template resolver.
 func (f *fakeTaskFetcher) renderConfigOf(t *testing.T) (RenderConfigOf, *artifact.Set) {
 	t.Helper()
 	read := ""
 	if f.readRoles != "" {
 		read = `,"read":{"roles":` + f.readRoles + `}`
+	}
+	if f.claimable {
+		read += `,"claimable":true`
 	}
 	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
 		"manifest_v1.json": []byte(`{"artifacts":[

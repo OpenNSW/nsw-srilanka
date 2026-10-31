@@ -61,10 +61,7 @@ type HTTPHandler struct {
 	AuthzCatalog taskauthz.Catalog
 	// Users names a task's claim holder in the task view. When nil, the holder has
 	// no name.
-	Users UserService
-	// ClaimsEnabled turns task claims on for this deployment. When false, claim and
-	// release answer 404.
-	ClaimsEnabled   bool
+	Users           UserService
 	Audit           nswaudit.Auditor
 	MaxRequestBytes int64
 	// Files swaps the task's declared file fields: stored values out as
@@ -106,8 +103,8 @@ func NewHTTPHandler(
 // HandleGetTask returns the ZoneView payload for a single task, scoped to the
 // caller: they must own the task's consignment in a role the task's template
 // admits, and the claims resolved for them decide which sections of the
-// view they see. Where claims are on, the response also says who holds the task's
-// claim.
+// view they see. Where the task can be claimed, the response also says who
+// holds its claim.
 //
 //	GET /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
@@ -132,10 +129,15 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	taskTemplate, err := h.taskTemplate(ctx, record)
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
+		return
+	}
 	// The case ID is the consignment id, so this decides the caller's access
 	// from their role-tied ownership of the task's consignment, and returns the
 	// claims that shape their view of it.
-	claims, err := h.resolveRead(ctx, in, record)
+	claims, err := h.resolveRead(ctx, in, record, taskTemplate)
 	if err != nil {
 		if !errors.Is(err, readauthz.ErrDenied) {
 			httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
@@ -168,9 +170,15 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	// claimed_at would repeat it, and show the holder's internal user id.
 	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
+	canClaim, err := claimable(taskTemplate)
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to read whether the task can be claimed", err, "taskId", taskID)
+		return
+	}
+
 	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, false, nil))
 	resp := taskResponse{ZoneView: zv}
-	if h.ClaimsEnabled {
+	if canClaim {
 		// From the stored record, not the view: the view only swaps file values.
 		claim := h.claimOf(ctx, in, record)
 		resp.Claim = &claim
