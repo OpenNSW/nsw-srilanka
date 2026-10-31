@@ -8,7 +8,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 |                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                    |
 | -------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
-| Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow |
+| Task ownership       | trader/CHA company owns the consignment                 | `catalog.ownsEveryCase` roles, every case  |
 | Task claims          | off                                                     | on (a hint, never required)                |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
@@ -53,6 +53,7 @@ the agency API's identifier as its audience:
 catalog:
   roles:
     officer: Officer
+  ownsEveryCase: [officer]
   clients:
     tnsw: NSW_TO_AGENCY
 artifactLoader:
@@ -85,7 +86,7 @@ In agency mode `/consignments` lists cases (`GET /api/v1/cases`), and
 `/consignments/:id` reuses `ConsignmentDetailScreen` with a `getCase` fetcher
 (`GET /api/v1/cases/{id}`): the tasks of every workflow in the case, in the
 consignment's `workflowNodes` shape. Opening a task uses the normal
-`/api/v1/tasks/{id}`, authorized by the officer gate. The screens keep the
+`/api/v1/tasks/{id}`, authorized by the task gate. The screens keep the
 `/consignments` paths because task cards and the task screen link there directly.
 
 The app has no roles of its own: it admits every signed-in user, and the backend
@@ -114,10 +115,10 @@ checks the token's catalog roles on each call.
    for replies, a resubmission comes back as a reply on the agency's own token
    (below), not as a repeat inject.
 5. The workflow is started as its own case, so tasks spawned under it have
-   `CaseID == taskId`. The agency's task authz gate (`agency.RoleGate`) reports
-   ownership in every catalog role for any case ID that is an `agency_workflow` row, so
-   `readauthz` and the write extension treat officers like any other owner. Officers
-   use the normal `/api/v1/tasks/{id}` routes.
+   `CaseID == taskId`. The task authz gate (`authzgate`, the same as TNSW's) reports
+   ownership of every case in each role of `catalog.ownsEveryCase`, so `readauthz` and
+   the write extension treat officers like any other owner. Officers use the normal
+   `/api/v1/tasks/{id}` routes.
 
 ## Asking for more information
 
@@ -197,9 +198,9 @@ TNSW has no task configs: it picks its workflow server-side at consignment creat
 
 ## Roles per task
 
-An agency has no per-case owner, so every injected workflow is owned in **every role of
-the agency's catalog**. What each role may do is decided by the task's own rules, which
-the agency's artifacts therefore declare for every task:
+An agency has no per-case owner, so every injected workflow is owned in **every role
+listed in `catalog.ownsEveryCase`**. What each role may do is decided by the task's own
+rules, which the agency's artifacts therefore declare for every task:
 
 - the step's `authz` extension says which roles may run each command, e.g.
   `"PENDING_USER": { "submit": ["officer"] }`;
@@ -207,16 +208,18 @@ the agency's artifacts therefore declare for every task:
   `["officer"]`.
 
 A step without an `authz` block is refused on writes, so every step must declare one.
-A task template without a `read` block is readable by every catalog role, so a task
-that should be open to one role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
+A task template without a `read` block is readable by every role that owns the case,
+so a task that should be open to one role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
 (read authorization) and the
 [authz extension](../internal/tasks/extensions/authz/README.md).
 
-No role is required of the catalog; it maps the roles the agency's tasks name. To add one:
+No particular role is required of the catalog; it maps the roles the agency's tasks
+name, and lists in `ownsEveryCase` the ones that own every case. To add one:
 
 1. Create the role in the IdP (`idp/resources/government/<agency>.json`).
 2. Map its logical name to that token role under `catalog.roles` in the agency's
-   `config.yaml`, e.g. `reviewer: CDA Reviewer`.
+   `config.yaml`, e.g. `reviewer: CDA Reviewer`, and add the name to
+   `catalog.ownsEveryCase`.
 3. Name it in the `authz` and `read.roles` of the tasks it may act on.
 
 The case list and detail admit an officer holding the token role of any catalog role.
@@ -230,10 +233,9 @@ officer. The catalog maps that client under `clients` as `tnsw` (for example
 `authz` names it: `"QUEUED_EXTERNALLY": { "resubmit": ["tnsw"] }`. Without the
 mapping, TNSW's reply is refused with `403`.
 
-A catalog that maps no role (for example one with only `clients`) still starts, but no
-officer can open cases or act on tasks: the server logs a warning at start. And without
-`authz` and `read.roles` on a task there is no role-based access control on it, since
-every catalog role then owns it.
+An agency whose catalog lists no role in `ownsEveryCase` refuses to start: no officer
+could open or act on a task. And without `authz` and `read.roles` on a task there is
+no role-based access control on it, since every role in `ownsEveryCase` owns it.
 
 ## Cases
 
@@ -246,8 +248,8 @@ One case has many workflows (`agency_workflow.case_id`). It carries the columns 
 a user) per role. The role is a catalog role name, so a new role needs no new column.
 In TNSW a consignment's trader company holds `trader` and the CHA company it selected
 holds `cha`, and a company owns a task in every role it holds on the task's case. An
-agency writes no parties yet: every injected workflow is owned in every catalog role
-(see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
+agency writes no parties yet: every injected workflow is owned in every role of
+`catalog.ownsEveryCase` (see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
 
 `state` is `IN_PROGRESS` on creation and becomes `FINISHED` once **every** workflow of
 the case has completed. A new workflow injected into a finished case reopens it

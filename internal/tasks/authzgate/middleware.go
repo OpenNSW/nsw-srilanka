@@ -5,7 +5,9 @@
 //
 // It resolves the principal eagerly (cheap) but defers ownership to a resolver
 // the extension invokes only when a user rule matches by role, so clients,
-// role-mismatches, and non-authz tasks incur no ownership lookup. It depends only
+// role-mismatches, and non-authz tasks incur no ownership lookup. A user owns a
+// task's case in every role their company holds on it, and in every role the
+// deployment says owns every case (catalog.ownsEveryCase: an agency's officers). It depends only
 // on narrow interfaces (bootstrap injects the concrete services), so the task
 // HTTP surface, the authz policy evaluator, and the consignment/company domains
 // each stay unaware of one another.
@@ -41,14 +43,18 @@ type CompanyResolver interface {
 type Middleware struct {
 	roles   CaseRoles
 	company CompanyResolver
+	// ownsEveryCase are the logical roles a user owns every case in.
+	ownsEveryCase []string
 }
 
 // NewMiddleware builds the middleware. roles and company are both required.
-func NewMiddleware(roles CaseRoles, company CompanyResolver) (*Middleware, error) {
+// ownsEveryCase lists the logical roles that own every case (catalog.ownsEveryCase),
+// and may be empty.
+func NewMiddleware(roles CaseRoles, company CompanyResolver, ownsEveryCase []string) (*Middleware, error) {
 	if roles == nil || company == nil {
 		return nil, errors.New("authzgate: case roles and company resolver are required")
 	}
-	return &Middleware{roles: roles, company: company}, nil
+	return &Middleware{roles: roles, company: company, ownsEveryCase: ownsEveryCase}, nil
 }
 
 // Handler wraps next (the task-write handler), attaching the authz Input.
@@ -89,9 +95,15 @@ func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
 	return func(ctx context.Context, caseID string) (map[string]bool, error) {
 		owned := map[string]bool{}
-		// Nothing (or nobody) to match against: no task, or a caller with no OU
-		// handle. Skip the lookups entirely.
-		if caseID == "" || ouHandle == "" {
+		// No task, so no case to own.
+		if caseID == "" {
+			return owned, nil
+		}
+		for _, name := range m.ownsEveryCase {
+			owned[name] = true
+		}
+		// A caller with no OU handle has no company to hold a role on the case.
+		if ouHandle == "" {
 			return owned, nil
 		}
 		userCompanyID, err := m.company.CompanyIDByOUHandle(ctx, ouHandle)
@@ -99,9 +111,18 @@ func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
 			return nil, err
 		}
 		if userCompanyID == "" {
-			return owned, nil // no company profile — owns nothing; skip ownership lookup
+			return owned, nil // no company profile, so no role on the case; skip that lookup
 		}
 		// The caller owns a case in every role their company holds on it.
-		return m.roles.RolesOf(ctx, caseID, caseparty.Company(userCompanyID))
+		held, err := m.roles.RolesOf(ctx, caseID, caseparty.Company(userCompanyID))
+		if err != nil {
+			return nil, err
+		}
+		for name, ok := range held {
+			if ok {
+				owned[name] = true
+			}
+		}
+		return owned, nil
 	}
 }

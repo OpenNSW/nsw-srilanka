@@ -22,6 +22,11 @@ type Catalog struct {
 	// Clients maps a logical principal name ("fcau") to the OAuth2 client id
 	// presented by an M2M caller ("FCAU_TO_NSW").
 	Clients map[string]string `yaml:"clients"`
+	// OwnsEveryCase lists the roles, by logical name, that own every case: a user
+	// holding one of them owns each task in that role, as an agency's officers own
+	// every injected case. Each must be in Roles. Other roles own a case only where
+	// the user's company holds the role on it (case_parties).
+	OwnsEveryCase []string `yaml:"ownsEveryCase"`
 }
 
 // RequireRoles reports an error unless roles — the catalog's Roles map — defines
@@ -65,6 +70,11 @@ func (c *Catalog) Validate() error {
 	for name, clientID := range c.Clients {
 		if clientID == "" {
 			return fmt.Errorf("clients[%q] must map to a non-empty client id", name)
+		}
+	}
+	for _, name := range c.OwnsEveryCase {
+		if _, ok := c.Roles[name]; !ok {
+			return fmt.Errorf("ownsEveryCase names %q, which is not in roles", name)
 		}
 	}
 	return nil

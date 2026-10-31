@@ -88,11 +88,13 @@ authn:
   audience: https://api.cda.nsw-agency.local
 
 # The catalog: the logical names the agency's workflow rules use, mapped to
-# this deployment's IdP token roles and OAuth2 client ids. Each role here
-# owns an injected workflow; tnsw names the client TNSW calls this agency as.
+# this deployment's IdP token roles and OAuth2 client ids. The roles in
+# ownsEveryCase own every injected case; tnsw names the client TNSW calls this
+# agency as.
 catalog:
   roles:
     officer: CDA Officer
+  ownsEveryCase: [officer]
   clients:
     tnsw: NSW_TO_CDA
 
