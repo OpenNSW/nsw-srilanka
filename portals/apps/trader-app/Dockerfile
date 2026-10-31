@@ -40,8 +40,8 @@ COPY --chown=101:0 --from=builder /workspace/apps/trader-app/dist /usr/share/ngi
 # docker-compose, or mounted from a ConfigMap by Helm (see
 # deployments/helm/lk-tnsw/templates/frontend/configmap.yaml).
 
-# Alpine security fixes published after the base image was built; Trivy reports
-# the fixable ones against this image at release time.
+# Alpine security fixes published after the base image was built; CI scans this
+# image and fails on a fixable CRITICAL CVE.
 USER root
 RUN apk upgrade --no-cache
 
