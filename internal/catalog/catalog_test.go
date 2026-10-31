@@ -27,6 +27,8 @@ func TestCatalog_Validate(t *testing.T) {
 		{name: "valid roles only", catalog: &Catalog{Roles: map[string]string{"trader": "Trader"}}, wantErr: false},
 		{name: "valid clients only", catalog: &Catalog{Clients: map[string]string{"fcau": "FCAU_TO_NSW"}}, wantErr: false},
 		{name: "valid full", catalog: testCatalog(), wantErr: false},
+		{name: "owns every case in a catalog role", catalog: &Catalog{Roles: map[string]string{"officer": "Officer"}, OwnsEveryCase: []string{"officer"}}, wantErr: false},
+		{name: "owns every case outside the roles", catalog: &Catalog{Roles: map[string]string{"officer": "Officer"}, OwnsEveryCase: []string{"reviewer"}}, wantErr: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

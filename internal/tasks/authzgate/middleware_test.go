@@ -62,7 +62,7 @@ func (f *fakeCompany) CompanyIDByOUHandle(context.Context, string) (string, erro
 // construction errors.
 func mustNewMiddleware(t *testing.T, ownership CaseRoles, company CompanyResolver) *Middleware {
 	t.Helper()
-	mw, err := NewMiddleware(ownership, company)
+	mw, err := NewMiddleware(ownership, company, nil)
 	if err != nil {
 		t.Fatalf("NewMiddleware: %v", err)
 	}
@@ -217,10 +217,10 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 
 // Both dependencies are required: a nil one would panic on the first request.
 func TestNewMiddleware_RequiresDependencies(t *testing.T) {
-	if _, err := NewMiddleware(nil, &fakeCompany{}); err == nil {
+	if _, err := NewMiddleware(nil, &fakeCompany{}, nil); err == nil {
 		t.Error("NewMiddleware(nil roles) = nil error, want one")
 	}
-	if _, err := NewMiddleware(&fakeOwnership{}, nil); err == nil {
+	if _, err := NewMiddleware(&fakeOwnership{}, nil, nil); err == nil {
 		t.Error("NewMiddleware(nil company) = nil error, want one")
 	}
 }
@@ -237,6 +237,56 @@ func TestMiddleware_AsksForCallerCompany(t *testing.T) {
 	if len(own.parties) != 1 || own.parties[0] != want[0] {
 		t.Errorf("parties = %v, want %v", own.parties, want)
 	}
+}
+
+// A role that owns every case is owned on any case, with or without a company, and
+// adds to the roles the caller's company holds on it.
+func TestMiddleware_OwnsEveryCase(t *testing.T) {
+	const traderCo = "adam-pvt-ltd"
+	everyCase := func(t *testing.T, own *fakeOwnership, comp *fakeCompany) *Middleware {
+		t.Helper()
+		mw, err := NewMiddleware(own, comp, []string{"officer"})
+		if err != nil {
+			t.Fatalf("NewMiddleware: %v", err)
+		}
+		return mw
+	}
+	tests := []struct {
+		name      string
+		ouHandle  string
+		company   *fakeCompany
+		wantOwned map[string]bool
+	}{
+		{"no OU handle", "", &fakeCompany{}, map[string]bool{"officer": true}},
+		{"no company profile", "ghost", &fakeCompany{id: ""}, map[string]bool{"officer": true}},
+		{"no role on the case", "other", &fakeCompany{id: "other-co"}, map[string]bool{"officer": true}},
+		{"and a role on the case", traderCo, &fakeCompany{id: traderCo}, map[string]bool{"officer": true, "trader": true}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			in, _ := attachedInput(everyCase(t, owns(traderCo, ""), tc.company), userCtx(tc.ouHandle, "Officer"))
+			owned, err := in.OwnedRoles(context.Background(), "c1")
+			if err != nil {
+				t.Fatalf("resolve: %v", err)
+			}
+			if len(owned) != len(tc.wantOwned) {
+				t.Fatalf("owned = %v, want %v", owned, tc.wantOwned)
+			}
+			for k, v := range tc.wantOwned {
+				if owned[k] != v {
+					t.Errorf("owned[%q] = %v, want %v", k, owned[k], v)
+				}
+			}
+		})
+	}
+
+	t.Run("no case owns nothing", func(t *testing.T) {
+		in, _ := attachedInput(everyCase(t, owns(traderCo, ""), &fakeCompany{}), userCtx("", "Officer"))
+		owned, err := in.OwnedRoles(context.Background(), "")
+		if err != nil || len(owned) != 0 {
+			t.Fatalf("owned=%v err=%v, want empty/nil", owned, err)
+		}
+	})
 }
 
 func userCtx(ouHandle string, roles ...string) *authn.Principal {

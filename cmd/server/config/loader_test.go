@@ -207,8 +207,9 @@ func TestLoad_ConfigFileMode(t *testing.T) {
 	}{
 		"omitted is rejected": {configYAML(t, "", "mode"), "", "mode is required"},
 		"tnsw":                {configYAML(t, "mode: tnsw\n"), ModeTNSW, ""},
-		"agency":              {configYAML(t, "mode: agency\n"), ModeAgency, ""},
-		"unknown is rejected": {configYAML(t, "mode: both\n"), "", "invalid mode"},
+		"agency":              {configYAML(t, agencyYAML), ModeAgency, ""},
+		"agency without ownsEveryCase is rejected": {configYAML(t, "mode: agency\n"), "", "ownsEveryCase"},
+		"unknown is rejected":                      {configYAML(t, "mode: both\n"), "", "invalid mode"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg, err := loadYAML(t, tc.body)
@@ -232,7 +233,7 @@ func TestLoad_ConfigFileMode(t *testing.T) {
 func TestLoad_AgencyModeNeedsNoSLPASecret(t *testing.T) {
 	const secret = "integrations.slpaWebhookSecret"
 
-	if _, err := loadYAML(t, configYAML(t, "mode: agency\n", secret)); err != nil {
+	if _, err := loadYAML(t, configYAML(t, agencyYAML, secret)); err != nil {
 		t.Fatalf("agency: Load() unexpected error: %v", err)
 	}
 

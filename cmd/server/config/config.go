@@ -179,16 +179,25 @@ func loadFile(path string) (*Config, error) {
 }
 
 // validateTNSW checks TNSW's trade integrations and consignments; an agency builds none of
-// them.
+// them, and is checked by validateAgency instead.
 func (c *Config) validateTNSW() error {
 	if c.Mode == ModeAgency {
-		return nil
+		return c.validateAgency()
 	}
 	if err := c.Integrations.Validate(); err != nil {
 		return fmt.Errorf("invalid external integration configuration: %w", err)
 	}
 	if err := c.Consignment.Validate(); err != nil {
 		return fmt.Errorf("invalid consignment configuration: %w", err)
+	}
+	return nil
+}
+
+// validateAgency checks what an agency needs: roles that own every injected case (its
+// officers). Without them it would start, but no officer could open or act on a task.
+func (c *Config) validateAgency() error {
+	if len(c.Catalog.OwnsEveryCase) == 0 {
+		return fmt.Errorf("invalid catalog configuration: an agency needs ownsEveryCase, the roles that own every injected case (its officers)")
 	}
 	return nil
 }

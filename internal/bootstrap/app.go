@@ -479,16 +479,11 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
-	// extension and the read evaluator to consume. In TNSW a company owns a task in
-	// every role it holds on the task's case (case_parties: the consignment's trader
-	// and CHA); in an agency an officer owns every injected workflow's tasks (see
-	// agency.go).
-	var taskAuthzGate taskGate
-	if agencyMode {
-		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
-	} else {
-		taskAuthzGate, err = authzgate.NewMiddleware(caseparty.NewRepository(db), companyIDResolver{svc: companyService})
-	}
+	// extension and the read evaluator to consume. A user owns a task in every role
+	// their company holds on the task's case (case_parties: in TNSW the consignment's
+	// trader and CHA), and in every role of catalog.ownsEveryCase (an agency's
+	// officers, who own every injected case).
+	taskAuthzGate, err := authzgate.NewMiddleware(caseparty.NewRepository(db), companyIDResolver{svc: companyService}, globalCatalog.OwnsEveryCase)
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
@@ -675,12 +670,6 @@ type parentTaskActivator interface {
 // parentUpstreamService is the narrow surface wireParentRunner needs to notify
 // a downstream domain when a parent workflow completes: *caseflow.Service in TNSW,
 // agency.CompletionHandler in an agency.
-// taskGate is Layer 1 of task authorization on the task routes: authzgate's
-// trader/CHA middleware in TNSW, agency.RoleGate in an agency.
-type taskGate interface {
-	Handler(next http.Handler) http.Handler
-}
-
 type parentUpstreamService interface {
 	CompletionHandler(workflowID string, finalContext map[string]any) error
 }
