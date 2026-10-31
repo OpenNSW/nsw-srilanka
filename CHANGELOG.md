@@ -8,13 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.13.0] - 2026-10-31
 
-This release has no required upgrade steps. It adds an optional `artifacts.fileCacheBytes` setting and two optional clean-ups: XML leaves the allowed upload types, and CDA, EFC, FCAU and SLTB give up the internal upload scope they never use. The artifacts pin can move on its own this time: its changes are to forms, which the 0.12.0 build already runs.
+This release has no required upgrade steps, but we recommend two hardening steps: XML leaves the allowed upload types, and CDA, EFC, FCAU and SLTB give up the internal upload scope they never use. It also adds an optional `artifacts.fileCacheBytes` setting. The artifacts pin can move on its own this time: its changes are to forms, which the 0.12.0 build already runs.
 
 ### Upgrade notes
 
-#### Take XML out of the allowed upload types (optional) ([#1008](https://github.com/OpenNSW/nsw-srilanka/pull/1008))
+#### Take XML out of the allowed upload types (recommended) ([#1008](https://github.com/OpenNSW/nsw-srilanka/pull/1008))
 
-No form stores an XML file any more: the CusDec imports parse the file in the browser and upload nothing, and the SLTB application in the pinned artifacts fills its draft CusDec on the form. Nothing fails if XML stays. To remove it, in this order:
+No form stores an XML file any more: the CusDec imports parse the file in the browser and upload nothing, and the SLTB application in the pinned artifacts fills its draft CusDec on the form. Nothing fails if XML stays, but we recommend removing it, so that nothing can store a type no form needs. To remove it, in this order:
 
 1. **The pinned artifacts first** (see below). The SLTB application in the earlier artifacts requires an XML upload, so removing XML first blocks every SLTB application with a 415. Let SLTB applications still on the earlier form finish, including any sent back for resubmission.
 2. **TNSW.** Remove `text/xml` and `application/xml` from `storage.allowedUploadTypes` (Helm: `backend.config.storage.allowedUploadTypes`). Their `storage.uploadTypeExtensions` entries can go too; startup accepts them either way.
@@ -22,9 +22,9 @@ No form stores an XML file any more: the CusDec imports parse the file in the br
 
 After this, an upload of an XML file gets a 415, including to a file field that accepts any type. Files already stored as XML still download.
 
-#### Take `nsw:storage:internalwrite` from CDA, EFC, FCAU and SLTB (optional) ([#1001](https://github.com/OpenNSW/nsw-srilanka/pull/1001))
+#### Take `nsw:storage:internalwrite` from CDA, EFC, FCAU and SLTB (recommended) ([#1001](https://github.com/OpenNSW/nsw-srilanka/pull/1001))
 
-Only NPQS generates documents, so only its agency-to-TNSW client needs the scope of the internal upload route. CDA, EFC, FCAU and SLTB never call the route. The example IdP bootstrap and agency configs no longer grant it to them, so a new deployment gets this by default. To take it from a deployment that granted it as the 0.10.0 notes said, in this order:
+Only NPQS generates documents, so only its agency-to-TNSW client needs the scope of the internal upload route. CDA, EFC, FCAU and SLTB never call the route, and a client should hold only the scopes it uses. Nothing fails if they keep it, but we recommend removing it. The example IdP bootstrap and agency configs no longer grant it to them, so a new deployment gets this by default. To take it from a deployment that granted it as the 0.10.0 notes said, in this order:
 
 1. **CDA, EFC, FCAU and SLTB first.** In each agency's `config.yaml`, remove `nsw:storage:internalwrite` from the scopes of the `tnsw` service, then restart the agency so it fetches a new token. An agency that asks for a scope its client no longer holds can fail its token request, so do this before the IdP. Keep `storage.proxy.internalUploadPath`: it is still required.
 2. **The IdP, after the agencies.** A live IdP does not read `idp/bootstrap/`, so change it by hand. Remove `nsw:storage:internalwrite` from the `CdaToNswM2M`, `EfcToNswM2M`, `FcauToNswM2M` and `SltbToNswM2M` roles, and from the scopes of the `CDA_TO_NSW_M2M`, `EFC_TO_NSW_M2M`, `FCAU_TO_NSW_M2M` and `SLTB_TO_NSW_M2M` apps.
@@ -46,8 +46,8 @@ An agency that later generates documents is given the scope then, as the [onboar
 
 ### Security
 
-- CDA, EFC, FCAU and SLTB no longer hold `nsw:storage:internalwrite` in the example IdP bootstrap and agency configs, so that only a client that generates documents can write to the internal upload route. See the upgrade notes for taking it from a live deployment. ([#1001](https://github.com/OpenNSW/nsw-srilanka/pull/1001))
-- The example configs no longer allow XML uploads. See the upgrade notes for removing it from a live deployment. ([#1008](https://github.com/OpenNSW/nsw-srilanka/pull/1008))
+- CDA, EFC, FCAU and SLTB no longer hold `nsw:storage:internalwrite` in the example IdP bootstrap and agency configs, so that only a client that generates documents can write to the internal upload route. We recommend taking it from a live deployment: see the upgrade notes. ([#1001](https://github.com/OpenNSW/nsw-srilanka/pull/1001))
+- The example configs no longer allow XML uploads. We recommend removing it from a live deployment: see the upgrade notes. ([#1008](https://github.com/OpenNSW/nsw-srilanka/pull/1008))
 
 ### Known issues
 
