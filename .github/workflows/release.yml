@@ -13,6 +13,16 @@ name: Release - Build and Publish Images
 #   with a version input. Any other trigger runs in dry-run mode: images are
 #   built but not pushed and no GitHub Release is created.
 #
+# Vulnerability gate:
+#   Each image is pushed under its immutable sha tag only, and that digest is
+#   scanned with Trivy (.github/scripts/trivy-image.sh). The version and `latest`
+#   tags are added to the same digest only when the scan finds no fixable
+#   CRITICAL CVE, so a failing image is never advertised and the digests, chart
+#   and GitHub Release jobs do not run. A CVE that cannot be fixed is accepted in
+#   .trivyignore with an expiry date. The final stage of each image is built
+#   without its layer cache, so its package upgrades are current on every
+#   attempt, including a re-run of a failed release.
+#
 # Outputs for gitops.yaml:
 #   The image digest is written to the GitHub Release as a JSON asset
 #   (release-digests.json). gitops.yaml reads this file to verify the image
@@ -110,9 +120,10 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
-  # STAGE 1: Build, tag, and publish the image. Writes the image digest to a
-  # file so Stage 2 can bundle it into release-digests.json and attach it to
-  # the GitHub Release.
+  # STAGE 1: Build the image, push it under its sha tag, scan it, and add the
+  # release tags if the scan passes. Writes the image digest to a file so
+  # Stage 2 can bundle it into release-digests.json and attach it to the GitHub
+  # Release.
   # ---------------------------------------------------------------------------
   build-and-publish:
     name: Build and Publish - ${{ matrix.service_name }}
@@ -219,8 +230,27 @@ jobs:
         id: repo_owner
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
+      # The build pushes only this tag; "Publish release tags" adds the others
+      # once the image has passed the scan.
       - name: Extract metadata
         id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}
+          tags: |
+            # Always write a full-length SHA tag for traceability
+            type=sha,format=long
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.version=${{ steps.version.outputs.tag }}
+            org.opencontainers.image.revision=${{ env.GIT_COMMIT }}
+            org.opencontainers.image.created=${{ steps.build-time.outputs.build_time }}
+
+      - name: Extract release tags
+        id: release-tags
+        if: steps.release-mode.outputs.enabled == 'true'
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}
@@ -236,17 +266,8 @@ jobs:
             type=semver,pattern={{major}},enable=${{ github.event_name == 'workflow_dispatch' }}
             # 'latest' is only written in release mode (never on dry runs)
             type=raw,value=latest,enable=${{ steps.release-mode.outputs.enabled == 'true' }}
-            # Always write a full-length SHA tag for traceability
-            type=sha,format=long
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.description=${{ matrix.description }}
-            org.opencontainers.image.licenses=Apache-2.0
-            org.opencontainers.image.version=${{ steps.version.outputs.tag }}
-            org.opencontainers.image.revision=${{ env.GIT_COMMIT }}
-            org.opencontainers.image.created=${{ steps.build-time.outputs.build_time }}
 
-      - name: Build and publish image
+      - name: Build and push image
         id: build
         uses: docker/build-push-action@v7
         with:
@@ -254,8 +275,15 @@ jobs:
           file: ${{ matrix.dockerfile }}
           # Empty for default-stage images; set to `migrate` for the migrator.
           target: ${{ matrix.target }}
-          # One manifest list per tag, so steps.build.outputs.digest is the list
-          # digest — which is what release-digests.json should pin.
+          # The final stage is built without its layer cache: a cached
+          # `apk upgrade` or `apk add` layer would keep the packages of an
+          # earlier build, and with them a CVE Alpine has since fixed. The
+          # builder stages keep their cache. The final stage is the target, or
+          # the Dockerfile's `runtime` stage when there is none.
+          no-cache-filters: ${{ matrix.target || 'runtime' }}
+          # A manifest list, so steps.build.outputs.digest is the list digest —
+          # which is what release-digests.json should pin, and what the scan and
+          # the release tags refer to.
           platforms: ${{ env.PLATFORMS }}
           push: ${{ steps.release-mode.outputs.enabled == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
@@ -286,65 +314,31 @@ jobs:
           path: /tmp/digests/${{ matrix.image_name }}.txt
           retention-days: 1
 
-      # Scans the pushed image for HIGH/CRITICAL CVEs. Reports only — see
-      # "Report Trivy findings" below.
+      # Scans the pushed digest — the manifest list the release tags will point
+      # at — for fixable HIGH and CRITICAL CVEs.
       - name: Setup Trivy
         if: steps.release-mode.outputs.enabled == 'true'
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
         with:
           version: v0.69.3
 
-      # `trivy image` resolves a manifest list to ONE entry, so each platform is
-      # scanned explicitly or arm64 goes unscanned. --platform needs the full
-      # os/arch form; a bare `arm64` parses as an OS name and matches nothing.
-      # --exit-code 0 so a finding neither aborts the loop nor skips the uploads
-      # below, which is what the old --exit-code 1 did.
+      # The script scans each platform in PLATFORMS and never fails on findings,
+      # so the uploads below always run; "Gate on image CVEs" decides.
       - name: Run Trivy vulnerability scanner
         id: trivy-scan
         if: steps.release-mode.outputs.enabled == 'true'
         env:
-          IMAGE_REF: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
-        run: |
-          # Collected rather than raised: a platform that cannot be scanned is
-          # reported by "Report Trivy findings", not failed here.
-          FAILED_PLATFORMS=""
-          for PLATFORM in ${PLATFORMS//,/ }; do
-            SLUG="${PLATFORM//\//-}"
-            echo "::group::Trivy ${{ matrix.image_name }} ${PLATFORM}"
-            # --image-src remote is load-bearing: the default `docker` source has
-            # priority and silently IGNORES --platform, which would turn both
-            # per-platform scans into two scans of the same arch.
-            if trivy image \
-                 --image-src remote \
-                 --platform "$PLATFORM" \
-                 --severity HIGH,CRITICAL \
-                 --ignore-unfixed \
-                 --format sarif \
-                 --output "trivy-${{ matrix.image_name }}-${SLUG}.sarif" \
-                 --exit-code 0 \
-                 "$IMAGE_REF"; then
-              # Same scan again as a readable table; caches are warm, so it is cheap.
-              trivy image \
-                --image-src remote \
-                --platform "$PLATFORM" \
-                --severity HIGH,CRITICAL \
-                --ignore-unfixed \
-                --format table \
-                --exit-code 0 \
-                "$IMAGE_REF" || true
-            else
-              echo "::warning::Trivy could not scan ${PLATFORM} — it is reported as unscanned below."
-              FAILED_PLATFORMS="${FAILED_PLATFORMS} ${PLATFORM}"
-            fi
-            echo "::endgroup::"
-          done
-          echo "failed_platforms=${FAILED_PLATFORMS# }" >> "$GITHUB_OUTPUT"
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}@${{ steps.build.outputs.digest }}
+          IMAGE_NAME: ${{ matrix.image_name }}
+        run: bash .github/scripts/trivy-image.sh scan "$IMAGE_REF" "$IMAGE_NAME"
 
       # One upload per (image, platform) — two uploads sharing a tool+category fails
       # the whole run. hashFiles tolerates a missing SARIF (narrowed PLATFORMS, or a
-      # platform that failed to scan).
+      # platform that failed to scan). An upload that fails does not block the
+      # release: the gate below does not depend on it.
       - name: Upload Trivy results (linux/amd64)
         if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-amd64.sarif', matrix.image_name)) != ''
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4.39.1
         with:
           sarif_file: trivy-${{ matrix.image_name }}-linux-amd64.sarif
@@ -352,50 +346,35 @@ jobs:
 
       - name: Upload Trivy results (linux/arm64)
         if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-arm64.sarif', matrix.image_name)) != ''
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4.39.1
         with:
           sarif_file: trivy-${{ matrix.image_name }}-linux-arm64.sarif
           category: ${{ matrix.image_name }}-linux-arm64
 
-      # Report-only: cannot fail the release. Base-image CVEs arrive on the CVE
-      # feed's schedule and often have no same-day fix, so gating on them blocks
-      # shipping on something nobody can action. Runs after the uploads, so the
-      # alerts it points at already exist.
-      - name: Report Trivy findings
-        if: always() && steps.trivy-scan.outcome == 'success'
+      # Fails on a fixable CRITICAL CVE, or on a platform that could not be
+      # scanned, so the release tags are not added. Fixable HIGH findings are
+      # reported only. Runs after the uploads, so the alerts it points at exist.
+      - name: Gate on image CVEs
+        if: steps.trivy-scan.outcome == 'success'
+        env:
+          IMAGE_NAME: ${{ matrix.image_name }}
+          UNSCANNED: ${{ steps.trivy-scan.outputs.failed_platforms }}
+        run: bash .github/scripts/trivy-image.sh gate "$IMAGE_NAME"
+
+      # Tags the scanned digest, so the digest — and release-digests.json —
+      # stays the one that was scanned.
+      - name: Publish release tags
+        if: steps.release-mode.outputs.enabled == 'true'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}@${{ steps.build.outputs.digest }}
+          RELEASE_TAGS: ${{ steps.release-tags.outputs.tags }}
         run: |
-          {
-            echo "### ${{ matrix.image_name }} — image CVEs (report only)"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          UNSCANNED="${{ steps.trivy-scan.outputs.failed_platforms }}"
-          if [ -n "$UNSCANNED" ]; then
-            echo "::warning::Trivy could not scan: ${UNSCANNED} — published without a CVE report for those platforms."
-            {
-              echo "> **Not scanned:** \`${UNSCANNED}\` — published without a CVE report for those platforms."
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # `[ -e ]` guards the no-match case: an unexpanded glob would otherwise
-          # reach jq as a literal filename.
-          TOTAL=0
-          for FILE in trivy-${{ matrix.image_name }}-*.sarif; do
-            [ -e "$FILE" ] || continue
-            COUNT=$(jq '[.runs[].results[]] | length' "$FILE")
-            TOTAL=$(( TOTAL + COUNT ))
-            echo "$FILE: $COUNT fixable HIGH/CRITICAL finding(s)"
-            echo "- \`${FILE}\`: ${COUNT} fixable HIGH/CRITICAL" >> "$GITHUB_STEP_SUMMARY"
-          done
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$TOTAL" -gt 0 ]; then
-            echo "::warning::${TOTAL} fixable HIGH/CRITICAL CVE(s) in ${{ matrix.image_name }} — the release was NOT blocked; triage under Security → Code scanning."
-            echo "Triage under **Security → Code scanning**, category \`${{ matrix.image_name }}-linux-<arch>\`. The release was not blocked." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "No fixable HIGH/CRITICAL CVEs on any scanned platform." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          TAG_ARGS=()
+          while IFS= read -r TAG; do
+            if [ -n "$TAG" ]; then TAG_ARGS+=(--tag "$TAG"); fi
+          done <<< "$RELEASE_TAGS"
+          docker buildx imagetools create "${TAG_ARGS[@]}" "$IMAGE_REF"
 
       - name: Generate service summary
         if: always()

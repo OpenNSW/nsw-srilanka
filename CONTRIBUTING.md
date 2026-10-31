@@ -89,8 +89,10 @@ Runs when `portals/**` changes.
 ### Docker Validation (`docker-validation.yml`)
 
 Runs when `portals/**`, `Dockerfile`, Go source, `go.mod`/`go.sum`, `migrations/**`,
-`configs/**` or `.dockerignore` change. Builds all three images (tnsw-web,
-tnsw-api, tnsw-migrate) without pushing; **Docker images** reports the result.
+`configs/**`, `.dockerignore`, `.trivyignore` or `.github/scripts/trivy-image.sh`
+change. Builds all three images (tnsw-web, tnsw-api, tnsw-migrate) without pushing
+and scans each with Trivy; **Docker images** reports the result, and fails on a
+fixable CRITICAL CVE (see [Image CVEs](#image-cves)).
 
 ### Chart Validation (`chart-validation.yml`)
 
@@ -197,6 +199,8 @@ Fill in the PR template's **Deployment Notes** whenever a deployer has to do som
 2. **Merge it.** That is the release: the merge commit is tagged and released. Merge it only when you mean to ship, and if the PR has waited, update the heading's date to today first. The release run warns when the date and the merge day differ.
 3. **If the release fails at "Release Notes"**, nothing was built. Fix the cause in a new release PR; the tag is only created once the checks pass. To retry a release that failed later on, re-run the failed run of `release.yml`.
 
+   A failure at **Gate on image CVEs** means that image has a fixable CRITICAL CVE. The image is in the registry only under its `sha-` tag; no version or `latest` tag, chart or GitHub Release is created. See [Image CVEs](#image-cves) for the fix.
+
 A tag pushed by hand still starts `release.yml`, but only releases if `version.txt` and CHANGELOG.md at that commit agree with it. Never use `git push --tags`.
 
 While on 0.x, a breaking change or a new feature bumps the minor version (0.2.0 → 0.3.0), and fixes alone bump the patch (0.2.0 → 0.2.1).
@@ -214,6 +218,18 @@ The Helm chart is released with the app, in lockstep: `release.yml` publishes `l
 The pre-commit hook and CI both run gitleaks. Do not commit real credentials — use the `.env.example` pattern for documenting required environment variables.
 
 Report vulnerabilities privately via GitHub's Security tab (see [SECURITY.md](SECURITY.md)).
+
+### Image CVEs
+
+Trivy checks the images in three places, all through [`.github/scripts/trivy-image.sh`](.github/scripts/trivy-image.sh):
+
+- **Pull requests:** Docker Validation scans each image it builds.
+- **Releases:** `release.yml` pushes each image under its `sha-` tag only, scans that digest, and adds the version and `latest` tags only if the scan passes.
+- **Weekly:** [`image-scan.yml`](.github/workflows/image-scan.yml) scans the published `latest` images, so a CVE published after a release still shows up. It blocks nothing; the run fails.
+
+Only findings with a fix available count. A fixable CRITICAL fails the check, and so does a platform Trivy cannot scan. Fixable HIGH findings are reported in the job summary, and in Security → Code scanning for releases and the weekly scan, without failing anything.
+
+To fix a failure, update the image. The final stage of each image is built without its layer cache, and `tnsw-web` runs `apk upgrade`, so a rebuild takes the Alpine fixes published since the base image was built. For a CVE that cannot be fixed that way, list it in [`.trivyignore`](.trivyignore) in a PR, with the reason on the line above and an expiry date (`CVE-2026-12345 exp:2026-12-31`); it counts again from that date.
 
 ## License headers
 

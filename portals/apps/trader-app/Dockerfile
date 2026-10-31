@@ -28,7 +28,7 @@ RUN pnpm --filter trader-app build
 # ngx_http_perl_module and a perl interpreter would only widen the CVE surface.
 # envsubst templating and /docker-entrypoint.d — which default.conf.template
 # relies on — live in the base layer, not this variant.
-FROM nginxinc/nginx-unprivileged:stable-alpine3.24
+FROM nginxinc/nginx-unprivileged:stable-alpine3.24 AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
 LABEL org.opencontainers.image.description="NSW Trader Portal Frontend"

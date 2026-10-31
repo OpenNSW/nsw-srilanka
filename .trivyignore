@@ -1,0 +1,10 @@
+# Image CVEs accepted as a known risk. .github/scripts/trivy-image.sh reads this
+# file for the PR image check, the release gate and the weekly scan: a listed CVE
+# is left out of their reports and does not fail the gate.
+#
+# Only fixable CRITICAL findings fail the gate, so list a CVE here only when it
+# cannot be fixed by updating the image. Put the reason on the line above it and
+# an expiry date after the id; the CVE counts again from that date.
+#
+#   # Reachable only through <component>, which this image does not run.
+#   CVE-2026-12345 exp:2026-12-31
