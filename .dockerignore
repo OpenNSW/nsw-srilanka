@@ -2,6 +2,7 @@
 .git/
 .gitignore
 .github/
+.trivyignore
 
 # Frontend — irrelevant to the Go build, large build context
 portals/
