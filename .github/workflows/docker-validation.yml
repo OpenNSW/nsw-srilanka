@@ -1,9 +1,10 @@
 name: Docker Validation CI
-# Validates that the deployable Docker images build successfully, on PRs to
-# main and in the merge queue, when any file in a Docker build context changes;
-# otherwise the builds are skipped. This workflow never pushes images — it is
-# purely a build correctness check. Image publishing is handled by
-# build-dev.yaml (on push to main).
+# Validates that the deployable Docker images build successfully, and that each
+# has no fixable CRITICAL CVE, on PRs to main and in the merge queue, when any
+# file in a Docker build context changes; otherwise the builds are skipped. The
+# scan policy and accepted risks are in .github/scripts/trivy-image.sh and
+# .trivyignore. This workflow never pushes images. Image publishing is handled
+# by build-dev.yaml (on push to main).
 
 on:
   pull_request:
@@ -32,7 +33,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
-          PATTERN: '^portals/|^Dockerfile$|\.go$|^go\.(mod|sum)$|^migrations/|^configs/|^\.dockerignore$|^\.github/workflows/docker-validation\.yml$'
+          PATTERN: '^portals/|^Dockerfile$|\.go$|^go\.(mod|sum)$|^migrations/|^configs/|^\.dockerignore$|^\.trivyignore$|^\.github/scripts/trivy-image\.sh$|^\.github/workflows/docker-validation\.yml$'
         run: |
           # --no-renames lists both paths of a rename, so a file moved out of a
           # watched path still counts as a change to it.
@@ -81,11 +82,38 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           target: ${{ matrix.target }}
+          # The final stage is built without its layer cache: a cached
+          # `apk upgrade` or `apk add` layer would keep the packages of an
+          # earlier build, and with them a CVE Alpine has since fixed. The
+          # builder stages keep their cache. The final stage is the target, or
+          # the Dockerfile's `runtime` stage when there is none.
+          no-cache-filters: ${{ matrix.target || 'runtime' }}
           push: false # validation only — never push in this workflow
+          load: true  # into the local daemon, for the scan below
           tags: ${{ matrix.tags }}
           # Scope cache per image so matrix builds don't overwrite each other's layers.
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      # Same Trivy version as release.yml.
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
+        with:
+          version: v0.69.3
+
+      - name: Scan ${{ matrix.name }} image
+        id: trivy-scan
+        env:
+          IMAGE_REF: ${{ matrix.tags }}
+          IMAGE_NAME: ${{ matrix.name }}
+        run: bash .github/scripts/trivy-image.sh scan "$IMAGE_REF" "$IMAGE_NAME"
+
+      # Fails on a fixable CRITICAL CVE; fixable HIGH findings are reported only.
+      - name: Gate on image CVEs
+        env:
+          IMAGE_NAME: ${{ matrix.name }}
+          UNSCANNED: ${{ steps.trivy-scan.outputs.failed_platforms }}
+        run: bash .github/scripts/trivy-image.sh gate "$IMAGE_NAME"
 
   # The required check for this workflow. A skipped matrix job reports a single
   # check whose name isn't expanded, so the per-image checks can't be required;
