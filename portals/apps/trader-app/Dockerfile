@@ -40,8 +40,12 @@ COPY --chown=101:0 --from=builder /workspace/apps/trader-app/dist /usr/share/ngi
 # docker-compose, or mounted from a ConfigMap by Helm (see
 # deployments/helm/lk-tnsw/templates/frontend/configmap.yaml).
 
-# OpenShift Compliance: Fix permissions for random UID (Group 0)
+# Alpine security fixes published after the base image was built; Trivy reports
+# the fixable ones against this image at release time.
 USER root
+RUN apk upgrade --no-cache
+
+# OpenShift Compliance: Fix permissions for random UID (Group 0)
 RUN chmod -R g+w /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html
 USER 101
 EXPOSE 8080
