@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/OpenNSW/core/artifact"
@@ -42,4 +43,28 @@ func TestTaskTemplates(t *testing.T) {
 		_, err := of(ctx, store.TaskRecord{TaskID: "1", TaskTemplateID: "missing", ManifestVersion: 1})
 		assert.ErrorIs(t, err, artifact.ErrNotFound)
 	})
+}
+
+func TestClaimable(t *testing.T) {
+	for name, tt := range map[string]struct {
+		template string
+		want     bool
+		wantErr  bool
+	}{
+		"claimable":         {`{"id":"t","claimable":true}`, true, false},
+		"says not":          {`{"id":"t","claimable":false}`, false, false},
+		"no claimable":      {`{"id":"t"}`, false, false},
+		"not a boolean":     {`{"id":"t","claimable":"yes"}`, false, true},
+		"null is not there": {`{"id":"t","claimable":null}`, false, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := claimable(json.RawMessage(tt.template))
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

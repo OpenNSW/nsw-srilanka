@@ -164,7 +164,7 @@ function claimErrorKey(err: unknown, op: ClaimOp, refreshed: ZoneView | undefine
     if (err.status === 409) return refreshed?.state === 'COMPLETED' ? 'completed' : 'changed'
     // A refused release means another user holds the claim.
     if (err.status === 403 && op === 'release') return 'notHolder'
-    // The deployment does not use claims, or the task is gone.
+    // The task can't be claimed, or it is gone.
     if (err.status === 404) return 'unavailable'
   }
   return 'failed'

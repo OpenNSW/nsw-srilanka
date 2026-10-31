@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,7 +23,7 @@ const (
 	errClaimChanged      = "this task's claim just changed; refetch the task and try again"
 	errClaimTaskComplete = "this task is completed and can no longer be claimed"
 	errNotClaimHolder    = "this task is claimed by another user"
-	errClaimsOff         = "task claims are not used in this deployment"
+	errClaimsOff         = "this task can't be claimed"
 )
 
 // UserService resolves a user's id to the name shown for them, such as a claim holder's.
@@ -32,14 +33,14 @@ type UserService interface {
 }
 
 // taskResponse is the task view served by GET /api/v1/tasks/{id}: core's zone view
-// and, where claims are on, who holds the task's claim, as seen by the caller.
+// and, where the task can be claimed, who holds its claim, as seen by the caller.
 type taskResponse struct {
 	zoneview.ZoneView
 	Claim *taskClaim `json:"claim,omitempty"`
 }
 
 // taskClaim is the task's claim as the caller sees it. The task view carries it only
-// where claims are on.
+// where the task can be claimed.
 type taskClaim struct {
 	// Holder is who holds the claim; absent when the task is unclaimed.
 	Holder    *claimHolder `json:"holder,omitempty"`
@@ -93,7 +94,7 @@ type TaskClaimer interface {
 
 // HandleClaimTask claims a task for the calling user, so others can see who is
 // working on it. A claim is a hint, not a lock: submitting a step never checks it.
-// Whether claims are used is the deployment's choice (HTTPHandler.ClaimsEnabled).
+// Whether a task can be claimed is its task template's choice (its claimable field).
 // Any user who can read the task may claim it. If another user holds the claim, the
 // caller takes it over, for example when the holder is away. Claiming a task you
 // already hold succeeds.
@@ -101,7 +102,7 @@ type TaskClaimer interface {
 //	POST /api/v1/tasks/{id}/claim
 //
 // 204 on success: the task view changes with the claim, so the caller refetches it.
-// 404 where the deployment does not use claims. 409 when the task is completed, or
+// 404 when the task can't be claimed. 409 when the task is completed, or
 // when the claim changed while it was being taken over.
 func (h *HTTPHandler) HandleClaimTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -153,8 +154,8 @@ type takeover struct {
 //
 //	POST /api/v1/tasks/{id}/release
 //
-// 204 on success. 403 when another user holds the claim. 404 where the deployment
-// does not use claims.
+// 204 on success. 403 when another user holds the claim. 404 when the task can't be
+// claimed.
 func (h *HTTPHandler) HandleReleaseTask(w http.ResponseWriter, r *http.Request) {
 	taskID, in, _, ok := h.claimTarget(w, r, "release")
 	if !ok {
@@ -208,8 +209,7 @@ func (h *HTTPHandler) answerClaim(w http.ResponseWriter, r *http.Request, op, ta
 }
 
 // claimant returns the calling user, or answers and reports false when the caller
-// cannot claim or release a task at all: not authenticated, not a user, or in a
-// deployment that does not use claims.
+// cannot claim or release a task at all: not authenticated, or not a user.
 func (h *HTTPHandler) claimant(w http.ResponseWriter, r *http.Request, taskID string) (taskauthz.Input, bool) {
 	ctx := r.Context()
 	in, ok := taskauthz.InputFromContext(ctx)
@@ -223,11 +223,6 @@ func (h *HTTPHandler) claimant(w http.ResponseWriter, r *http.Request, taskID st
 		httputil.Error(w, r, http.StatusForbidden, errClaimUsersOnly)
 		return in, false
 	}
-	// Answered before the task is read, so it cannot be used to probe task ids.
-	if !h.ClaimsEnabled {
-		httputil.Error(w, r, http.StatusNotFound, errClaimsOff)
-		return in, false
-	}
 	if in.UserID == "" {
 		slog.ErrorContext(ctx, "tasks: user principal without an internal user id", "taskId", taskID)
 		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
@@ -237,7 +232,7 @@ func (h *HTTPHandler) claimant(w http.ResponseWriter, r *http.Request, taskID st
 }
 
 // admitClaimant returns the task's record if in may claim or release it, answering
-// when not: they must be able to read it.
+// when not: they must be able to read it, and its task template must make it claimable.
 func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, taskID string, in taskauthz.Input) (store.TaskRecord, bool) {
 	ctx := r.Context()
 	record, ok := h.Store.GetTask(ctx, taskID)
@@ -245,9 +240,14 @@ func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, 
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return record, false
 	}
+	taskTemplate, err := h.taskTemplate(ctx, record)
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
+		return record, false
+	}
 	// A read denial is answered as not found, as HandleGetTask does, so it cannot be
 	// used to probe task ids.
-	canRead, err := h.readable(ctx, in, record)
+	canRead, err := h.readable(ctx, in, record, taskTemplate)
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
 		return record, false
@@ -258,13 +258,24 @@ func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, 
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return record, false
 	}
+	// Decided only for a caller who can read the task, so it cannot be used to probe
+	// task ids either.
+	canClaim, err := claimable(taskTemplate)
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to read whether the task can be claimed", err, "taskId", taskID)
+		return record, false
+	}
+	if !canClaim {
+		httputil.Error(w, r, http.StatusNotFound, errClaimsOff)
+		return record, false
+	}
 	return record, true
 }
 
 // readable reports whether in may read record. A denial is (false, nil); any other
 // failure is an error, not a denial.
-func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (bool, error) {
-	_, err := h.resolveRead(ctx, in, record)
+func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record store.TaskRecord, taskTemplate json.RawMessage) (bool, error) {
+	_, err := h.resolveRead(ctx, in, record, taskTemplate)
 	switch {
 	case err == nil:
 		return true, nil
@@ -275,9 +286,8 @@ func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record s
 	}
 }
 
-// resolveRead is readauthz.Resolve for record, against its task template's read
-// policy.
-func (h *HTTPHandler) resolveRead(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (map[string]bool, error) {
+// taskTemplate returns record's task template.
+func (h *HTTPHandler) taskTemplate(ctx context.Context, record store.TaskRecord) (json.RawMessage, error) {
 	if h.TaskTemplateOf == nil {
 		return nil, errors.New("tasks: no task template resolver configured")
 	}
@@ -285,6 +295,12 @@ func (h *HTTPHandler) resolveRead(ctx context.Context, in taskauthz.Input, recor
 	if err != nil {
 		return nil, fmt.Errorf("tasks: %w", err)
 	}
+	return taskTemplate, nil
+}
+
+// resolveRead is readauthz.Resolve for record, against the read policy of its task
+// template, taskTemplate.
+func (h *HTTPHandler) resolveRead(ctx context.Context, in taskauthz.Input, record store.TaskRecord, taskTemplate json.RawMessage) (map[string]bool, error) {
 	return readauthz.Resolve(ctx, h.AuthzCatalog, in, taskTemplate, record.CaseID)
 }
 
