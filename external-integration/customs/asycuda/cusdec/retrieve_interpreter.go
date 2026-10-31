@@ -43,6 +43,17 @@ const (
 // captured when the retrieve answers with one.
 const RetrieveCountKey = "container_count"
 
+// RetrieveCDNCountKey and RetrieveMissingCDNsKey are where the number of
+// dispatch notes registered against the declaration and not cancelled is
+// captured, and, with a usable container count, how many containers have none:
+// the container count less that number, never below 0. A dispatch note covers
+// one container, so a declaration can be dispatched in full only when none is
+// missing.
+const (
+	RetrieveCDNCountKey    = "cdn_count"
+	RetrieveMissingCDNsKey = "missing_cdn_count"
+)
+
 // RetrieveDeclarationKey and RetrieveCDNRefsKey are where the retrieved
 // declaration and the dispatch notes listed against it (cdnRefs) are captured,
 // whenever the answer carries a declaration, so a later step can read the
@@ -62,7 +73,8 @@ func (RetrieveInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 }
 
 // Interpret captures the retrieved declaration, the dispatch notes listed
-// against it, and its container count when the count is usable. Only an answer
+// against it and how many of them are active, and its container count, with
+// how many containers have no active dispatch note, when the count is usable. Only an answer
 // without a declaration is rejected, with nothing but the reason captured, so
 // the declaration never reaches the log a rejection writes. A count that is not
 // usable is logged by its reason alone.
@@ -74,9 +86,12 @@ func (RetrieveInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	if decl == nil {
 		return false, map[string]any{"error": "the retrieve answer carries no declaration"}
 	}
+	cdnRefs := document.RetrievedCDNRefs(resp)
+	cdns := len(document.ActiveCDNRefs(cdnRefs))
 	out := map[string]any{
 		RetrieveDeclarationKey: decl,
-		RetrieveCDNRefsKey:     document.RetrievedCDNRefs(resp),
+		RetrieveCDNRefsKey:     cdnRefs,
+		RetrieveCDNCountKey:    cdns,
 	}
 	count, err := containerCount(decl)
 	if err != nil {
@@ -84,6 +99,7 @@ func (RetrieveInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 		return true, out
 	}
 	out[RetrieveCountKey] = count
+	out[RetrieveMissingCDNsKey] = max(count-cdns, 0)
 	return true, out
 }
 
