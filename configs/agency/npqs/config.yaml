@@ -203,14 +203,21 @@ refid:
       - PO-KDY
       - PO-JAF
 
-# Placeholder providers.
-notification:
-  providers:
-    email:
-      baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
-    sms:
-      baseURL: https://smsservice.lk
-      userName: replace-with-actual-username
-      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-      sidCode: sidCode
+# Optional, and off for local development: uncomment to send email and SMS.
+# notification:
+#   providers:
+#     # Email straight to an SMTP server. To send through PingMailer's API
+#     # instead, set an email block in its place (the schema is in
+#     # github.com/OpenNSW/core/notification); email and smtp can't both be set.
+#     smtp:
+#       host: smtp.example.com
+#       # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+#       # tlsMode: starttls # starttls (default), tls or none
+#       username: no-reply@example.com
+#       password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
+#       sender: no-reply@example.com
+#     sms:
+#       baseURL: https://smsservice.lk
+#       userName: replace-with-actual-username
+#       password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+#       sidCode: sidCode
