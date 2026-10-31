@@ -209,17 +209,17 @@ type refIDTarget struct {
 func (p *RefIDGeneratorPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg refIDGeneratorConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
-		return fmt.Errorf("refid_generator: invalid config: %w", err)
+		return configError(fmt.Errorf("refid_generator: invalid config: %w", err))
 	}
 	entries, err := cfg.entries()
 	if err != nil {
-		return fmt.Errorf("refid_generator: %w", err)
+		return configError(fmt.Errorf("refid_generator: %w", err))
 	}
 	if ctx.OutputNamespace == "" {
-		return errors.New("refid_generator: output_namespace is required to hold the generated IDs")
+		return configError(errors.New("refid_generator: output_namespace is required to hold the generated IDs"))
 	}
 	if ctx.Record == nil {
-		return errors.New("refid_generator: task record is nil")
+		return inputError(errors.New("refid_generator: task record is nil"))
 	}
 
 	// The inputs belong to the caller, so the IDs are filled into a copy.
@@ -232,7 +232,7 @@ func (p *RefIDGeneratorPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	for i := range entries {
 		t, err := collectRefIDTargets(root, &entries[i])
 		if err != nil {
-			return fmt.Errorf("refid_generator: ids[%d]: %w", i, err)
+			return inputError(fmt.Errorf("refid_generator: ids[%d]: %w", i, err))
 		}
 		targets = append(targets, t...)
 	}
@@ -246,10 +246,10 @@ func (p *RefIDGeneratorPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 		spec := t.entry.spec
 		id, err := p.refIDs.Generate(ctx.Context, spec.Issuer, spec.IDType, t.params)
 		if err != nil {
-			return fmt.Errorf("refid_generator: generate %s (%q, %q): %w", t.label, spec.Issuer, spec.IDType, err)
+			return refIDError(fmt.Errorf("refid_generator: generate %s (%q, %q): %w", t.label, spec.Issuer, spec.IDType, err))
 		}
 		if !jsonpointer.Set(t.obj, t.ptr, id) {
-			return fmt.Errorf("refid_generator: cannot write %s", t.label)
+			return inputError(fmt.Errorf("refid_generator: cannot write %s", t.label))
 		}
 	}
 
@@ -262,6 +262,19 @@ func (p *RefIDGeneratorPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 
 // collectRefIDTargets resolves e against root: one target without "each", one
 // per array element with it, and none for a missing or null array.
+// refIDError marks a Generate error retrying can't fix: an issuer, ID type or
+// padding the configuration names wrongly, or a param the inputs lack. A random
+// collision, an exhausted search and a database error stay retryable.
+func refIDError(err error) error {
+	switch {
+	case errors.Is(err, refid.ErrUnknownIssuer), errors.Is(err, refid.ErrUnknownIDType), errors.Is(err, refid.ErrCounterOverflow):
+		return configError(err)
+	case errors.Is(err, refid.ErrInvalidParam):
+		return inputError(err)
+	}
+	return err
+}
+
 func collectRefIDTargets(root map[string]any, e *refIDEntry) ([]refIDTarget, error) {
 	if e.each == "" {
 		t, err := newRefIDTarget(root, nil, e, e.path.ptr)

@@ -14,7 +14,6 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/steptemplate"
-	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
@@ -336,18 +335,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to wire parent runner: %w", err)
 	}
-	pr.RegisterDefinitionHandler(func(manifestVersion int, templateID string) (workflow.WorkflowDefinition, error) {
-		ctx := context.Background()
-		reg, err := artifacts.Registry(ctx, manifestVersion)
-		if err != nil {
-			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q: %w", templateID, err)
-		}
-		def, err := workflowdef.Load(ctx, reg, templateID)
-		if err != nil {
-			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q not found in manifest version %d: %w", templateID, manifestVersion, err)
-		}
-		return def, nil
-	})
+	pr.RegisterDefinitionHandler(workflowDefinitionLoader(artifacts))
 	parentRunner = pr
 
 	if !agencyMode {
@@ -1048,8 +1036,7 @@ func initTask(
 		if tm == nil {
 			return nil, fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		res, err := tm.StartTaskStep(ctx, payload)
-		return res, keepNonRetryable(err)
+		return tm.StartTaskStep(ctx, payload)
 	}
 
 	microCompletionHandler := func(ctx context.Context, completion workflow.WorkflowCompletion) error {

@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -470,4 +471,22 @@ func TestRefIDGenerator_ParamSegments(t *testing.T) {
 	rejected := refIDCtx(map[string]any{"holder_no": "42", "serial": "1205/26"})
 	require.ErrorIs(t, execRefIDs(t, reg, rejected, props), refid.ErrInvalidParam)
 	assert.NotContains(t, rejected.Record.Data, "refid", "a rejected param writes no output")
+}
+
+func TestRefIDError(t *testing.T) {
+	for _, tc := range []struct {
+		err       error
+		permanent bool
+	}{
+		{refid.ErrUnknownIssuer, true},
+		{refid.ErrUnknownIDType, true},
+		{refid.ErrCounterOverflow, true},
+		{refid.ErrInvalidParam, true},
+		{refid.ErrRandomCollision, false},
+		{refid.ErrRandomExhausted, false},
+		{errors.New("database unavailable"), false},
+	} {
+		got := refIDError(fmt.Errorf("generate: %w", tc.err))
+		assert.Equal(t, tc.permanent, plugins.IsPermanent(got), "%v", tc.err)
+	}
 }
