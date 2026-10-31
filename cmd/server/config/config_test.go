@@ -948,6 +948,13 @@ func TestConfigValidate_ArtifactsError(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("a positive pin should validate, got: %v", err)
 	}
+
+	for _, n := range []int{-1, 0, 1 << 20} {
+		cfg.Artifacts.FileCacheBytes = n
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("fileCacheBytes %d should validate, got: %v", n, err)
+		}
+	}
 }
 
 func TestConfigValidate_AuthnError(t *testing.T) {

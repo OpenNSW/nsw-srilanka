@@ -96,6 +96,12 @@ type ArtifactsConfig struct {
 	// publish a manifest before turning it on. Flows already running keep the version
 	// they started on either way.
 	ManifestVersion int `yaml:"manifestVersion"`
+
+	// FileCacheBytes is how many bytes of artifact files the server keeps in memory once
+	// loaded, evicting the least recently used. 0, the default, keeps core's default (64
+	// MiB); a negative value turns the cache off. Only versioned manifests are cached: a
+	// source with only manifest.json is a working copy, so its files are fetched every time.
+	FileCacheBytes int `yaml:"fileCacheBytes"`
 }
 
 // Validate checks the artifacts configuration.

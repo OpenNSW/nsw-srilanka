@@ -1,7 +1,6 @@
 import { http } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
 import type { ZoneView } from '@/features/zone/types'
-import type { TaskCommandRequest, TaskCommandResponse } from './types'
 
 export async function getZoneView(taskId: string, signal?: AbortSignal): Promise<ZoneView> {
   const { data } = await http.request<ZoneView>({
@@ -67,23 +66,4 @@ export async function releaseTask(taskId: string, signal?: AbortSignal): Promise
     attachToken: true,
     signal,
   })
-}
-
-export async function sendTaskCommand(request: TaskCommandRequest, signal?: AbortSignal): Promise<TaskCommandResponse> {
-  const action: string = request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMIT_FORM'
-
-  const { data } = await http.request<TaskCommandResponse>({
-    url: `${API_BASE_URL}/api/v1/tasks/${request.taskId}`,
-    method: 'POST',
-    data: {
-      command: action,
-      payload: {
-        workflow_id: request.workflowId,
-        content: request.data,
-      },
-    },
-    attachToken: true,
-    signal,
-  })
-  return data
 }

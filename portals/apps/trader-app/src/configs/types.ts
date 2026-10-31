@@ -44,7 +44,6 @@ export const UIConfigSchema = z.object({
     .optional(),
   features: z
     .object({
-      preConsignment: z.boolean(),
       consignmentManagement: z.boolean(),
       reportingDashboard: z.boolean(),
     })

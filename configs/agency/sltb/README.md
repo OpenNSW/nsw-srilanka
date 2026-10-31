@@ -14,7 +14,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 SLTB keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `SLTB_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`), and the files this agency generates to its internal upload route (`nsw:storage:internalwrite`). `storage.proxy.allowedUploadTypes` is what its officers may upload.
+TNSW as `SLTB_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`). SLTB generates no files itself, so its client doesn't hold `nsw:storage:internalwrite`, the scope of TNSW's internal upload route. `storage.proxy.allowedUploadTypes` is what its officers may upload.
 
 One thing nsw-agency did for SLTB isn't here yet: a second round on the same
 TNSW step. A review sent back to the trader (`needs_more_info` on the application
@@ -76,7 +76,7 @@ creates SLTB for this deployment, on the `SLTB API` resource server
 | ---------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`               |
 | TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on SLTB's parked steps, which its catalog maps `tnsw` to |
-| SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write`/`internalwrite` on TNSW                                       |
+| SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                       |
 
 TNSW's `config.yaml` services entry `sltb` requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.sltb.nsw-agency.local` (see `configs/config*.example.yaml`).

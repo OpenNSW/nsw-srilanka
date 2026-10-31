@@ -247,10 +247,16 @@ local-dev equivalent, and shows every setting of the three applications.
 Create two more applications in the agency's OU, each a **Backend Service** (client
 credentials, client secret sent as HTTP Basic):
 
-| Application           | Example name     | Custom scopes                                                                                                  |
-| --------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
-| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:storage:internalwrite` |
-| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`                                                                        |
+| Application           | Example name     | Custom scopes                                                                     |
+| --------------------- | ---------------- | --------------------------------------------------------------------------------- |
+| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write` |
+| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`                                           |
+
+If the agency's workflows generate documents (an `HTML_DOCUMENT_GENERATOR` step), the
+agency-to-TNSW client also needs `nsw:storage:internalwrite`, the scope of TNSW's internal
+upload route, where the agency stores them. Add it here, to the client's role (Step 2f) and
+to its `scopes` (Step 4b), and grant the documents' types in TNSW (Step 6b). Leave it out
+otherwise.
 
 For each, note the client ID from **Credentials**, and copy the client secret straight
 into its cluster Secret: the agency-to-TNSW client's into the agency's Secret (Step 4a),
@@ -268,7 +274,7 @@ Assignment**):
 | ---------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | Officer role                 | `DEA Officer` | On the agency API: `nsw:consignment:read`, `nsw:profile:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:read`, `nsw:task:write` | The officers' group       |
 | TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `nsw:workflow:inject`, `nsw:task:write`                                                                                | The TNSW-to-agency client |
-| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:storage:internalwrite`, `nsw:task:write`            | The agency-to-TNSW client |
+| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:write`                                         | The agency-to-TNSW client |
 
 The officer role's name is repeated in the agency's configuration in Step 4, and must
 match there exactly. If the agency's tasks name more roles than `officer`, create one
@@ -383,7 +389,8 @@ backend:
             tokenURL: https://idp.example.com/oauth2/token
             clientID: "<agency-to-TNSW client ID>"
             clientSecret: "{{env:M2M_DEA_TO_NSW_SECRET}}"
-            scopes: ["nsw:task:write", "nsw:storage:read", "nsw:storage:write", "nsw:storage:internalwrite"]
+            # Add "nsw:storage:internalwrite" if the agency generates documents (Step 2e).
+            scopes: ["nsw:task:write", "nsw:storage:read", "nsw:storage:write"]
             endpointParams:
               resource: https://api.nsw-srilanka.local
     db:
@@ -404,7 +411,7 @@ backend:
     # Documents live in TNSW; officers reach them through it as the agency-to-TNSW client.
     # Officers' uploads go to TNSW's upload route (nsw:storage:write), so TNSW checks them like
     # a trader's. The files the agency generates itself (a generated document, say) go to its
-    # internal upload route (nsw:storage:internalwrite).
+    # internal upload route, which needs nsw:storage:internalwrite (Step 2e).
     storage:
       type: proxy
       tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
@@ -569,6 +576,17 @@ In TNSW's catalog, in the same file, map the handle to the agency-to-TNSW client
 catalog:
   clients:
     dea: "<agency-to-TNSW client ID>"
+```
+
+If the agency generates documents, grant their types to it under
+`storage.allowedInternalUploadTypes`, by the same handle. TNSW accepts them only on its
+internal upload route, from the agency-to-TNSW client. Each type needs an entry in
+`storage.uploadTypeExtensions`, as `text/html` has in the example config:
+
+```yaml
+storage:
+  allowedInternalUploadTypes:
+    dea: [text/html]
 ```
 
 Then roll out:

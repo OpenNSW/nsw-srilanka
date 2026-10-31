@@ -119,22 +119,6 @@ const en = {
       },
     },
 
-    preconsignment: {
-      title: 'Verified Documents',
-      error: {
-        loadFailed: 'Failed to load pre-consignments list.',
-        noReadyTask: 'No ready task found in pre-consignment.',
-        startFailed: 'Failed to start registration process.',
-        noTask: 'No task found in pre-consignment.',
-        loadDetailFailed: 'An error occurred while loading the process details.',
-      },
-      action: {
-        start: 'Start',
-        view: 'View',
-        continue: 'Continue',
-      },
-    },
-
     tasks: {
       loading: 'Loading task...',
       goBack: 'Go Back',

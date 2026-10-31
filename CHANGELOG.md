@@ -6,6 +6,61 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-31
+
+This release has no required upgrade steps, but we recommend two hardening steps: XML leaves the allowed upload types, and CDA, EFC, FCAU and SLTB give up the internal upload scope they never use. It also adds an optional `artifacts.fileCacheBytes` setting. The artifacts pin can move on its own this time: its changes are to forms, which the 0.12.0 build already runs.
+
+### Upgrade notes
+
+#### Take XML out of the allowed upload types (recommended) ([#1008](https://github.com/OpenNSW/nsw-srilanka/pull/1008))
+
+No form stores an XML file any more: the CusDec imports parse the file in the browser and upload nothing, and the SLTB application in the pinned artifacts fills its draft CusDec on the form. Nothing fails if XML stays, but we recommend removing it, so that nothing can store a type no form needs. To remove it, in this order:
+
+1. **The pinned artifacts first** (see below). The SLTB application in the earlier artifacts requires an XML upload, so removing XML first blocks every SLTB application with a 415. Let SLTB applications still on the earlier form finish, including any sent back for resubmission.
+2. **TNSW.** Remove `text/xml` and `application/xml` from `storage.allowedUploadTypes` (Helm: `backend.config.storage.allowedUploadTypes`). Their `storage.uploadTypeExtensions` entries can go too; startup accepts them either way.
+3. **Each agency.** Remove both types from `storage.proxy.allowedUploadTypes`.
+
+After this, an upload of an XML file gets a 415, including to a file field that accepts any type. Files already stored as XML still download.
+
+#### Take `nsw:storage:internalwrite` from CDA, EFC, FCAU and SLTB (recommended) ([#1001](https://github.com/OpenNSW/nsw-srilanka/pull/1001))
+
+Only NPQS generates documents, so only its agency-to-TNSW client needs the scope of the internal upload route. CDA, EFC, FCAU and SLTB never call the route, and a client should hold only the scopes it uses. Nothing fails if they keep it, but we recommend removing it. The example IdP bootstrap and agency configs no longer grant it to them, so a new deployment gets this by default. To take it from a deployment that granted it as the 0.10.0 notes said, in this order:
+
+1. **CDA, EFC, FCAU and SLTB first.** In each agency's `config.yaml`, remove `nsw:storage:internalwrite` from the scopes of the `tnsw` service, then restart the agency so it fetches a new token. An agency that asks for a scope its client no longer holds can fail its token request, so do this before the IdP. Keep `storage.proxy.internalUploadPath`: it is still required.
+2. **The IdP, after the agencies.** A live IdP does not read `idp/bootstrap/`, so change it by hand. Remove `nsw:storage:internalwrite` from the `CdaToNswM2M`, `EfcToNswM2M`, `FcauToNswM2M` and `SltbToNswM2M` roles, and from the scopes of the `CDA_TO_NSW_M2M`, `EFC_TO_NSW_M2M`, `FCAU_TO_NSW_M2M` and `SLTB_TO_NSW_M2M` apps.
+
+An agency that later generates documents is given the scope then, as the [onboarding guide](https://github.com/OpenNSW/nsw-srilanka/blob/v0.13.0/docs/guides/onboarding-agency-mode-agencies.md) describes.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`a7b8620`](https://github.com/OpenNSW/one-trade-artifacts/commit/a7b8620303ffaca73f7192f9b9ee12e73abdeb3a) (31 October 2026), for TNSW and for each agency. It changes forms only, so it needs no matching image version:
+  - [one-trade-artifacts#306](https://github.com/OpenNSW/one-trade-artifacts/pull/306): the SLTB application carries the CusDec form, which the trader fills by importing a CusDec XML. The import is parsed and not stored, and the officer sees the same form. This is what lets XML leave the allowed upload types;
+  - [one-trade-artifacts#300](https://github.com/OpenNSW/one-trade-artifacts/pull/300): importing an ASYCUDA XML on the CusDec form fills each item's HS code with all 10 digits;
+  - [one-trade-artifacts#301](https://github.com/OpenNSW/one-trade-artifacts/pull/301): the CusDec form hides the currency when a valuation amount is 0;
+  - [one-trade-artifacts#298](https://github.com/OpenNSW/one-trade-artifacts/pull/298): the CDA coconut certificate application asks for the contract number again, next to the contact number.
+- Let SLTB applications submitted on the earlier form finish before you move the pin: the new form replaces the uploaded XML with a CusDec section, which those applications don't have ([one-trade-artifacts#306](https://github.com/OpenNSW/one-trade-artifacts/pull/306)).
+
+### Added
+
+- **Artifact file cache size.** The optional `artifacts.fileCacheBytes` (Helm: `backend.config.artifacts.fileCacheBytes`) sets how many bytes of artifact files the server keeps in memory once loaded. 0 or unset keeps core's default of 64 MiB, a positive value sets the size, and a negative value turns the cache off. Only versioned manifests are cached, so a source with only `manifest.json`, which the pinned artifacts are, is fetched every time whatever this is set to. ([#987](https://github.com/OpenNSW/nsw-srilanka/pull/987))
+
+### Security
+
+- CDA, EFC, FCAU and SLTB no longer hold `nsw:storage:internalwrite` in the example IdP bootstrap and agency configs, so that only a client that generates documents can write to the internal upload route. We recommend taking it from a live deployment: see the upgrade notes. ([#1001](https://github.com/OpenNSW/nsw-srilanka/pull/1001))
+- The example configs no longer allow XML uploads. We recommend removing it from a live deployment: see the upgrade notes. ([#1008](https://github.com/OpenNSW/nsw-srilanka/pull/1008))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines exported over OTLP at `info`, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks are audited. Payments, the storage module's own events and SLC Edge callbacks are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- A temporary development aid can copy every SLC Edge callback to another deployment. It is off unless `services` lists an entry with the id `slce-debug-forward`, and it logs a warning at startup when it is on. Never define one in production: the aid will be removed before production use. ([#870](https://github.com/OpenNSW/nsw-srilanka/pull/870))
+
 ## [0.12.0] - 2026-10-30
 
 This release reads each task's `read.roles` from its task template, so the image version and the artifacts pin must change in the same deployment: the pinned artifacts and this build depend on each other in three places. One migration runs and records each consignment's trader and CHA in a new `case_parties` table. File tokens change, so agency work that holds files must be finished or cleared first, and audit records now go to OTLP only and no longer to the pod log. It also fills each Customs dispatch note form in from the CusDec, checks file fields' rules on submit, and fixes the ePhyto commodity name and packaging.
@@ -1056,7 +1111,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.9.0...v0.10.0
