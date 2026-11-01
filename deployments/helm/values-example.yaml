@@ -558,10 +558,12 @@ backend:
     integrations:
       slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
 
-    # Flows a trader or CHA may start on a consignment, besides the export
-    # flow; see configs/config.example.yaml.
-    consignment:
-      flows: []
+    # Workflows a trader or CHA may start on a consignment they own, besides
+    # the export flow; see configs/config.example.yaml.
+    flows:
+      users:
+        enabled: false
+        workflows: []
 
     # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
     # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.

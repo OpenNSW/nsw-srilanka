@@ -18,8 +18,8 @@ import (
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
-	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
@@ -69,9 +69,10 @@ type Config struct {
 	Notification NotificationConfig  `yaml:"notification"`
 	Integrations integrations.Config `yaml:"integrations"`
 
-	// Consignment configures TNSW's consignments: the flows a trader or CHA may start on
-	// one. Optional; an agency ignores it.
-	Consignment consignment.Config `yaml:"consignment"`
+	// Flows lists the workflows a person (users) or another system (clients) may start
+	// on a case. Optional: with none, nothing outside this deployment's own code starts a
+	// flow.
+	Flows caseflow.Config `yaml:"flows"`
 
 	Otel telemetry.Config `yaml:"otel"`
 }
@@ -178,17 +179,13 @@ func loadFile(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// validateTNSW checks TNSW's trade integrations and consignments; an agency builds none of
-// them.
+// validateTNSW checks TNSW's trade integrations; an agency builds none of them.
 func (c *Config) validateTNSW() error {
 	if c.Mode == ModeAgency {
 		return nil
 	}
 	if err := c.Integrations.Validate(); err != nil {
 		return fmt.Errorf("invalid external integration configuration: %w", err)
-	}
-	if err := c.Consignment.Validate(); err != nil {
-		return fmt.Errorf("invalid consignment configuration: %w", err)
 	}
 	return nil
 }
@@ -252,6 +249,9 @@ func (c *Config) validateAuxiliary() error {
 	}
 	if err := c.Artifacts.Validate(); err != nil {
 		return fmt.Errorf("invalid artifacts configuration: %w", err)
+	}
+	if err := c.Flows.Validate(&c.Catalog); err != nil {
+		return fmt.Errorf("invalid flows configuration: %w", err)
 	}
 	return nil
 }

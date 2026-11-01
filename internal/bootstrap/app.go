@@ -187,6 +187,11 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
+	// A listed flow that is not a workflow could never start, so it stops the server here.
+	if err := cfg.Flows.CheckWorkflows(ctx, artifacts); err != nil {
+		_ = database.Close(db)
+		return nil, err
+	}
 
 	chaService := cha.NewService(db)
 	companyService := company.NewService(db)
@@ -296,7 +301,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	if agencyMode {
 		upstream = agencyCompletion(db)
 	} else {
-		consignmentService, err = consignment.NewService(db, artifacts, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Consignment.Flows)
+		consignmentService, err = consignment.NewService(db, artifacts, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Flows.Users)
 		if err != nil {
 			_ = stopTask()
 			temporalClient.Close()
