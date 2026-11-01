@@ -187,8 +187,10 @@ func TestHandlerHealthProbesKeepMetricsWithoutSpans(t *testing.T) {
 			p.tp = tp
 			mux := http.NewServeMux()
 			called := false
-			mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+			var handlerTraceID string
+			mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 				called = true
+				handlerTraceID = trace.GetTraceID(r.Context())
 				w.Header().Set("X-Health", "checked")
 				w.WriteHeader(tc.healthStatus)
 			})
@@ -197,12 +199,15 @@ func TestHandlerHealthProbesKeepMetricsWithoutSpans(t *testing.T) {
 			req.Header.Set("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
 			ctx := propagation.TraceContext{}.Extract(req.Context(), propagation.HeaderCarrier(req.Header))
 			rec := httptest.NewRecorder()
-			p.Handler("tnsw-api", mux).ServeHTTP(rec, req.WithContext(ctx))
+			trace.TraceMiddleware(p.Handler("tnsw-api", mux)).ServeHTTP(rec, req.WithContext(ctx))
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
 			}
 			if tc.wantSpans == 0 && (!called || rec.Header().Get("X-Health") != "checked") {
 				t.Fatal("health handler was not preserved")
+			}
+			if tc.wantSpans == 0 && (handlerTraceID == "" || rec.Header().Get("X-Trace-ID") != handlerTraceID) {
+				t.Fatalf("handler trace ID = %q, response trace ID = %q; want the same non-empty ID", handlerTraceID, rec.Header().Get("X-Trace-ID"))
 			}
 			if got := len(exp.GetSpans()); got != tc.wantSpans {
 				t.Fatalf("spans = %d, want %d", got, tc.wantSpans)
