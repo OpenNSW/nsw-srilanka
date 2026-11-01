@@ -25,6 +25,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // Provider owns the OTLP meter, tracer and logger providers.
@@ -125,8 +126,9 @@ func Start(ctx context.Context, cfg Config) (*Provider, error) {
 	}, nil
 }
 
-// Handler wraps next with otelhttp so every mux route records metrics and
-// traces. When Start found no endpoint, next is returned unchanged.
+// Handler wraps next with otelhttp so mux routes record metrics and traces.
+// GET/HEAD /health probes retain metrics but do not record server spans.
+// When Start found no endpoint, next is returned unchanged.
 func (p *Provider) Handler(operation string, next http.Handler) http.Handler {
 	if !p.enabled {
 		return next
@@ -152,7 +154,18 @@ func (p *Provider) Handler(operation string, next http.Handler) http.Handler {
 	if p.tp != nil {
 		opts = append(opts, otelhttp.WithTracerProvider(p.tp))
 	}
-	return otelhttp.NewHandler(tagged, operation, opts...)
+	instrumented := otelhttp.NewHandler(tagged, operation, opts...)
+	// A filter would remove metrics as well as traces. Override only the tracer
+	// for probes so uptime/status metrics and route labels remain available.
+	probeOpts := append(opts, otelhttp.WithTracerProvider(noop.NewTracerProvider()))
+	probe := otelhttp.NewHandler(tagged, operation, probeOpts...)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/health" {
+			probe.ServeHTTP(w, r)
+			return
+		}
+		instrumented.ServeHTTP(w, r)
+	})
 }
 
 // correlationIDGenerator copies trace.GetTraceID onto new root spans. A

@@ -121,7 +121,7 @@ func TestHandlerUsesCorrelationIDDespiteTraceparent(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /api/v1/tasks", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	h := p.Handler("tnsw-api", mux)
@@ -131,7 +131,7 @@ func TestHandlerUsesCorrelationIDDespiteTraceparent(t *testing.T) {
 		remoteTraceID = "11111111111111111111111111111111"
 		remoteSpanID  = "2222222222222222"
 	)
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	// sampled=0 and a different trace id. A public endpoint must still record
 	// a root span under the correlation id, and only link the incoming span.
 	// The default propagator ignores traceparent, so extract it here.
@@ -163,6 +163,62 @@ func TestHandlerUsesCorrelationIDDespiteTraceparent(t *testing.T) {
 	}
 	if got := link.SpanID().String(); got != remoteSpanID {
 		t.Fatalf("link span id = %s, want %s", got, remoteSpanID)
+	}
+}
+
+func TestHandlerHealthProbesKeepMetricsWithoutSpans(t *testing.T) {
+	for _, tc := range []struct {
+		name, method, path                  string
+		healthStatus, wantStatus, wantSpans int
+	}{
+		{"get probe", http.MethodGet, "/health", 200, 200, 0},
+		{"head probe", http.MethodHead, "/health", 200, 200, 0},
+		{"query probe", http.MethodGet, "/health?ready=true", 200, 200, 0},
+		{"failed probe", http.MethodGet, "/health", 503, 503, 0},
+		{"other method", http.MethodPost, "/health", 200, 405, 1},
+		{"other path", http.MethodGet, "/healthz", 200, 404, 1},
+		{"trailing slash", http.MethodGet, "/health/", 200, 404, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := testProvider(t)
+			exp := tracetest.NewInMemoryExporter()
+			tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+			t.Cleanup(func() { _ = tp.Shutdown(t.Context()) })
+			p.tp = tp
+			mux := http.NewServeMux()
+			called := false
+			mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+				called = true
+				w.Header().Set("X-Health", "checked")
+				w.WriteHeader(tc.healthStatus)
+			})
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			// A sampled upstream parent must not turn a probe into an exported span.
+			req.Header.Set("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
+			ctx := propagation.TraceContext{}.Extract(req.Context(), propagation.HeaderCarrier(req.Header))
+			rec := httptest.NewRecorder()
+			p.Handler("tnsw-api", mux).ServeHTTP(rec, req.WithContext(ctx))
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+			if tc.wantSpans == 0 && (!called || rec.Header().Get("X-Health") != "checked") {
+				t.Fatal("health handler was not preserved")
+			}
+			if got := len(exp.GetSpans()); got != tc.wantSpans {
+				t.Fatalf("spans = %d, want %d", got, tc.wantSpans)
+			}
+			points := durationDataPoints(t, collect(t, p))
+			if len(points) != 1 || points[0].Count != 1 {
+				t.Fatalf("duration points = %+v, want one observation", points)
+			}
+			attrs := points[0].Attributes.ToSlice()
+			if got := attrInt(attrs, semconv.HTTPResponseStatusCodeKey); got != tc.wantStatus {
+				t.Fatalf("metric status = %d, want %d", got, tc.wantStatus)
+			}
+			if tc.wantSpans == 0 && attrString(attrs, semconv.HTTPRouteKey) != "/health" {
+				t.Fatal("health metric lost its route label")
+			}
+		})
 	}
 }
 
