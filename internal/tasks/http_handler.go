@@ -255,9 +255,11 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	// step it names; core decodes it again to complete the step.
 	taskID, stepID, err := callbacktoken.Decode(token)
 	if err != nil {
-		slog.WarnContext(r.Context(), "tasks: invalid callback token", "error", err)
+		// ErrInvalid only: Decode wraps caller input (e.g. unknown version %q)
+		// and that must not reach the security line.
 		securitylog.Annotate(r.Context(), "invalid callback token",
 			"reason", "invalid_callback_token",
+			"error", callbacktoken.ErrInvalid,
 		)
 		h.auditTaskUpdate(r.Context(), "", true, taskAuditMeta(http.StatusBadRequest, "invalid_callback_token"))
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidCallbackToken)

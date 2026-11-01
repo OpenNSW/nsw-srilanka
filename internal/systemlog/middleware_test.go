@@ -3,6 +3,7 @@ package systemlog
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,9 +18,15 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
 
+var errAnnotateTest = errors.New("sig mismatch")
+
+func testLogger(buf *bytes.Buffer) *slog.Logger {
+	return slog.New(StampCategory(slog.NewJSONHandler(buf, nil)))
+}
+
 func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 
 	const payload = `{"command":"approve","email":"a@example.com","phone":"+94111"}`
 	const response = `{"status":"accepted","email":"a@example.com"}`
@@ -106,7 +113,7 @@ func assertKeysPresent(t *testing.T, line map[string]any, keys ...string) {
 
 func TestMiddlewareAnonymousWhenUnauthenticated(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	const payload = `{"event":"ping"}`
 
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +154,7 @@ func TestMiddlewareAnonymousWhenUnauthenticated(t *testing.T) {
 
 func TestMiddlewareEmitsSecurityOnForbidden(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if slot := authn.RequestCallerFrom(r.Context()); slot != nil {
@@ -166,12 +173,13 @@ func TestMiddlewareEmitsSecurityOnForbidden(t *testing.T) {
 
 func TestMiddlewareEmitsOneSecurityLineWhenAnnotated(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		securitylog.Annotate(r.Context(), "webhook auth failed",
 			"reason", "webhook_auth_failed",
 			"partner", "slpa",
+			"error", errAnnotateTest,
 		)
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
@@ -182,13 +190,14 @@ func TestMiddlewareEmitsOneSecurityLineWhenAnnotated(t *testing.T) {
 	assertEqual(t, "security.msg", securityLine["msg"], "webhook auth failed")
 	assertEqual(t, "security.reason", securityLine["reason"], "webhook_auth_failed")
 	assertEqual(t, "security.partner", securityLine["partner"], "slpa")
+	assertEqual(t, "security.error", securityLine["error"], errAnnotateTest.Error())
 	assertEqual(t, "security.status", securityLine["status"], float64(http.StatusUnauthorized))
 	assertEqual(t, "security.path", securityLine["path"], "/webhooks/slpa")
 }
 
 func TestMiddlewareEmitsSecurityWhenAnnotatedWithoutDenialStatus(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		securitylog.Annotate(r.Context(), "invalid callback token",
@@ -208,7 +217,7 @@ func TestMiddlewareEmitsSecurityWhenAnnotatedWithoutDenialStatus(t *testing.T) {
 
 func TestMiddlewareIgnoresInterimStatus(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 
 	dst := &finalStatus{ResponseWriter: httptest.NewRecorder()}
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -229,7 +238,7 @@ func TestMiddlewareIgnoresInterimStatus(t *testing.T) {
 
 func TestMiddlewarePassesReadFromThrough(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	const file = "file-bytes-not-for-the-log"
 	dst := &sendFile{ResponseWriter: httptest.NewRecorder()}
 
@@ -258,7 +267,7 @@ func TestMiddlewarePassesReadFromThrough(t *testing.T) {
 
 func TestMiddlewareLogsWhenHandlerPanics(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	h := Middleware(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	}))
@@ -284,7 +293,7 @@ func TestMiddlewareLogsWhenHandlerPanics(t *testing.T) {
 
 func TestMiddlewareSkipsHealth(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	called := false
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
@@ -301,7 +310,7 @@ func TestMiddlewareSkipsHealth(t *testing.T) {
 
 func TestMiddlewareDoesNotReadBody(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	body := &countReader{r: strings.NewReader(`{"note":"secret payload"}`)}
 
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -330,7 +339,7 @@ func TestMiddlewareDoesNotReadBody(t *testing.T) {
 
 func TestMiddlewareCountsUnknownLengthBody(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	payload := strings.Repeat("a", 64)
 
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -361,7 +370,7 @@ func TestMiddlewareCountsUnknownLengthBody(t *testing.T) {
 
 func TestMiddlewareRedactsCallbackTokenInPath(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	const token = "callback-secret"
 
 	mux := http.NewServeMux()
@@ -385,7 +394,7 @@ func TestMiddlewareRedactsCallbackTokenInPath(t *testing.T) {
 // the mux so pattern is still recorded.
 func TestMiddlewareRedactsCallbackTokenThroughRequestCopy(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	const token = "callback-secret"
 
 	mux := http.NewServeMux()
@@ -412,7 +421,7 @@ func TestMiddlewareRedactsCallbackTokenThroughRequestCopy(t *testing.T) {
 
 func TestMiddlewareLogsSwitchingProtocols(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	logger := testLogger(&buf)
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusSwitchingProtocols)
 	}))

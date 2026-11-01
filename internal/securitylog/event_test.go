@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"testing"
 )
@@ -42,12 +43,14 @@ func TestEventWritesCategorySecurity(t *testing.T) {
 func TestAnnotateFillsSlot(t *testing.T) {
 	ann := &Annotation{}
 	ctx := WithAnnotation(context.Background(), ann)
+	wantErr := errors.New("sig mismatch")
 
 	Annotate(ctx, "webhook auth failed",
 		"reason", "webhook_auth_failed",
 		"partner", "slpa",
+		"error", wantErr,
 		"ignored", "x",
-		"status", 401, // non-string value ignored
+		"status", 401, // non-error / non-string value ignored
 	)
 
 	if !ann.Annotated() {
@@ -61,6 +64,9 @@ func TestAnnotateFillsSlot(t *testing.T) {
 	}
 	if ann.Partner != "slpa" {
 		t.Fatalf("Partner = %q", ann.Partner)
+	}
+	if !errors.Is(ann.Err, wantErr) {
+		t.Fatalf("Err = %v", ann.Err)
 	}
 }
 

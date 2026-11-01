@@ -6,9 +6,10 @@
 //
 // Handlers do not write security lines themselves. systemlog.Middleware puts
 // an Annotation slot on the request context; handlers call Annotate to add
-// reason and partner. Middleware then writes the only category=security line
-// when the status is 401/403 or the slot was annotated, so each denial is
-// logged exactly once.
+// reason, partner, and an optional error. Middleware then writes the only
+// category=security line when the status is 401/403 or the slot was annotated,
+// so each denial is logged exactly once (no parallel slog.Warn from the
+// handler).
 package securitylog
 
 import (
@@ -21,12 +22,13 @@ import (
 const Category = "security"
 
 // Annotation is a request-scoped slot systemlog.Middleware allocates before
-// ServeHTTP. Handlers call Annotate to fill Msg, Reason, and Partner; the
-// middleware reads them when writing the security line.
+// ServeHTTP. Handlers call Annotate to fill Msg, Reason, Partner, and Err;
+// the middleware reads them when writing the security line.
 type Annotation struct {
 	Msg     string
 	Reason  string
 	Partner string
+	Err     error
 	set     bool
 }
 
@@ -48,10 +50,10 @@ func (a *Annotation) Annotated() bool {
 	return a != nil && a.set
 }
 
-// Annotate records msg, reason, and partner on the request's Annotation slot
-// for Middleware to include on the security line. attrs may include the keys
-// "reason" and "partner" (string values); other keys are ignored. No-op when
-// no slot is on ctx (handler ran outside Middleware).
+// Annotate records msg, reason, partner, and optional error on the request's
+// Annotation slot for Middleware to include on the security line. attrs may
+// include "reason" and "partner" (string) and "error" (error). Other keys are
+// ignored. No-op when no slot is on ctx (handler ran outside Middleware).
 func Annotate(ctx context.Context, msg string, attrs ...any) {
 	slot := FromContext(ctx)
 	if slot == nil {
@@ -66,15 +68,19 @@ func Annotate(ctx context.Context, msg string, attrs ...any) {
 		if !ok {
 			continue
 		}
-		val, ok := attrs[i+1].(string)
-		if !ok {
-			continue
-		}
 		switch key {
 		case "reason":
-			slot.Reason = val
+			if s, ok := attrs[i+1].(string); ok {
+				slot.Reason = s
+			}
 		case "partner":
-			slot.Partner = val
+			if s, ok := attrs[i+1].(string); ok {
+				slot.Partner = s
+			}
+		case "error":
+			if err, ok := attrs[i+1].(error); ok {
+				slot.Err = err
+			}
 		}
 	}
 }

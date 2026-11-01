@@ -181,16 +181,21 @@ func TestLogSinkExportsOnlyViaOTLPHandler(t *testing.T) {
 		t.Fatalf("export handler audit records = %d, want 1", auditRecords)
 	}
 
+	// Audit ignores server.logLevel: a warn process level still exports.
 	extraWarn := newAlwaysEnabled()
 	warnSink := nswaudit.NewLogSink(slog.New(auditExportHandler(
 		&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}},
 		extraWarn,
 	)))
 	warnSink.Write(context.Background(), record)
+	var warnAudit int
 	for _, attrs := range *extraWarn.attrs {
 		if attrs["category"] == nswaudit.Category {
-			t.Fatal("audit line exported below server.logLevel")
+			warnAudit++
 		}
+	}
+	if warnAudit != 1 {
+		t.Fatalf("audit at warn logLevel exported %d, want 1", warnAudit)
 	}
 }
 
@@ -201,14 +206,11 @@ func TestLogAuditExportStatus(t *testing.T) {
 	var warnBuf bytes.Buffer
 	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &warnBuf)
 	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, false)
-	if !strings.Contains(warnBuf.String(), "audit records (category=audit) are not exported") {
-		t.Fatalf("missing log-level warning: %s", warnBuf.String())
-	}
 	if !strings.Contains(warnBuf.String(), "otel log export is off") {
-		t.Fatalf("missing export-off warning when level is also high: %s", warnBuf.String())
+		t.Fatalf("missing export-off warning: %s", warnBuf.String())
 	}
-	if strings.Count(warnBuf.String(), "server.logLevel is above info") != 1 {
-		t.Fatalf("log-level warning should appear once: %s", warnBuf.String())
+	if strings.Contains(warnBuf.String(), "server.logLevel is above info") {
+		t.Fatalf("audit must not warn about logLevel: %s", warnBuf.String())
 	}
 
 	var errorBuf bytes.Buffer
@@ -230,6 +232,18 @@ func TestLogAuditExportStatus(t *testing.T) {
 	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, true)
 	if infoBuf.Len() != 0 {
 		t.Fatalf("warning when export is on at info: %s", infoBuf.String())
+	}
+}
+
+func TestConfigureLoggingStampsSystemCategory(t *testing.T) {
+	prevDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prevDefault) })
+
+	var buf bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &buf)
+	slog.Info("ops line")
+	if !strings.Contains(buf.String(), "category=system") {
+		t.Fatalf("plain slog missing category=system: %s", buf.String())
 	}
 }
 

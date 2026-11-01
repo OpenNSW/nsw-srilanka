@@ -37,8 +37,8 @@ const callbacksPathPrefix = "/api/v1/callbacks/"
 
 // Middleware logs one system line after next returns, including when next
 // panics. logger nil uses slog.Default. The logger must already be the process
-// handler so the line picks up the request trace id. GET /health is served and
-// not logged.
+// handler (with StampCategory) so the line picks up category=system and the
+// request trace id. GET /health is served and not logged.
 //
 // Wrap the mux with CaptureRoute so pattern is recorded when Middleware sits
 // outside otelhttp (which copies the request before ServeMux sets Pattern).
@@ -46,8 +46,6 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	base := logger
-	logger = logger.With(slog.String("category", Category))
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +88,7 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 					time.Since(start).Milliseconds(),
 					requestBytes(r.ContentLength, reqBody), int64(resp.n),
 				)...)
-				emitSecurityDenial(r.Context(), base, r, path, kind, id, status, ann)
+				emitSecurityDenial(r.Context(), logger, r, path, kind, id, status, ann)
 				if panicked != nil {
 					panic(panicked)
 				}
@@ -177,6 +175,9 @@ func emitSecurityDenial(
 	}
 	if ann.Partner != "" {
 		attrs = append(attrs, "partner", ann.Partner)
+	}
+	if ann.Err != nil {
+		attrs = append(attrs, "error", ann.Err)
 	}
 	securitylog.Event(ctx, base, msg, attrs...)
 }

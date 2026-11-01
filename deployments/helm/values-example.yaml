@@ -159,8 +159,9 @@ backend:
 
     server:
       port: 8080               # keep in step with containerPort above
-      # Audit records (category=audit) are written at info, so warn or error
-      # drops them. Startup logs that at this level.
+      # Filters the system stream (category=system) and security lines on it.
+      # Audit (category=audit) is OTLP-only and ignores this level; with export
+      # off, startup warns once.
       logLevel: info
       serviceURL: "https://nsw-api.example.com"
       # Request-body size cap and server timeouts (Slowloris/DoS hardening).

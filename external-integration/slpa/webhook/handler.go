@@ -69,10 +69,10 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	// Before anything is decoded: an unauthenticated body is not worth parsing,
 	// and the signature is over the bytes as received.
 	if err := VerifySignature(r.Header.Get(SignatureHeader), body, h.secret); err != nil {
-		slog.WarnContext(r.Context(), "slpa webhook: rejected an unauthenticated call", "error", err)
 		securitylog.Annotate(r.Context(), "webhook auth failed",
 			"reason", "webhook_auth_failed",
 			"partner", "slpa",
+			"error", err,
 		)
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
