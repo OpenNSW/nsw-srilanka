@@ -69,13 +69,6 @@ func SLPAConsolidationResolveFunc(ctx flowplugins.PluginContext, _ json.RawMessa
 	// is knowably false, so it is recorded here rather than left to the absence
 	// of a value elsewhere.
 	ctx.Record.Data["deleted"] = false
-
-	// The placeholder the container is now paired with. The branch carries it
-	// as a variable, but a flow of its own on the consignment — a sundry order —
-	// reads only the task records, so the pairing is recorded with both halves.
-	if placeholder := strings.TrimSpace(asString(value(ctx, "so_container_no"))); placeholder != "" {
-		ctx.Record.Data["so_container_no"] = placeholder
-	}
 	return nil
 }
 

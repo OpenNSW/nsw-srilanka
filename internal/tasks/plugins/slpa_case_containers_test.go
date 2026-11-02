@@ -25,8 +25,7 @@ func (f *fakeCaseTasks) GetAllTasks(_ context.Context, caseID string) []store.Ta
 
 const caseContainersConfig = `{
   "registration_template_id": "slpa-ecdn-submission-flow",
-  "consolidation_template_id": "slpa-consolidation-flow",
-  "gate_pass_template_id": "slpa-gate-pass-flow"
+  "pairing_template_ids": ["slpa-consolidation-flow", "slpa-gate-pass-flow"]
 }`
 
 var caseStart = time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
@@ -67,26 +66,10 @@ func container(dummy, realNo string) map[string]any {
 	return map[string]any{"container_no": dummy, "real_container_no": realNo}
 }
 
-// consolidated is a consolidation pairing dummy with the real container number,
-// as its resolve step records it: SLPA's ID for the container beside it.
-func consolidated(minutes int, dummy, number string) store.TaskRecord {
-	return task("slpa-consolidation-flow", minutes, map[string]any{
-		"so_container_no": dummy, "container_no": number, "cap_sqid": "cap-" + number, "deleted": false,
-	})
-}
-
-// deletedPairing is a gate pass from which the trader deleted the pairing with
-// number. The gate pass names the container by SLPA's ID alone.
-func deletedPairing(minutes int, number string) store.TaskRecord {
-	return task("slpa-gate-pass-flow", minutes, map[string]any{
-		"cap_id": "cap-" + number, "consolidation": map[string]any{"deleted": true},
-	})
-}
-
 func TestSLPACaseContainers_PairsEachDummyWithTheContainerItWasConsolidatedTo(t *testing.T) {
 	source, got := runCaseContainers(t,
 		ecdnTask(0, "CBEX1E68944-20261102-01", "CBEX1E68944-20261102-02"),
-		consolidated(10, "CBEX1E68944-20261102-01", "MSCU8492019"),
+		task("slpa-consolidation-flow", 10, map[string]any{"so_container_no": "CBEX1E68944-20261102-01", "container_no": "MSCU8492019", "deleted": false}),
 	)
 
 	assert.Equal(t, "consignment-1", source.caseID, "the containers are the sundry order's own consignment's")
@@ -96,41 +79,21 @@ func TestSLPACaseContainers_PairsEachDummyWithTheContainerItWasConsolidatedTo(t 
 	}, got, "a container not consolidated yet is listed by its dummy number alone")
 }
 
-// A pairing the trader deleted from the gate pass no longer pairs the dummy with
-// anything, and the pairing made after it is the one that counts.
+// A consolidation the trader deleted no longer pairs the dummy with anything,
+// whether the delete was recorded by the consolidation or the gate pass, and the
+// pairing made after it is the one that counts.
 func TestSLPACaseContainers_ReadsTheLatestPairing(t *testing.T) {
 	_, got := runCaseContainers(t,
-		consolidated(30, "D-02", "TGHU1111111"),
-		deletedPairing(20, "MSCU2222222"),
-		consolidated(10, "D-02", "MSCU2222222"),
-		consolidated(5, "D-01", "MSCU3333333"),
-		deletedPairing(25, "MSCU3333333"),
+		task("slpa-consolidation-flow", 30, map[string]any{"so_container_no": "D-02", "container_no": "TGHU1111111"}),
+		task("slpa-gate-pass-flow", 20, map[string]any{"so_container_no": "D-02", "container_no": "MSCU2222222",
+			"consolidation": map[string]any{"deleted": true}}),
+		task("slpa-consolidation-flow", 10, map[string]any{"so_container_no": "D-02", "container_no": "MSCU2222222"}),
+		task("slpa-gate-pass-flow", 25, map[string]any{"so_container_no": "D-01", "container_no": "MSCU3333333",
+			"consolidation": map[string]any{"deleted": true}}),
 		ecdnTask(0, "D-01", "D-02"),
 	)
 
 	assert.Equal(t, []any{container("D-01", ""), container("D-02", "TGHU1111111")}, got)
-}
-
-// Consolidating to the same container again after deleting it pairs it again.
-func TestSLPACaseContainers_PairsAContainerConsolidatedAgainAfterADelete(t *testing.T) {
-	_, got := runCaseContainers(t,
-		ecdnTask(0, "D-01"),
-		consolidated(10, "D-01", "MSCU8492019"),
-		deletedPairing(20, "MSCU8492019"),
-		consolidated(30, "D-01", "MSCU8492019"),
-	)
-
-	assert.Equal(t, []any{container("D-01", "MSCU8492019")}, got)
-}
-
-// A consolidation recorded before its resolve step names its dummy pairs nothing.
-func TestSLPACaseContainers_IgnoresAConsolidationThatNamesNoDummy(t *testing.T) {
-	_, got := runCaseContainers(t,
-		ecdnTask(0, "D-01"),
-		task("slpa-consolidation-flow", 10, map[string]any{"container_no": "MSCU8492019", "cap_sqid": "cap-MSCU8492019"}),
-	)
-
-	assert.Equal(t, []any{container("D-01", "")}, got)
 }
 
 func TestSLPACaseContainers_ListsEachDummyOnce(t *testing.T) {

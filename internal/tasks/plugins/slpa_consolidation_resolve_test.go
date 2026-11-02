@@ -32,19 +32,6 @@ func TestSLPAConsolidationResolve_RecordsBothNamesOfTheChosenContainer(t *testin
 	assert.Equal(t, "TCLU1234567", ctx.Record.Data["container_no"])
 }
 
-// The pairing is recorded with the placeholder it is for, so a flow that reads
-// only the task records can tell which of the order's containers it now is.
-func TestSLPAConsolidationResolve_RecordsThePlaceholderItPairs(t *testing.T) {
-	ctx := splitCtx(map[string]any{
-		"cap_container_no": "cap-B",
-		"cap_containers":   capContainerRows(),
-		"so_container_no":  " DUMY0000001 ",
-	})
-	require.NoError(t, SLPAConsolidationResolveFunc(ctx, nil))
-
-	assert.Equal(t, "DUMY0000001", ctx.Record.Data["so_container_no"])
-}
-
 // The branch redoes a consolidation by reading a flag the delete sets, and the
 // gate pass does not set it when it issues a pass. Since a workflow output
 // mapping can only copy a value it finds, an absent flag left the previous one
