@@ -23,7 +23,7 @@ describe('RequireScope', () => {
   })
 
   it('renders the fallback for a user without the scope', () => {
-    auth.scope = 'openid nsw:consignment:read nsw:consignment:flow'
+    auth.scope = 'openid nsw:consignment:read nsw:consignment:flow:write'
     render(<NewConsignment />)
 
     expect(screen.queryByRole('button', { name: 'New consignment' })).toBeNull()

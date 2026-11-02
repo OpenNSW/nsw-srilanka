@@ -4,7 +4,7 @@ export const TEST_APP_CONFIG = {
   API_BASE_URL: 'http://api.test',
   SCOPE_CONSIGNMENTS_VIEW: 'nsw:consignment:read',
   SCOPE_CONSIGNMENTS_CREATE: 'nsw:consignment:write',
-  SCOPE_CONSIGNMENT_FLOWS: 'nsw:consignment:flow',
+  SCOPE_CONSIGNMENT_FLOWS: 'nsw:consignment:flow:write',
   SCOPE_TASKS_VIEW: 'nsw:task:read',
   SCOPE_TASKS_ACTIONS: 'nsw:task:write',
   SCOPE_ADMIN_VIEW: 'nsw:consignment:adminread',

@@ -70,7 +70,7 @@ name their company as CHA.
 | ------------------------------------------------------------------------------ | ------------------------------ | ---------------------------- |
 | Consignments (Cases in an agency portal) and their pages                       | `SCOPE_CONSIGNMENTS_VIEW`      | `nsw:consignment:read`       |
 | **New consignment**                                                            | `SCOPE_CONSIGNMENTS_CREATE`    | `nsw:consignment:write`      |
-| A consignment's flow buttons                                                   | `SCOPE_CONSIGNMENT_FLOWS`      | `nsw:consignment:flow`       |
+| A consignment's flow buttons                                                   | `SCOPE_CONSIGNMENT_FLOWS`      | `nsw:consignment:flow:write` |
 | A task                                                                         | `SCOPE_TASKS_VIEW`             | `nsw:task:read`              |
 | **Submit**, **Save draft**, **Claim**, **Release** and **Take over** on a task | `SCOPE_TASKS_ACTIONS`          | `nsw:task:write`             |
 | The admin consignment views                                                    | `SCOPE_ADMIN_VIEW`             | `nsw:consignment:adminread`  |
