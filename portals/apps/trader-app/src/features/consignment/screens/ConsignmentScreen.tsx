@@ -10,7 +10,7 @@ import type { TradeFlow, ConsignmentState } from '@/features/consignment/types.t
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { ROUTES } from '@/constants'
-import { PaginationControl, LoadError, LinkRow, RowLink } from '@portals/ui'
+import { LinkRow, LoadingOverlay, PageHeader, PaginationControl, RowLink, Surface, PageState } from '@portals/ui'
 import { ACCESS_SCOPES } from '@/constants/scopes'
 import { RequireScope } from '@/components/RequireScope'
 
@@ -66,31 +66,27 @@ export function ConsignmentScreen() {
 
   return (
     <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('consignments.list.title')}</h1>
-          {totalCount > 0 && (
-            <span className="inline-flex items-center rounded-full bg-primary-subtle px-2.5 py-0.5 text-sm font-medium text-primary">
-              {totalCount}
-            </span>
-          )}
-        </div>
-        <RequireScope scope={ACCESS_SCOPES.CONSIGNMENTS_CREATE}>
-          <div className="flex flex-col items-end gap-2">
-            <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
-              <PlusIcon />
-              {creating ? t('consignments.list.creating') : t('consignments.list.create')}
-            </Button>
-            {createError && (
-              <Text size="2" color="red">
-                {t('consignments.list.error.createFailed')}
-              </Text>
-            )}
-          </div>
-        </RequireScope>
-      </div>
+      <PageHeader
+        title={t('consignments.list.title')}
+        count={totalCount}
+        actions={
+          <RequireScope scope={ACCESS_SCOPES.CONSIGNMENTS_CREATE}>
+            <div className="flex flex-col items-end gap-2">
+              <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
+                <PlusIcon />
+                {creating ? t('consignments.list.creating') : t('consignments.list.create')}
+              </Button>
+              {createError && (
+                <Text size="2" color="red">
+                  {t('consignments.list.error.createFailed')}
+                </Text>
+              )}
+            </div>
+          </RequireScope>
+        }
+      />
 
-      <div className="rounded-2xl bg-app-surface shadow-md overflow-hidden">
+      <Surface className="overflow-hidden">
         <div className="p-4 bg-app-surface/60">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
@@ -143,26 +139,18 @@ export function ConsignmentScreen() {
         </div>
 
         <div className="relative min-h-[400px]">
-          {loading && (
-            <div className="absolute inset-0 bg-app-surface/60 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-2">
-              <Spinner size="3" />
-              <Text size="2" color="gray">
-                {t('consignments.list.loading')}
-              </Text>
-            </div>
-          )}
+          {loading && <LoadingOverlay message={t('consignments.list.loading')} />}
           {loadError ? (
-            <div className="p-16">
-              <LoadError message={t('consignments.list.error.loadFailed')} onRetry={() => void refetch()} />
-            </div>
+            <PageState variant="error" title={t('consignments.list.error.loadFailed')} onRetry={() => void refetch()} />
           ) : consignments.length === 0 ? (
-            <div className="p-16 text-center">
-              <Text size="3" color="gray">
-                {debouncedSearchQuery || stateFilter !== 'all' || tradeFlowFilter !== 'all'
+            <PageState
+              variant="empty"
+              title={
+                debouncedSearchQuery || stateFilter !== 'all' || tradeFlowFilter !== 'all'
                   ? t('consignments.list.empty.filtered')
-                  : t('consignments.list.empty.none')}
-              </Text>
-            </div>
+                  : t('consignments.list.empty.none')
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -237,7 +225,7 @@ export function ConsignmentScreen() {
             totalCount={totalCount}
           />
         </div>
-      </div>
+      </Surface>
     </div>
   )
 }

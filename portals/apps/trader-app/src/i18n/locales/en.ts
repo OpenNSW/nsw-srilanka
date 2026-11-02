@@ -90,7 +90,6 @@ const en = {
           settingUp: 'Setting up your consignment...',
         },
         backToList: 'Back to Consignments',
-        tryAgain: 'Try Again',
         refresh: 'Refresh',
         refreshing: 'Refreshing...',
         title: 'Consignment View',

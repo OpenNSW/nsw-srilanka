@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, Badge, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
+import { Button, Badge, IconButton, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { isAgencyMode } from '@/features/case/mode'
@@ -9,7 +9,7 @@ import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { useConsignment } from '@/features/consignment/hooks.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { ROUTES } from '@/constants'
-import { Breadcrumb, type BreadcrumbItem, CopyableId } from '@portals/ui'
+import { Breadcrumb, type BreadcrumbItem, CopyableId, LoadingOverlay, Surface, PageState } from '@portals/ui'
 import { ACCESS_SCOPES } from '@/constants/scopes'
 import { RequireScope } from '@/components/RequireScope'
 
@@ -54,12 +54,7 @@ export function ConsignmentDetailScreen({
         : t('consignments.detail.loading.processing')
     return (
       <div className="p-6">
-        <div className="flex items-center justify-center py-12">
-          <Spinner size="3" />
-          <Text size="3" color="gray" className="ml-3">
-            {message}
-          </Text>
-        </div>
+        <PageState variant="loading" title={message} />
       </div>
     )
   }
@@ -79,23 +74,24 @@ export function ConsignmentDetailScreen({
         <div className="mb-6">
           <Breadcrumb items={[up, { label: untitled }]} />
         </div>
-        <div className="bg-app-surface rounded-2xl shadow-md p-8 text-center">
-          <Text size="5" color="red" weight="medium" className="block mb-2">
-            {errorTitle}
-          </Text>
-          <Text size="2" color="gray" className="block mb-6">
-            {isLoadFailed
-              ? t('consignments.detail.error.loadFailedDescription')
-              : t('consignments.detail.error.notFoundDescription')}
-          </Text>
-          <div className="flex gap-3 justify-center">
-            <Button variant="soft" onClick={() => void navigate(backTo)}>
-              <ArrowLeftIcon />
-              {t(isAgencyMode ? 'cases.detail.backToList' : 'consignments.detail.backToList')}
-            </Button>
-            {isLoadFailed && <Button onClick={refetch}>{t('consignments.detail.tryAgain')}</Button>}
-          </div>
-        </div>
+        <Surface>
+          <PageState
+            variant="error"
+            title={errorTitle}
+            description={
+              isLoadFailed
+                ? t('consignments.detail.error.loadFailedDescription')
+                : t('consignments.detail.error.notFoundDescription')
+            }
+            onRetry={isLoadFailed ? refetch : undefined}
+            actions={
+              <Button variant="soft" color="gray" onClick={() => void navigate(backTo)}>
+                <ArrowLeftIcon />
+                {t(isAgencyMode ? 'cases.detail.backToList' : 'consignments.detail.backToList')}
+              </Button>
+            }
+          />
+        </Surface>
       </div>
     )
   }
@@ -153,17 +149,8 @@ export function ConsignmentDetailScreen({
         )}
       </div>
 
-      <div className="bg-app-surface rounded-2xl shadow-md relative">
-        {refreshing && (
-          <div className="absolute inset-0 bg-app-surface/80 backdrop-blur-sm z-20 flex items-center justify-center rounded-lg">
-            <div className="flex items-center gap-3 bg-app-surface px-6 py-4 rounded-xl shadow-lg">
-              <Spinner size="3" />
-              <Text size="3" weight="medium" color="gray">
-                {t('consignments.detail.refreshing')}
-              </Text>
-            </div>
-          </div>
-        )}
+      <Surface className="relative">
+        {refreshing && <LoadingOverlay message={t('consignments.detail.refreshing')} />}
 
         <div className="p-4 sm:p-6">
           {workflowNodes.length > 0 ? (
@@ -174,19 +161,14 @@ export function ConsignmentDetailScreen({
               consignmentState={consignment.state}
             />
           ) : (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <Text size="4" color="gray" weight="medium" className="block mb-2">
-                  {t('consignments.detail.noWorkflow.title')}
-                </Text>
-                <Text size="2" color="gray">
-                  {t('consignments.detail.noWorkflow.description')}
-                </Text>
-              </div>
-            </div>
+            <PageState
+              variant="empty"
+              title={t('consignments.detail.noWorkflow.title')}
+              description={t('consignments.detail.noWorkflow.description')}
+            />
           )}
         </div>
-      </div>
+      </Surface>
     </div>
   )
 }

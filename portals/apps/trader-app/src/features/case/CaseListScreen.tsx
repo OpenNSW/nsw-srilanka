@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Badge, Spinner, Text } from '@radix-ui/themes'
+import { Badge, Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
 import { ROUTES } from '@/constants'
 import { useQuery } from '@/hooks/useQuery'
-import { PaginationControl, LoadError, LinkRow, RowLink } from '@portals/ui'
+import { LinkRow, LoadingOverlay, PageHeader, PaginationControl, RowLink, Surface, PageState } from '@portals/ui'
 
 // The officer's list of cases. A trimmed ConsignmentScreen: no create button, no
 // trade-flow filter, no role switch — an officer sees every case.
@@ -27,35 +27,15 @@ export function CaseListScreen() {
 
   return (
     <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('cases.list.title')}</h1>
-        {totalCount > 0 && (
-          <span className="inline-flex items-center rounded-full bg-primary-subtle px-2.5 py-0.5 text-sm font-medium text-primary">
-            {totalCount}
-          </span>
-        )}
-      </div>
+      <PageHeader title={t('cases.list.title')} count={totalCount} />
 
-      <div className="rounded-2xl bg-app-surface shadow-md overflow-hidden">
+      <Surface className="overflow-hidden">
         <div className="relative min-h-[400px]">
-          {isFetching && (
-            <div className="absolute inset-0 bg-app-surface/60 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-2">
-              <Spinner size="3" />
-              <Text size="2" color="gray">
-                {t('cases.list.loading')}
-              </Text>
-            </div>
-          )}
+          {isFetching && <LoadingOverlay message={t('cases.list.loading')} />}
           {error ? (
-            <div className="p-16">
-              <LoadError message={t('cases.list.error')} onRetry={() => void refetch()} />
-            </div>
+            <PageState variant="error" title={t('cases.list.error')} onRetry={() => void refetch()} />
           ) : cases.length === 0 ? (
-            <div className="p-16 text-center">
-              <Text size="3" color="gray">
-                {t('cases.list.empty')}
-              </Text>
-            </div>
+            <PageState variant="empty" title={t('cases.list.empty')} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -114,7 +94,7 @@ export function CaseListScreen() {
             totalCount={totalCount}
           />
         </div>
-      </div>
+      </Surface>
     </div>
   )
 }
