@@ -15,17 +15,20 @@ export const API_CONFIG = {
 
 // Application Routes. An agency portal serves the same screens for its cases, under /cases.
 const CONSIGNMENTS_PATH = isAgencyMode ? '/cases' : '/consignments'
+const ADMIN_CONSIGNMENTS_PATH = '/admin/consignments'
 
 export const ROUTES = {
   HOME: '/',
   CONSIGNMENTS: CONSIGNMENTS_PATH,
   CONSIGNMENT_DETAIL: (id: string) => `${CONSIGNMENTS_PATH}/${id}`,
   TASK_FORM: (consignmentId: string, taskId: string) => `${CONSIGNMENTS_PATH}/${consignmentId}/tasks/${taskId}`,
+  ADMIN_CONSIGNMENT: (id: string) => `${ADMIN_CONSIGNMENTS_PATH}/${id}`,
+  ADMIN_CONSIGNMENT_VIEW: (id: string) => `${ADMIN_CONSIGNMENTS_PATH}/${id}/view`,
   // Route patterns, for <Route path> and useMatch.
   CONSIGNMENT_DETAIL_PATTERN: `${CONSIGNMENTS_PATH}/:consignmentId`,
   TASK_FORM_PATTERN: `${CONSIGNMENTS_PATH}/:consignmentId/tasks/:taskId`,
-  ADMIN_CONSIGNMENT_PATTERN: '/admin/consignments/:consignmentId',
-  ADMIN_CONSIGNMENT_VIEW_PATTERN: '/admin/consignments/:consignmentId/view',
+  ADMIN_CONSIGNMENT_PATTERN: `${ADMIN_CONSIGNMENTS_PATH}/:consignmentId`,
+  ADMIN_CONSIGNMENT_VIEW_PATTERN: `${ADMIN_CONSIGNMENTS_PATH}/:consignmentId/view`,
 } as const
 
 // Pagination

@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { ConsignmentDetailScreen } from '@/features/consignment/screens/ConsignmentDetailScreen'
 import { getConsignmentForAdmin } from '@/features/admin/service'
+import { ROUTES } from '@/constants'
 
 // Renders the same consignment detail view as the trader/CHA-facing screen, but sourced via
 // getConsignmentForAdmin (ConsignmentAdminRead, no ownership check) instead of getConsignment —
@@ -13,7 +14,7 @@ export function AdminConsignmentDetailScreen() {
     <ConsignmentDetailScreen
       scope="admin"
       fetcher={getConsignmentForAdmin}
-      parent={{ label: 'Engine status', to: `/admin/consignments/${consignmentId}` }}
+      parent={{ label: 'Engine status', to: ROUTES.ADMIN_CONSIGNMENT(consignmentId!) }}
       canStartFlows={false}
     />
   )
