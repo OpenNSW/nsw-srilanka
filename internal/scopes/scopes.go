@@ -15,9 +15,6 @@ const (
 	ConsignmentRead = "nsw:consignment:read"
 	// ConsignmentWrite grants creating a consignment, which only traders do.
 	ConsignmentWrite = "nsw:consignment:write"
-	// ConsignmentFlow grants starting a configured flow on a consignment, which
-	// its trader and its CHA both do.
-	ConsignmentFlow = "nsw:consignment:flow"
 	// ConsignmentAdminRead grants ops/admin visibility into any consignment's raw
 	// workflow-engine state, unlike ConsignmentRead which is scoped to the caller's
 	// own trader/CHA-owned consignments.
@@ -25,6 +22,11 @@ const (
 	// ConsignmentAdminWrite grants ops/admin the ability to resolve a node parked
 	// in AWAITING_ADMIN (RETRY/COMPLETE/ABORT) on any consignment's workflow.
 	ConsignmentAdminWrite = "nsw:consignment:adminwrite"
+
+	// Consignment flow resource: the auxiliary flows within a consignment.
+	// ConsignmentFlowWrite grants starting a configured flow on a consignment, which
+	// its trader and its CHA both do.
+	ConsignmentFlowWrite = "nsw:consignment:flow:write"
 
 	// Task resource.
 	TaskRead  = "nsw:task:read"

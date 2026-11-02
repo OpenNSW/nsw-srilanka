@@ -98,8 +98,8 @@ func TestMountTNSW_StartFlowScope(t *testing.T) {
 	mux := http.NewServeMux()
 	mountTNSW(mux, tnswHandlers{files: nswstorage.NewFileHandler(nil, refsStub{})}, stubAuth, stubScope)
 	// Past the scope check, the handler refuses the stub's M2M caller with 401.
-	if got := post(mux, scopes.ConsignmentFlow); got != http.StatusUnauthorized {
-		t.Errorf("with %s: status %d, want %d (past the scope check)", scopes.ConsignmentFlow, got, http.StatusUnauthorized)
+	if got := post(mux, scopes.ConsignmentFlowWrite); got != http.StatusUnauthorized {
+		t.Errorf("with %s: status %d, want %d (past the scope check)", scopes.ConsignmentFlowWrite, got, http.StatusUnauthorized)
 	}
 	if got := post(mux, scopes.ConsignmentWrite); got != http.StatusForbidden {
 		t.Errorf("with only %s: status %d, want %d", scopes.ConsignmentWrite, got, http.StatusForbidden)

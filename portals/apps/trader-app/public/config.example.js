@@ -13,13 +13,13 @@ window.__APP_CONFIG__ = {
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.nsw-srilanka.local',
   APP_URL: 'http://localhost:5173',
   IDP_SCOPES:
-    'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:consignment:flow,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite',
+    'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:consignment:flow:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite',
   // The scope each screen and action needs: the portal shows it only to a user
   // the IdP granted that scope. A SCOPE_* key left unset hides its screen or
   // action from everyone.
   SCOPE_CONSIGNMENTS_VIEW: 'nsw:consignment:read',
   SCOPE_CONSIGNMENTS_CREATE: 'nsw:consignment:write',
-  SCOPE_CONSIGNMENT_FLOWS: 'nsw:consignment:flow',
+  SCOPE_CONSIGNMENT_FLOWS: 'nsw:consignment:flow:write',
   SCOPE_TASKS_VIEW: 'nsw:task:read',
   SCOPE_TASKS_ACTIONS: 'nsw:task:write',
   SCOPE_ADMIN_VIEW: 'nsw:consignment:adminread',

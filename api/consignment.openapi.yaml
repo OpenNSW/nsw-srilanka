@@ -222,7 +222,7 @@ paths:
         consignment the caller's company/role does not own is reported as
         not found.
 
-        Requires scope `nsw:consignment:flow`, which traders and CHAs hold.
+        Requires scope `nsw:consignment:flow:write`, which traders and CHAs hold.
       operationId: startConsignmentFlow
       parameters:
         - $ref: '#/components/parameters/ConsignmentID'
@@ -256,7 +256,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: >-
-            The bearer token lacks scope `nsw:consignment:flow`, or the caller has
+            The bearer token lacks scope `nsw:consignment:flow:write`, or the caller has
             no resolvable company profile.
           content:
             application/json:

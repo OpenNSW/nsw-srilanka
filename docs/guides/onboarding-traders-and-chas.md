@@ -50,7 +50,7 @@ flowchart LR
   that handle, the user can sign in but owns nothing.
 - **What a user may do comes from the groups.** `Traders` grants the `Trader` role and
   `CHA` grants the `CHA` role (`idp/bootstrap/10-nsw-platform.yaml`). Each role grants
-  `nsw:*` scopes on the NSW API: both get `nsw:consignment:flow` to start a flow on a
+  `nsw:*` scopes on the NSW API: both get `nsw:consignment:flow:write` to start a flow on a
   consignment, and only `Trader` gets `nsw:consignment:write` to create one. The `catalog`
   section of `config.yaml` maps the role names the backend expects (`trader`, `cha`) to
   these IdP role names.
