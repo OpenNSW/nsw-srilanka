@@ -184,11 +184,7 @@ current when it arrives, and the workflow runs on it:
   "schemaVersion": 2,
   "taskCode": "cda_officer_verification_v1",
   "workflow": "cda_officer_verification_v1",
-  "meta": {
-    "title": "CDA Application Verification",
-    "description": "...",
-    "category": "CDA"
-  }
+  "meta": { "title": "CDA Application Verification", "description": "...", "category": "CDA" }
 }
 ```
 

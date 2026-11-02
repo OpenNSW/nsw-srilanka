@@ -136,11 +136,7 @@ In the agency's folder (for example `dea-v2/`), for each kind of review:
     "schemaVersion": 2,
     "taskCode": "dea_permit_review_v1",
     "workflow": "dea_permit_review_v1",
-    "meta": {
-      "title": "Export Permit Review",
-      "description": "…",
-      "category": "DEA"
-    }
+    "meta": { "title": "Export Permit Review", "description": "…", "category": "DEA" }
   }
   ```
 
@@ -356,11 +352,9 @@ backend:
     DB_PASSWORD:
       valueFrom: { secretKeyRef: { name: dea-secrets, key: db-password } }
     M2M_DEA_TO_NSW_SECRET:
-      valueFrom:
-        { secretKeyRef: { name: dea-secrets, key: m2m-dea-to-nsw-secret } }
+      valueFrom: { secretKeyRef: { name: dea-secrets, key: m2m-dea-to-nsw-secret } }
     STORAGE_TOKEN_KEYSET:
-      valueFrom:
-        { secretKeyRef: { name: dea-secrets, key: storage-token-keyset } }
+      valueFrom: { secretKeyRef: { name: dea-secrets, key: storage-token-keyset } }
 
   # No GovPay+ private key: an agency takes no payments.
   volumes: []
@@ -448,7 +442,7 @@ backend:
         ref: <tag or SHA>
         basePath: dea-v2
     notification:
-      providers: { … } # as for TNSW
+      providers: { … }   # as for TNSW
     # refid: only if the agency's workflows generate reference numbers
 
 migration:
@@ -459,15 +453,7 @@ migration:
   config:
     db:
       driver: postgres
-      postgres:
-        {
-          host: nsw-db,
-          port: 5432,
-          user: postgres,
-          password: "{{env:DB_PASSWORD}}",
-          name: dea_db,
-          sslMode: require,
-        }
+      postgres: { host: nsw-db, port: 5432, user: postgres, password: "{{env:DB_PASSWORD}}", name: dea_db, sslMode: require }
 
 frontend:
   config:
@@ -562,8 +548,7 @@ unset S
 backend:
   env:
     M2M_NSW_TO_DEA_SECRET:
-      valueFrom:
-        { secretKeyRef: { name: nsw-secrets, key: m2m-nsw-to-dea-secret } }
+      valueFrom: { secretKeyRef: { name: nsw-secrets, key: m2m-nsw-to-dea-secret } }
 ```
 
 ### 6b. TNSW's configuration
