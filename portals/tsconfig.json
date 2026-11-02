@@ -3,6 +3,9 @@
   "references": [
     {
       "path": "./apps/trader-app"
+    },
+    {
+      "path": "./packages/ui"
     }
   ]
 }

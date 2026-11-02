@@ -32,8 +32,10 @@ portals/
 ├── pnpm-lock.yaml         # Single lock file for entire monorepo
 ├── package.json           # Root workspace configuration
 ├── tsconfig.json          # Shared TypeScript configuration
-└── apps/                  # Applications
-    └── trader-app/        # Trader portal application
+├── apps/                  # Applications
+│   └── trader-app/        # Trader portal application
+└── packages/              # Code the apps share
+    └── ui/                # @portals/ui: generic components and design tokens
 ```
 
 ## Apps
@@ -45,6 +47,25 @@ project. Shared JSON Forms renderers are consumed from the published
 **Current apps:**
 
 - `trader-app` - Trader portal application
+
+## Packages
+
+`packages/ui` is `@portals/ui`: the generic components every portal can use
+(breadcrumbs, pagination, table rows, error states) and the design tokens they
+paint with. An app depends on it with `"@portals/ui": "workspace:*"`; Vite
+compiles its TypeScript source, so it has no build step.
+
+- Only generic UI goes in. A component that knows about consignments, tasks or
+  the app's config stays in the app.
+- It does no translation. Text comes in through props, and the fixed words
+  (Previous, Next, Copy, Try Again) through `UiLabelsProvider`, which the app
+  sets once with its translations.
+- An app imports the tokens after Tailwind, in its CSS:
+
+  ```css
+  @import 'tailwindcss';
+  @import '@portals/ui/theme.css';
+  ```
 
 ---
 

@@ -8,6 +8,7 @@ Sri Lanka’s National Single Window uses `OpenNSW/core`.
 - `internal/`: application wiring, domains, authentication, tasks, and storage.
 - `external-integration/`: GovPay, ASYCUDA, ePhyto, and SLPA integrations.
 - `portals/apps/trader-app/`: React/TypeScript frontend; source in `src/`, static assets in `public/`.
+- `portals/packages/ui/`: `@portals/ui`, the generic components and design tokens (`theme.css`) the portals share; domain components stay in the app.
 - `migrations/`: PostgreSQL migrations; `test/e2e/replay/`: replay tests and JSON fixtures.
 - `configs/`, `idp/`, `deployments/helm/`, and `docs/`: runtime configuration, identity setup, deployment charts, and documentation.
 

@@ -3,7 +3,7 @@ import type { ThemeProps } from '@radix-ui/themes'
 import { getBooleanEnv } from '@/runtimeConfig'
 
 // The named Radix palette nearest each scheme's --color-primary. Radix's
-// accent scale itself is derived from --color-primary in index.css (the
+// accent scale itself is derived from --color-primary in @portals/ui's theme.css (the
 // "Radix accent" block), so buttons and JSONForms controls are painted in
 // the exact brand color; this name is only what <Theme> is given.
 export type AccentColor = NonNullable<ThemeProps['accentColor']>
@@ -14,7 +14,7 @@ export interface ColorScheme {
   description: string
   accentColor: AccentColor
   // Hex used only for the little preview swatch in the switcher — the real
-  // color values live in index.css under `[data-theme="<id>"]`.
+  // color values live in @portals/ui's theme.css under `[data-theme="<id>"]`.
   swatch: string
 }
 

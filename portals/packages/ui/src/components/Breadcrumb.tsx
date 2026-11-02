@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ChevronRightIcon } from '@radix-ui/react-icons'
-import { useTranslation } from 'react-i18next'
+import { useUiLabels } from '../labels'
 
 export interface BreadcrumbItem {
   label: string
@@ -11,10 +11,10 @@ export interface BreadcrumbItem {
 // Where the user is, and the way back to each level above it:
 // Consignments › <consignment> › <task>.
 export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
-  const { t } = useTranslation()
+  const labels = useUiLabels()
   const link = 'text-foreground-muted hover:text-foreground hover:underline'
   return (
-    <nav aria-label={t('common.breadcrumb')} className="min-w-0">
+    <nav aria-label={labels.breadcrumb} className="min-w-0">
       <ol className="flex flex-wrap items-center gap-1.5 text-sm">
         {items.map((item, index) => (
           <li key={index} className="flex min-w-0 items-center gap-1.5">

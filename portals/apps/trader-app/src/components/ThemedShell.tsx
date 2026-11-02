@@ -4,7 +4,7 @@ import { useColorScheme } from '@/services/useColorScheme'
 
 // Reads the active color scheme so <Theme accentColor> stays in sync with
 // the CSS variable overrides the scheme applies (see ColorSchemeContext +
-// the `[data-theme]` blocks in index.css). Split out from main.tsx because
+// the `[data-theme]` blocks in @portals/ui's theme.css). Split out from main.tsx because
 // it needs to be inside ColorSchemeProvider to read the context, while
 // <Theme> itself needs to wrap everything else in the app.
 export function ThemedShell({ children }: { children: ReactNode }) {

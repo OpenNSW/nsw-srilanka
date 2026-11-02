@@ -2,13 +2,11 @@ import { useState } from 'react'
 import { Badge, Spinner, Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
-import { PaginationControl } from '@/components/common/PaginationControl.tsx'
-import { LoadError } from '@/components/common/LoadError.tsx'
-import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
 import { ROUTES } from '@/constants'
 import { useQuery } from '@/hooks/useQuery'
+import { PaginationControl, LoadError, LinkRow, RowLink } from '@portals/ui'
 
 // The officer's list of cases. A trimmed ConsignmentScreen: no create button, no
 // trade-flow filter, no role switch — an officer sees every case.
