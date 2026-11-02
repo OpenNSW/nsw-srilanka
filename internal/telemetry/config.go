@@ -77,16 +77,21 @@ func (c Config) baseURL() (string, error) {
 			break
 		}
 	}
-	decodedPath, err := url.PathUnescape(path)
-	if err != nil {
-		return "", fmt.Errorf("otel.endpoint has an invalid escaped path")
+	escapedSegments := strings.Split(path, "/")
+	decodedSegments := make([]string, 0, len(escapedSegments))
+	for _, escapedSegment := range escapedSegments {
+		decodedSegment, err := url.PathUnescape(escapedSegment)
+		if err != nil {
+			return "", fmt.Errorf("otel.endpoint has an invalid escaped path")
+		}
+		// Base prefixes are deployment-specific. A remaining v1 segment is
+		// invalid, but encoded slashes within a segment are part of its name.
+		if decodedSegment == "v1" {
+			return "", fmt.Errorf("otel.endpoint must use a base path or end in /v1/metrics, /v1/traces, or /v1/logs")
+		}
+		decodedSegments = append(decodedSegments, decodedSegment)
 	}
-	// Base prefixes are deployment-specific. A remaining /v1 segment, however,
-	// is an incomplete, unsupported, or repeated OTLP signal path.
-	if strings.Contains(decodedPath+"/", "/v1/") {
-		return "", fmt.Errorf("otel.endpoint must use a base path or end in /v1/metrics, /v1/traces, or /v1/logs")
-	}
-	u.Path = decodedPath
+	u.Path = strings.Join(decodedSegments, "/")
 	u.RawPath = path
 	return strings.TrimSuffix(u.String(), "/"), nil
 }

@@ -87,6 +87,7 @@ func TestEndpointRejectsDiscardedComponentsAndMalformedSignalPaths(t *testing.T)
 		"https://collector.example/api/default/v1/unknown",
 		"https://collector.example/api/default/v1/traces/extra",
 		"https://collector.example/v1/metrics/v1/logs",
+		"https://collector.example/api/%76%31/metrics",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
 			cfg := Config{Endpoint: endpoint, ServiceName: "tnsw-api"}
@@ -108,6 +109,7 @@ func TestSignalURLsPreserveSupportedBases(t *testing.T) {
 		"https://openobserve.example/api/default",
 		"https://proxy.example/tenant/telemetry",
 		"https://proxy.example/api/org%2Fteam",
+		"https://proxy.example/api/org%2Fv1%2Fteam",
 	} {
 		for _, suffix := range []string{"", "/", "/v1/metrics", "/v1/traces", "/v1/logs", "/v1/logs/"} {
 			t.Run(base+suffix, func(t *testing.T) {
