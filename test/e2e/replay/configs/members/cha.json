@@ -6,7 +6,7 @@
     "roles": ["CHA"],
     "scopes": [
       "nsw:consignment:read",
-      "nsw:consignment:flow",
+      "nsw:consignment:flow:write",
       "nsw:task:read",
       "nsw:task:write",
       "nsw:company:read",
