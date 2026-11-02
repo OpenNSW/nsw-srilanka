@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Badge, Button, Spinner, Text } from '@radix-ui/themes'
+import { Badge, Button, Text } from '@radix-ui/themes'
+import { PageState } from '@portals/ui'
 import { getConsignmentForAdmin } from '@/features/admin/service'
 import type { AdminConsignmentDetail } from '@/features/admin/types'
 import { formatDateTime, formatState, getStateColor } from '@/features/consignment/utils'
@@ -50,11 +51,8 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center py-12">
-        <Spinner size="3" />
-        <Text size="3" color="gray" className="ml-3">
-          Loading consignment…
-        </Text>
+      <div className="p-6">
+        <PageState variant="loading" title="Loading consignment…" />
       </div>
     )
   }
@@ -62,13 +60,12 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
   if (error || !consignment) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-lg shadow p-8 text-center">
-          <Text size="5" color="red" weight="medium" className="block mb-2">
-            {error === 'notFound' ? 'Consignment not found' : 'Failed to load consignment'}
-          </Text>
-          <Button variant="soft" onClick={() => void reload()}>
-            Try again
-          </Button>
+        <div className="bg-app-surface rounded-lg shadow">
+          <PageState
+            variant="error"
+            title={error === 'notFound' ? 'Consignment not found' : 'Failed to load consignment'}
+            onRetry={() => void reload()}
+          />
         </div>
       </div>
     )
