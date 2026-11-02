@@ -10,7 +10,7 @@ import { humanizeStatus } from '@/utils/formatStatus'
  *   blue → info, green → success, gray → secondary.
  * In progress is blue to match an in-progress task (TaskRow), so the same
  * label never shows in two colors on one page.
- * See the token block in index.css.
+ * See the token block in @portals/ui's theme.css.
  */
 export function getStateColor(state: ConsignmentState): 'gray' | 'blue' | 'green' {
   switch (state) {

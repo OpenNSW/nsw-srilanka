@@ -2,8 +2,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Badge, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
-import { CopyableId } from '@/components/CopyableId'
 import { isAgencyMode } from '@/features/case/mode'
 import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
 import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
@@ -11,6 +9,7 @@ import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { useConsignment } from '@/features/consignment/hooks.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { ROUTES } from '@/constants'
+import { Breadcrumb, type BreadcrumbItem, CopyableId } from '@portals/ui'
 
 interface ConsignmentDetailScreenProps {
   // Keeps this view's results apart from other views of the same consignment.

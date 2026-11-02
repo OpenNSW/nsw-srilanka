@@ -6,11 +6,10 @@ import { ClaimBanner } from './ClaimBanner'
 import { useTask, type ActionErrorKey, type ClaimErrorKey } from './hooks'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import { zoneWidthClass } from '@/features/zone/width'
-import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
-import { LoadError } from '@/components/common/LoadError.tsx'
+import { Breadcrumb, type BreadcrumbItem, LoadError } from '@portals/ui'
 
 export function TaskDetailScreen() {
   const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()

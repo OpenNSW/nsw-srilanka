@@ -9,10 +9,8 @@ import { useTranslation } from 'react-i18next'
 import type { TradeFlow, ConsignmentState } from '@/features/consignment/types.ts'
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
-import { PaginationControl } from '@/components/common/PaginationControl.tsx'
-import { LoadError } from '@/components/common/LoadError.tsx'
-import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import { ROUTES } from '@/constants'
+import { PaginationControl, LoadError, LinkRow, RowLink } from '@portals/ui'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()

@@ -5,7 +5,7 @@ import { COLOR_SCHEMES } from '@/services/colorSchemeContextCore'
 import { useColorScheme } from '@/services/useColorScheme'
 
 // A demo control for trying different brand palettes — see
-// services/colorSchemeContextCore.ts for the options and index.css for
+// services/colorSchemeContextCore.ts for the options and @portals/ui's theme.css for
 // what each one actually overrides. Lives in the footer (not the TopBar)
 // since it's a whole-app setting, not a page action.
 export function ColorSchemeSwitcher() {

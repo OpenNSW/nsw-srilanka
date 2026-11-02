@@ -54,6 +54,7 @@ clean:
 	@echo "🧹 Cleaning workspace..."
 	@rm -rf node_modules
 	@rm -rf apps/*/node_modules
+	@rm -rf packages/*/node_modules
 	@rm -rf apps/*/dist
 	@rm -rf apps/*/.turbo
 	@echo "✅ Cleaned!"

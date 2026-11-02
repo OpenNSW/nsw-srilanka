@@ -5,7 +5,7 @@ import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
 import { zoneWidthClass } from '@/features/zone/width'
-import { CopyableId } from '@/components/CopyableId'
+import { CopyableId } from '@portals/ui'
 
 type Props = {
   task: ZoneView

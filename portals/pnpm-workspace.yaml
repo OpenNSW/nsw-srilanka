@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - packages/*
 
 # Force transitive dependencies up to patched versions to clear high-severity
 # advisories that upstream packages have not yet picked up themselves.

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
-import { Breadcrumb } from '@/components/Breadcrumb'
+import { Breadcrumb } from './Breadcrumb'
 
 describe('Breadcrumb', () => {
   it('links each level above the current page and marks the last as current', () => {
