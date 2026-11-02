@@ -2,13 +2,13 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
@@ -260,12 +260,7 @@ func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, 
 	}
 	// Decided only for a caller who can read the task, so it cannot be used to probe
 	// task ids either.
-	canClaim, err := claimable(taskTemplate)
-	if err != nil {
-		httputil.InternalServerError(w, r, "tasks: failed to read whether the task can be claimed", err, "taskId", taskID)
-		return record, false
-	}
-	if !canClaim {
+	if !taskTemplate.Claimable {
 		httputil.Error(w, r, http.StatusNotFound, errClaimsOff)
 		return record, false
 	}
@@ -274,7 +269,7 @@ func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, 
 
 // readable reports whether in may read record. A denial is (false, nil); any other
 // failure is an error, not a denial.
-func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record store.TaskRecord, taskTemplate json.RawMessage) (bool, error) {
+func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record store.TaskRecord, taskTemplate types.TaskTemplate) (bool, error) {
 	_, err := h.resolveRead(ctx, in, record, taskTemplate)
 	switch {
 	case err == nil:
@@ -287,21 +282,21 @@ func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record s
 }
 
 // taskTemplate returns record's task template.
-func (h *HTTPHandler) taskTemplate(ctx context.Context, record store.TaskRecord) (json.RawMessage, error) {
+func (h *HTTPHandler) taskTemplate(ctx context.Context, record store.TaskRecord) (types.TaskTemplate, error) {
 	if h.TaskTemplateOf == nil {
-		return nil, errors.New("tasks: no task template resolver configured")
+		return types.TaskTemplate{}, errors.New("tasks: no task template resolver configured")
 	}
 	taskTemplate, err := h.TaskTemplateOf(ctx, record)
 	if err != nil {
-		return nil, fmt.Errorf("tasks: %w", err)
+		return types.TaskTemplate{}, fmt.Errorf("tasks: %w", err)
 	}
 	return taskTemplate, nil
 }
 
-// resolveRead is readauthz.Resolve for record, against the read policy of its task
+// resolveRead is readauthz.Resolve for record, against the read.roles of its task
 // template, taskTemplate.
-func (h *HTTPHandler) resolveRead(ctx context.Context, in taskauthz.Input, record store.TaskRecord, taskTemplate json.RawMessage) (map[string]bool, error) {
-	return readauthz.Resolve(ctx, h.AuthzCatalog, in, taskTemplate, record.CaseID)
+func (h *HTTPHandler) resolveRead(ctx context.Context, in taskauthz.Input, record store.TaskRecord, taskTemplate types.TaskTemplate) (map[string]bool, error) {
+	return readauthz.Resolve(ctx, h.AuthzCatalog, in, taskTemplate.Read.Roles, record.CaseID)
 }
 
 // auditClaim records a claim, takeover or release of a task. tk is the takeover, or

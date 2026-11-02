@@ -2,65 +2,37 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/tasktemplate"
+	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/taskflow/store"
 )
 
 // errNoTaskTemplate means a task record names no task template.
 var errNoTaskTemplate = errors.New("task has no task template")
 
-// TaskTemplateOf returns record's task template as raw JSON, in the manifest version
-// it runs on. Its read policy decides who may read the task (see readauthz), and its
-// claimable field whether the task has claims.
-type TaskTemplateOf func(ctx context.Context, record store.TaskRecord) (json.RawMessage, error)
-
-// claimable reports whether taskTemplate's tasks can be claimed: its "claimable" field.
-// A template without one has no claims.
-func claimable(taskTemplate json.RawMessage) (bool, error) {
-	var t struct {
-		Claimable bool `json:"claimable"`
-	}
-	if err := json.Unmarshal(taskTemplate, &t); err != nil {
-		return false, fmt.Errorf("decode task template's claimable: %w", err)
-	}
-	return t.Claimable, nil
-}
-
-// rawTaskTemplate is a task template kept as its raw JSON, for the fields core's
-// types.TaskTemplate does not carry.
-type rawTaskTemplate struct {
-	raw json.RawMessage
-}
-
-func (rawTaskTemplate) Kind() artifact.Kind { return tasktemplate.Kind }
-
-func (t *rawTaskTemplate) Parse(raw []byte) error {
-	if !json.Valid(raw) {
-		return errors.New("decode task template: invalid JSON")
-	}
-	t.raw = raw
-	return nil
-}
+// TaskTemplateOf returns record's task template, in the manifest version it runs on.
+// Its read.roles decide who may read the task (see readauthz), and its claimable field
+// whether the task has claims.
+type TaskTemplateOf func(ctx context.Context, record store.TaskRecord) (types.TaskTemplate, error)
 
 // TaskTemplates returns a TaskTemplateOf that reads task templates from artifacts.
 func TaskTemplates(artifacts *artifact.Set) TaskTemplateOf {
-	return func(ctx context.Context, record store.TaskRecord) (json.RawMessage, error) {
+	return func(ctx context.Context, record store.TaskRecord) (types.TaskTemplate, error) {
 		if record.TaskTemplateID == "" {
-			return nil, fmt.Errorf("task %s: %w", record.TaskID, errNoTaskTemplate)
+			return types.TaskTemplate{}, fmt.Errorf("task %s: %w", record.TaskID, errNoTaskTemplate)
 		}
 		reg, err := artifacts.Registry(ctx, record.ManifestVersion)
 		if err != nil {
-			return nil, fmt.Errorf("task %s: task template %q: %w", record.TaskID, record.TaskTemplateID, err)
+			return types.TaskTemplate{}, fmt.Errorf("task %s: task template %q: %w", record.TaskID, record.TaskTemplateID, err)
 		}
-		template, err := artifact.Latest[rawTaskTemplate](ctx, reg, record.TaskTemplateID)
+		template, err := tasktemplate.Load(ctx, reg, record.TaskTemplateID)
 		if err != nil {
-			return nil, fmt.Errorf("task %s: task template %q in manifest version %d: %w", record.TaskID, record.TaskTemplateID, record.ManifestVersion, err)
+			return types.TaskTemplate{}, fmt.Errorf("task %s: task template %q in manifest version %d: %w", record.TaskID, record.TaskTemplateID, record.ManifestVersion, err)
 		}
-		return template.raw, nil
+		return template, nil
 	}
 }

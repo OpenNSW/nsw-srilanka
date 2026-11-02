@@ -529,6 +529,19 @@ func TestHandleGetTask_OwnedRoleNotAdmittedByReadPolicy(t *testing.T) {
 	}
 }
 
+// A task template that does not load is a real failure, not a denial: a 500 says
+// "fix the template", a 404 would quietly hide the task instead.
+func TestHandleGetTask_MalformedTaskTemplateIsNotADenial(t *testing.T) {
+	fetcher := pendingHSCodeTask()
+	fetcher.readRoles = `"trader"` // a string, where read.roles is a list
+	in := ownerInput("Trader", "trader")
+
+	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d, want 500: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
 // The headline behavior: one task, one state, two roles, two different views —
 // and the submit affordance travels only with the section that owns it.
 func TestHandleGetTask_ClaimsShapeTheViewPerRole(t *testing.T) {
