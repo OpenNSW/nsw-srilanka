@@ -8,6 +8,7 @@ package document
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"strconv"
 	"strings"
@@ -202,14 +203,27 @@ func RetrievedCDNRefs(resp map[string]any) []map[string]any {
 // whose integration failed is never registered, so it is never listed (§7.2).
 const CancelledCDNStatus = "Cancelled"
 
+// RegisteredCDNStatus is ASYCUDA World's status for a live dispatch note.
+const RegisteredCDNStatus = "Registered"
+
 // ActiveCDNRefs reads the dispatch notes listed against a declaration
 // (cdnRefs), leaving out any Customs cancelled and any whose reference is
 // unreadable.
+//
+// Only a cancellation leaves a note out. A status other than the two known ones
+// is read as live and logged: counting a live note as missing would ask the
+// trader for a dispatch note Customs already holds, and the log says when
+// ASYCUDA starts using a status this has not been told about.
 func ActiveCDNRefs(cdnRefs []map[string]any) []Reference {
 	var refs []Reference
 	for _, r := range cdnRefs {
-		if strings.EqualFold(Str(r, "status"), CancelledCDNStatus) {
+		status := Str(r, "status")
+		if strings.EqualFold(status, CancelledCDNStatus) {
 			continue
+		}
+		if !strings.EqualFold(status, RegisteredCDNStatus) {
+			slog.Warn("customs: dispatch note listed with a status not known to be live; counted as live",
+				"status", status, "number", r["number"])
 		}
 		n, err := WholeNumber(r["number"])
 		if err != nil {

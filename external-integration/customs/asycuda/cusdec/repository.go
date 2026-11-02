@@ -15,7 +15,7 @@ type DeclarationRepository interface {
 	GetByCusdecRef(ctx context.Context, ref DocumentReference) (*CusdecDeclaration, error)
 	Update(ctx context.Context, decl *CusdecDeclaration) error
 	// GetRegisteredByCase returns the declaration of case caseID that ASYCUDA
-	// registered (it has a reference), the most recently updated if there is
+	// registered (it has a reference), the most recently submitted if there is
 	// more than one, or nil when there is none.
 	GetRegisteredByCase(ctx context.Context, caseID string) (*CusdecDeclaration, error)
 	// RecordSubmitted records that SLC Edge accepted a submission as edgeID,
@@ -66,7 +66,10 @@ func (r *declarationRepository) GetRegisteredByCase(ctx context.Context, caseID 
 	var decl CusdecDeclaration
 	err := r.db.WithContext(ctx).
 		Where("case_id = ? AND cusdec_number > 0", caseID).
-		Order("updated_at DESC").
+		// By submission, not by the last update: Customs' later events (paid,
+		// warranted, released) update an older declaration too, and must not
+		// make it the case's declaration again.
+		Order("created_at DESC").
 		First(&decl).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
