@@ -14,7 +14,7 @@
 #   kubectl create secret generic nsw-secrets \
 #     --from-literal=db-password=... \
 #     --from-literal=slpa-webhook-secret=... \
-#     --from-literal=notification-email-token=... \
+#     --from-literal=notification-smtp-password=... \
 #     --from-literal=notification-sms-password=... \
 #     --from-literal=m2m-npqs-secret=... \
 #     --from-literal=m2m-fcau-secret=... \
@@ -81,9 +81,13 @@ backend:
     SLPA_WEBHOOK_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: slpa-webhook-secret }
-    NOTIFICATION_EMAIL_TOKEN:
+    NOTIFICATION_EMAIL_CLIENT_SECRET:
       valueFrom:
-        secretKeyRef: { name: nsw-secrets, key: notification-email-token }
+        secretKeyRef: { name: nsw-secrets, key: notification-email-client-secret }
+    # Only with notification.providers.smtp in place of email.
+    # NOTIFICATION_SMTP_PASSWORD:
+    #   valueFrom:
+    #     secretKeyRef: { name: nsw-secrets, key: notification-smtp-password }
     NOTIFICATION_SMS_PASSWORD:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: notification-sms-password }
@@ -544,12 +548,34 @@ backend:
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyyMM}", padding: 5}
 
-    # Email/SMS gateways, one settings block per channel.
+    # Email/SMS gateways, one settings block per channel. Optional: a channel
+    # left out sends nothing.
     notification:
       providers:
+        # Email: set email (through PingMailer's API) or smtp (straight to an
+        # SMTP server), not both. The schemas are in
+        # github.com/OpenNSW/core/notification. Use email where the cluster
+        # can't reach the SMTP server's submission port (587).
         email:
-          baseURL: "https://email.example.com"
-          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+          baseURL: "https://api-server.mail.svc.cluster.local:8000" # PingMailer API server
+          # path: "/notify" # optional, this is the default
+          # allowInsecureHTTP: true # only if baseURL is plain http (in-cluster)
+          auth:
+            type: oauth2
+            oauth2:
+              tokenURL: "https://idp.example.com/oauth2/token"
+              clientID: "replace-with-pingmailer-client-id"
+              clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+          smtpHost: "smtp.example.com" # SMTP server PingMailer relays to
+          smtpPort: 587
+          sender: "no-reply@example.com"
+        # smtp:
+        #   host: "smtp.example.com"
+        #   # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+        #   # tlsMode: "starttls" # starttls (default), tls or none
+        #   username: "no-reply@example.com"
+        #   password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
+        #   sender: "no-reply@example.com"
         sms:
           baseURL: "https://sms.example.com"
           userName: "nsw"
