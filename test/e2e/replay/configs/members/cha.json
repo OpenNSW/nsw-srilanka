@@ -6,7 +6,7 @@
     "roles": ["CHA"],
     "scopes": [
       "consignment:read",
-      "consignment:write",
+      "consignment:flow:write",
       "task:read",
       "task:write",
       "company:read",

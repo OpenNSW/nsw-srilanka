@@ -12,7 +12,8 @@ package scopes
 
 const (
 	// Consignment resource.
-	ConsignmentRead  = "consignment:read"
+	ConsignmentRead = "consignment:read"
+	// ConsignmentWrite grants creating a consignment, which only traders do.
 	ConsignmentWrite = "consignment:write"
 	// ConsignmentAdminRead grants ops/admin visibility into any consignment's raw
 	// workflow-engine state, unlike ConsignmentRead which is scoped to the caller's
@@ -21,6 +22,11 @@ const (
 	// ConsignmentAdminWrite grants ops/admin the ability to resolve a node parked
 	// in AWAITING_ADMIN (RETRY/COMPLETE/ABORT) on any consignment's workflow.
 	ConsignmentAdminWrite = "consignment:adminwrite"
+
+	// Consignment flow resource: the auxiliary flows within a consignment.
+	// ConsignmentFlowWrite grants starting a configured flow on a consignment, which
+	// its trader and its CHA both do.
+	ConsignmentFlowWrite = "consignment:flow:write"
 
 	// Task resource.
 	TaskRead  = "task:read"
