@@ -41,7 +41,7 @@ import (
 
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw-srilanka/internal/bootstrap"
-	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 )
 
 // TestMain changes the working directory to the repo root so bootstrap.Build's
@@ -111,7 +111,9 @@ func newHarness(t *testing.T) *harness {
 	cfg.Storage.Local.BaseDir = t.TempDir() // keep blob storage out of the repo tree
 	// consignment_flows.json starts a flow on a consignment. The artifacts hold no other
 	// consignment-level workflow, so the export workflow stands in for one.
-	cfg.Consignment.Flows = []consignment.FlowOption{{TemplateID: "trade-export", Label: "Another export flow"}}
+	cfg.Flows.Users = caseflow.UserFlows{Enabled: true, Workflows: []caseflow.UserFlow{
+		{ID: "trade-export", Label: "Another export flow", Roles: []string{"trader", "cha"}},
+	}}
 
 	// A controllable mock agency stands in for all external OGA services; all
 	// known agency service ids are pointed at it so EXTERNAL_REVIEW injects land

@@ -1,0 +1,95 @@
+name: Published Image Scan
+# Scans the `latest` image of each published TNSW image every week, so a CVE
+# published after a release is noticed without waiting for the next one. A fixable
+# CRITICAL CVE fails the run; nothing depends on it, so it blocks no release. The
+# findings are also uploaded to Security → Code scanning, in the same categories
+# as the release scan, so the alerts follow the image as it is fixed.
+#
+# The scan policy and accepted risks are in .github/scripts/trivy-image.sh and
+# .trivyignore.
+
+on:
+  schedule:
+    # Mondays 03:00 UTC (08:30 in Sri Lanka).
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # Platforms in every published manifest list. Adding one needs a matching
+  # "Upload Trivy results" step — each SARIF upload needs its own category.
+  PLATFORMS: linux/amd64,linux/arm64
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan ${{ matrix.image_name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image_name: [tnsw-web, tnsw-api, tnsw-migrate]
+    permissions:
+      contents: read
+      packages: read           # pull the published images
+      security-events: write   # upload Trivy SARIF results to GitHub Security
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # the job only reads the repository
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Convert repository owner to lowercase
+        id: repo_owner
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      # Same Trivy version as release.yml.
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
+        with:
+          version: v0.69.3
+
+      - name: Run Trivy vulnerability scanner
+        id: trivy-scan
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}:latest
+          IMAGE_NAME: ${{ matrix.image_name }}
+        run: bash .github/scripts/trivy-image.sh scan "$IMAGE_REF" "$IMAGE_NAME"
+
+      # One upload per (image, platform) — two uploads sharing a tool+category fails
+      # the whole run. hashFiles tolerates a missing SARIF (narrowed PLATFORMS, or a
+      # platform that failed to scan). An upload that fails does not hide the gate.
+      - name: Upload Trivy results (linux/amd64)
+        if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-amd64.sarif', matrix.image_name)) != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy-${{ matrix.image_name }}-linux-amd64.sarif
+          category: ${{ matrix.image_name }}-linux-amd64
+
+      - name: Upload Trivy results (linux/arm64)
+        if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-arm64.sarif', matrix.image_name)) != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy-${{ matrix.image_name }}-linux-arm64.sarif
+          category: ${{ matrix.image_name }}-linux-arm64
+
+      # Fails the run on a fixable CRITICAL CVE or an unscanned platform. Fixable
+      # HIGH findings are reported only.
+      - name: Gate on image CVEs
+        if: steps.trivy-scan.outcome == 'success'
+        env:
+          IMAGE_NAME: ${{ matrix.image_name }}
+          UNSCANNED: ${{ steps.trivy-scan.outputs.failed_platforms }}
+        run: bash .github/scripts/trivy-image.sh gate "$IMAGE_NAME"

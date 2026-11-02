@@ -580,18 +580,25 @@ integrations:
   # never hear the answer to.
   slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
 
-# Flows a trader or CHA may start on a consignment from its page
-# (POST /api/v1/consignments/{id}/flows), besides the export flow that creating
-# it starts. Each names a workflow template in the artifacts; label is the
-# text of its button. Empty: no such flow can be started.
-consignment:
-  flows: []
-  # flows:
-  #   - templateId: <a workflow template in your artifacts>
-  #     label: <the text of its button>
-  # e.g. the SLPA sundry (add-on) order and its payment:
-  #   - templateId: slpa-sundry-payment
-  #     label: SLPA sundry payment
+# Workflows a person or another system may start on a case, besides those this
+# deployment's own code starts (e.g. the export flow a new consignment runs).
+# Each id is a workflow in the artifacts; the server refuses to start if the
+# current manifest lacks one. Each list is off unless enabled: true.
+flows:
+  # A trader or CHA, on a consignment they own, from its page
+  # (POST /api/v1/consignments/{id}/flows). roles are catalog roles; the
+  # caller must own the consignment in one. label is the text of its button.
+  users:
+    enabled: false
+    workflows: []
+    # workflows:
+    #   - id: <a workflow in your artifacts>
+    #     label: <the text of its button>
+    #     roles: [trader, cha]
+    # e.g. the SLPA sundry (add-on) order and its payment:
+    #   - id: slpa-sundry-payment
+    #     label: SLPA sundry payment
+    #     roles: [trader, cha]
 
 # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
 # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.

@@ -28,7 +28,7 @@ RUN pnpm --filter trader-app build
 # ngx_http_perl_module and a perl interpreter would only widen the CVE surface.
 # envsubst templating and /docker-entrypoint.d — which default.conf.template
 # relies on — live in the base layer, not this variant.
-FROM nginxinc/nginx-unprivileged:stable-alpine3.24
+FROM nginxinc/nginx-unprivileged:stable-alpine3.24 AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
 LABEL org.opencontainers.image.description="NSW Trader Portal Frontend"
@@ -40,8 +40,8 @@ COPY --chown=101:0 --from=builder /workspace/apps/trader-app/dist /usr/share/ngi
 # docker-compose, or mounted from a ConfigMap by Helm (see
 # deployments/helm/lk-tnsw/templates/frontend/configmap.yaml).
 
-# Alpine security fixes published after the base image was built; Trivy reports
-# the fixable ones against this image at release time.
+# Alpine security fixes published after the base image was built; CI scans this
+# image and fails on a fixable CRITICAL CVE.
 USER root
 RUN apk upgrade --no-cache
 
