@@ -53,7 +53,7 @@ make test-e2e   # stops the api container, then runs E2E=1 GOWORK=off go test ./
 
 `make test-e2e` sources `.env` automatically — ensure `GOWORK` is not set (or set to `off`) in `.env` so the go workspace does not interfere with module resolution.
 
-The harness builds the full app via `bootstrap.Build`, which loads the workflow/form artifacts through the artifact loader (`config.Load()` reads `artifactLoader` from the committed `configs/config.example.yaml`, resolving its secret placeholders from the sourced `.env`). These artifacts are **not** in this repo — they live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/`. That template defaults to the GitHub loader, so `make test-e2e` works with no local clone (network access to GitHub required). To run offline, clone that repo and set `artifactLoader.type: local` / `artifactLoader.local.root: <path>/tnsw` in it (locally, without committing).
+The harness builds the full app via `bootstrap.Build`, which loads the workflow/form artifacts through the artifact loader (`config.Load()` reads `artifactLoader` from the committed `configs/config.example.yaml`, resolving its secret placeholders from the sourced `.env`). These artifacts are **not** in this repo — they live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/`. That template defaults to the GitHub loader, so `make test-e2e` works with no local clone (network access to GitHub required). The harness reads `main` from GitHub's raw-content host, which isn't held to the API's limit of 60 requests an hour without a token. The flows follow `main`: when an artifact changes a form or a step, update the flows that use it. To run offline, clone that repo and set `artifactLoader.type: local` / `artifactLoader.local.root: <path>/tnsw` in it (locally, without committing).
 
 Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task queues.
 
@@ -121,11 +121,11 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
 { "name": "my_flow", "steps": [ ... ] }
 ```
 
-Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
+Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`, `upload`.
 
 ### Variables
 
-`{{varName}}` in paths and body string values is interpolated from the variable store. Variables are populated by `wait` (via `into`) and `request` (via `extract`).
+`{{varName}}` in paths and body string values is interpolated from the variable store. Variables are populated by `wait` and `upload` (via `into`) and `request` (via `extract`).
 
 ---
 
@@ -261,6 +261,33 @@ The mock agency waits until the app sends the inject for that task id, then post
 | `method`  | Payment gateway id — must match an `id` in `configs/payments/`. |
 | `status`  | Gateway success status (default `"paid"`).                      |
 | `timeout` | Wait for the payment record to appear; default 45s.             |
+
+---
+
+### `upload` — upload a file for a form's file field
+
+```json
+{
+  "name": "trader uploads the analysis certificate",
+  "upload": {
+    "actor": "trader",
+    "filename": "analysis-cert.pdf",
+    "mimeType": "application/pdf",
+    "content": "%PDF-1.4\n%%EOF\n",
+    "into": "analysisCert"
+  }
+}
+```
+
+| Field      | Notes                                                                                              |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `actor`    | The member the file is issued to; only they can submit it.                                         |
+| `filename` | Its extension must be one `storage.uploadTypeExtensions` lists for `mimeType`.                     |
+| `mimeType` | One of the deployment's `storage.allowedUploadTypes`.                                              |
+| `content`  | The file's bytes, as text.                                                                         |
+| `into`     | Variable to store the file reference in; send it as the file field's value (`"{{analysisCert}}"`). |
+
+Uploads the way the portal does: reserves the file (`POST /api/v1/storage`), then `PUT`s `content` to the presigned URL that returns. A form's file field only takes a reference issued to the submitter, so a file field needs an `upload` step first.
 
 ---
 
