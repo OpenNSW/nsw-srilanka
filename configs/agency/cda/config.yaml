@@ -46,9 +46,9 @@ temporal:
 # CDA keeps no files of its own: it serves TNSW's storage, calling TNSW as
 # CDA_TO_NSW (services entry tnsw), so officers open the documents
 # traders uploaded there. Officers' uploads go to TNSW's upload route
-# (scope nsw:storage:write), so TNSW checks them like a trader's. CDA
+# (scope storage:write), so TNSW checks them like a trader's. CDA
 # generates no files itself, so CDA_TO_NSW doesn't hold
-# nsw:storage:internalwrite, the scope of TNSW's internal upload route
+# storage:internalwrite, the scope of TNSW's internal upload route
 # (internalUploadPath). A step that stores a generated file needs it granted
 # in the IdP and added to the tnsw service's scopes.
 storage:
@@ -131,9 +131,9 @@ services:
         clientID: CDA_TO_NSW
         clientSecret: "{{env:M2M_CDA_TO_NSW_SECRET}}"
         scopes:
-          - nsw:task:write
-          - nsw:storage:read
-          - nsw:storage:write
+          - task:write
+          - storage:read
+          - storage:write
         endpointParams:
           resource: https://api.nsw-srilanka.local
 

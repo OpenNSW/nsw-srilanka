@@ -386,7 +386,7 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 }
 
 // HandleGetConsignmentAgency handles GET /api/v1/consignments/{id}/agency.
-// Authenticated M2M (or user) callers with nsw:consignment:read may fetch the
+// Authenticated M2M (or user) callers with consignment:read may fetch the
 // allowlisted display names. Knowing the unguessable UUID is sufficient; there
 // is no trader/CHA company ownership check. Access is audit-logged.
 func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Request) {
@@ -429,7 +429,7 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 // trader-facing GetConsignmentByID, which reflects task-store/business state instead.
 //
 // Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go), not on the
-// trader/CHA nsw:consignment:read scope — this performs no per-consignment ownership
+// trader/CHA consignment:read scope — this performs no per-consignment ownership
 // check, so any caller holding the admin scope can view any workflow's engine state
 // by design.
 func (c *Router) HandleGetWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
