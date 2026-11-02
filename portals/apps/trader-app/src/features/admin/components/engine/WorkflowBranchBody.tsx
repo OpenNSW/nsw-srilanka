@@ -22,6 +22,7 @@ export function WorkflowBranchBody({
   expandSignal,
   onOpenVariables,
   onOpenResolve,
+  canIntervene,
   onRefresh,
 }: {
   workflowId: string
@@ -35,6 +36,8 @@ export function WorkflowBranchBody({
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
   onOpenResolve: (target: AdminResolutionTarget) => void
+  // Whether the admin may resolve or force-park nodes (see NodeRow).
+  canIntervene: boolean
   onRefresh: () => void
 }) {
   const nodes = status ? visibleNodes(status.nodes, showAllNodes) : []
@@ -72,6 +75,7 @@ export function WorkflowBranchBody({
               expandSignal={expandSignal}
               onOpenVariables={onOpenVariables}
               onOpenResolve={onOpenResolve}
+              canIntervene={canIntervene}
               onRefresh={onRefresh}
             />
           ))

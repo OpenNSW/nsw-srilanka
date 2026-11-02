@@ -29,10 +29,13 @@ const WORKFLOW_STATUS_COLOR: Record<EngineWorkflowStatus, 'orange' | 'green' | '
 export function EngineStatusView({
   workflowId,
   title,
+  canIntervene,
   onRefresh,
 }: {
   workflowId: string
   title: string
+  // Whether the admin may resolve or force-park nodes (see NodeRow).
+  canIntervene: boolean
   onRefresh: () => void
 }) {
   const [status, setStatus] = useState<EngineStatus | null>(null)
@@ -188,6 +191,7 @@ export function EngineStatusView({
                 expandSignal={expandSignal}
                 onOpenVariables={setVariablesTarget}
                 onOpenResolve={setResolveTarget}
+                canIntervene={canIntervene}
                 onRefresh={() => void refresh()}
               />
             ))

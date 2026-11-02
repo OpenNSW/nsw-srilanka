@@ -11,7 +11,14 @@ import { FlowList } from '@/features/admin/components/flows/FlowList'
 
 // The consignment's business-side detail and its flows. The flow on screen is ?flow=<workflowId>
 // (so a link can point at one), else the first flow, which is the export flow.
-export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }) {
+export function ConsignmentDebugger({
+  consignmentId,
+  canIntervene,
+}: {
+  consignmentId: string
+  // Whether the admin may resolve or force-park the flows' nodes (see NodeRow).
+  canIntervene: boolean
+}) {
   const [consignment, setConsignment] = useState<AdminConsignmentDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<FetchError>(null)
@@ -117,6 +124,7 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
           key={selectedId}
           workflowId={selectedId}
           title={selectedFlow?.templateName ?? selectedId}
+          canIntervene={canIntervene}
           onRefresh={() => void reload()}
         />
       ) : (

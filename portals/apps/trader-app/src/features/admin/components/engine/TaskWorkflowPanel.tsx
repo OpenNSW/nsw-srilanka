@@ -23,6 +23,7 @@ export function TaskWorkflowPanel({
   expandSignal,
   onOpenVariables,
   onOpenResolve,
+  canIntervene,
   onRefresh,
 }: {
   workflowId: string
@@ -34,6 +35,8 @@ export function TaskWorkflowPanel({
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
   onOpenResolve: (target: AdminResolutionTarget) => void
+  // Whether the admin may resolve or force-park nodes (see NodeRow).
+  canIntervene: boolean
   onRefresh: () => void
 }) {
   // The header is indented via its own margin, not a wrapper around the body below — see
@@ -71,6 +74,7 @@ export function TaskWorkflowPanel({
         expandSignal={expandSignal}
         onOpenVariables={onOpenVariables}
         onOpenResolve={onOpenResolve}
+        canIntervene={canIntervene}
         onRefresh={onRefresh}
       />
     </>

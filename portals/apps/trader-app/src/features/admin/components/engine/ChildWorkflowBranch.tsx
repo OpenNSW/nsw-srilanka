@@ -19,6 +19,7 @@ export function ChildWorkflowBranch({
   expandSignal,
   onOpenVariables,
   onOpenResolve,
+  canIntervene,
 }: {
   workflowId: string
   depth: number
@@ -26,6 +27,8 @@ export function ChildWorkflowBranch({
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
   onOpenResolve: (target: AdminResolutionTarget) => void
+  // Whether the admin may resolve or force-park nodes (see NodeRow).
+  canIntervene: boolean
 }) {
   const { expanded, toggle, loading, status, error, refetch } = useExpandableWorkflow(workflowId, 'child', expandSignal)
 
@@ -73,6 +76,7 @@ export function ChildWorkflowBranch({
           expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
           onOpenResolve={onOpenResolve}
+          canIntervene={canIntervene}
           onRefresh={refetch}
         />
       )}

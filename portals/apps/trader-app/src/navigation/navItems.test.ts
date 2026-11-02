@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { firstPermittedPath, permittedNav, type NavItem, type NavItemOrGroup } from '@/components/Layout/navItems'
+import { firstPermittedPath, permittedNav, type NavItem, type NavItemOrGroup } from '@/navigation/navItems'
 
 const consignments: NavItem = {
   labelKey: 'nav.consignments',
-  path: '/consignments',
+  route: { path: '/consignments', scope: 'nsw:consignment:read' },
   icon: null,
-  scope: 'nsw:consignment:read',
 }
-const engineStatus: NavItem = { labelKey: 'nav.menu', path: '/admin', icon: null, scope: 'nsw:consignment:adminread' }
+const engineStatus: NavItem = {
+  labelKey: 'nav.menu',
+  route: { path: '/admin', scope: 'nsw:consignment:adminread' },
+  icon: null,
+}
 const adminGroup: NavItemOrGroup = { labelKey: 'nav.menu', icon: null, items: [engineStatus] }
 const structure: NavItemOrGroup[] = [consignments, adminGroup]
 

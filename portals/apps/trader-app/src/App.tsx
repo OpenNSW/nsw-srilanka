@@ -8,7 +8,6 @@ import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
 import { UnsavedChangesGuard } from '@/features/zone/components/UnsavedChangesGuard'
 import { CaseDetailScreen, CaseListScreen } from '@/features/case'
 import { isAgencyMode } from '@/features/case/mode'
-import { ROUTES } from '@/constants'
 import { AdminConsignmentEngineStatusScreen } from '@/features/admin/screens/AdminConsignmentEngineStatusScreen.tsx'
 import { AdminConsignmentDetailScreen } from '@/features/admin/screens/AdminConsignmentDetailScreen.tsx'
 import { useAuth } from 'react-oidc-context'
@@ -21,8 +20,8 @@ import { useAuthContext } from './hooks/useAuthContext'
 import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
 import { AccessRestrictedScreen } from '@/screens/AccessRestrictedScreen'
 import { RequireScope } from '@/components/RequireScope'
-import { NAV_STRUCTURE, firstPermittedPath } from '@/components/Layout/navItems'
-import { ACCESS_SCOPES } from '@/constants/scopes'
+import { NAV_STRUCTURE, firstPermittedPath } from '@/navigation/navItems'
+import { APP_ROUTES, type AppRoute } from '@/navigation/routes'
 import { useScopes } from '@/hooks/useScopes'
 import { appConfig, displayName } from './config'
 import { useEffect } from 'react'
@@ -54,10 +53,10 @@ function ProtectedLayout() {
   )
 }
 
-// A route's screen, shown only to a user granted scope.
-function restrictTo(scope: string | undefined, screen: ReactNode) {
+// A route's screen, shown only to a user granted the scope the route needs.
+function restrictTo(route: AppRoute, screen: ReactNode) {
   return (
-    <RequireScope scope={scope} fallback={<AccessRestrictedScreen />}>
+    <RequireScope scope={route.scope} fallback={<AccessRestrictedScreen />}>
       {screen}
     </RequireScope>
   )
@@ -104,23 +103,20 @@ function App() {
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<HomeRedirect />} />
           <Route
-            path={ROUTES.CONSIGNMENTS}
-            element={restrictTo(
-              ACCESS_SCOPES.CONSIGNMENTS_VIEW,
-              isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />,
-            )}
+            path={APP_ROUTES.consignments.path}
+            element={restrictTo(APP_ROUTES.consignments, isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />)}
           />
           <Route
-            path={ROUTES.CONSIGNMENT_DETAIL_PATTERN}
+            path={APP_ROUTES.consignmentDetail.path}
             element={restrictTo(
-              ACCESS_SCOPES.CONSIGNMENTS_VIEW,
+              APP_ROUTES.consignmentDetail,
               isAgencyMode ? <CaseDetailScreen /> : <ConsignmentDetailScreen />,
             )}
           />
           <Route
-            path={ROUTES.TASK_FORM_PATTERN}
+            path={APP_ROUTES.task.path}
             element={restrictTo(
-              ACCESS_SCOPES.TASKS_VIEW,
+              APP_ROUTES.task,
               <UnsavedChangesGuard>
                 <TaskDetailScreen />
               </UnsavedChangesGuard>,
@@ -128,12 +124,12 @@ function App() {
           />
           {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
           <Route
-            path="/admin/consignments/:consignmentId"
-            element={restrictTo(ACCESS_SCOPES.ADMIN_VIEW, <AdminConsignmentEngineStatusScreen />)}
+            path={APP_ROUTES.adminConsignment.path}
+            element={restrictTo(APP_ROUTES.adminConsignment, <AdminConsignmentEngineStatusScreen />)}
           />
           <Route
-            path="/admin/consignments/:consignmentId/view"
-            element={restrictTo(ACCESS_SCOPES.ADMIN_VIEW, <AdminConsignmentDetailScreen />)}
+            path={APP_ROUTES.adminConsignmentView.path}
+            element={restrictTo(APP_ROUTES.adminConsignmentView, <AdminConsignmentDetailScreen />)}
           />
         </Route>
 

@@ -13,7 +13,7 @@ export function AccessRestrictedScreen() {
         <h1 className="text-2xl font-semibold text-foreground">{t('auth.unauthorized.title')}</h1>
         <p className="mt-3 text-foreground-muted">{t('auth.unauthorized.message')}</p>
         <div className="mt-8 flex items-center justify-center">
-          <Button onClick={handleSignOut} size="4" style={{ cursor: 'pointer' }}>
+          <Button onClick={handleSignOut} size="4" className="cursor-pointer">
             {t('auth.unauthorized.signOut')}
           </Button>
         </div>

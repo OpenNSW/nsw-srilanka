@@ -1,16 +1,14 @@
 import { DashboardIcon } from '@radix-ui/react-icons'
 import type { ReactNode } from 'react'
 import type { ParseKeys } from 'i18next'
-import { ROUTES } from '@/constants'
-import { ACCESS_SCOPES } from '@/constants/scopes'
 import { isAgencyMode } from '@/features/case/mode'
+import { APP_ROUTES, type AppRoute } from '@/navigation/routes'
 
 export interface NavItem {
   labelKey: ParseKeys
-  path: string
+  // Where it leads, and the scope that lists it: the one the route's screen needs.
+  route: AppRoute
   icon: ReactNode
-  // Listed only for a user granted this scope: the one the destination's screen needs.
-  scope: string | undefined
 }
 
 export interface NavGroup {
@@ -31,9 +29,8 @@ export function isNavGroup(item: NavItemOrGroup): item is NavGroup {
 export const NAV_STRUCTURE: NavItemOrGroup[] = [
   {
     labelKey: isAgencyMode ? 'nav.cases' : 'nav.consignments',
-    path: ROUTES.CONSIGNMENTS,
+    route: APP_ROUTES.consignments,
     icon: <DashboardIcon className="w-4 h-4" />,
-    scope: ACCESS_SCOPES.CONSIGNMENTS_VIEW,
   },
 ]
 
@@ -44,19 +41,19 @@ export function permittedNav(
   hasScope: (scope: string | undefined) => boolean,
 ): NavItemOrGroup[] {
   return structure.flatMap((item): NavItemOrGroup[] => {
-    if (!isNavGroup(item)) return hasScope(item.scope) ? [item] : []
-    const items = item.items.filter((child) => hasScope(child.scope))
+    if (!isNavGroup(item)) return hasScope(item.route.scope) ? [item] : []
+    const items = item.items.filter((child) => hasScope(child.route.scope))
     return items.length > 0 ? [{ ...item, items }] : []
   })
 }
 
-// The first destination in nav order that a user with these scopes may open,
-// or null when there is none.
+// The path of the first destination in nav order that a user with these scopes
+// may open, or null when there is none.
 export function firstPermittedPath(
   structure: NavItemOrGroup[],
   hasScope: (scope: string | undefined) => boolean,
 ): string | null {
   const first = permittedNav(structure, hasScope)[0]
   if (!first) return null
-  return isNavGroup(first) ? (first.items[0]?.path ?? null) : first.path
+  return isNavGroup(first) ? (first.items[0]?.route.path ?? null) : first.route.path
 }

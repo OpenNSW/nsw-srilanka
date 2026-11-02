@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DropdownMenu } from '@radix-ui/themes'
 import { useScopes } from '@/hooks/useScopes'
-import { NAV_STRUCTURE, isNavGroup, permittedNav, type NavItem } from '@/components/Layout/navItems'
+import { NAV_STRUCTURE, isNavGroup, permittedNav, type NavItem } from '@/navigation/navItems'
 
 // The app's nav destinations the user's scopes reach, surfaced as a menu in
 // the TopBar rather than a permanent side rail. onNavigate fires when the
@@ -19,7 +19,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
   const navStructure = useMemo(() => permittedNav(NAV_STRUCTURE, hasScope), [hasScope])
 
   const isItemActive = (item: NavItem) =>
-    location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+    location.pathname === item.route.path || location.pathname.startsWith(`${item.route.path}/`)
 
   const currentLabel = useMemo(() => {
     for (const item of navStructure) {
@@ -47,7 +47,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     if (!target) return null
     return (
       <Link
-        to={target.path}
+        to={target.route.path}
         onClick={onNavigate}
         aria-current={isItemActive(target) ? 'page' : undefined}
         className={`flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl text-sm font-semibold transition-colors ${
@@ -82,10 +82,10 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
               <DropdownMenu.SubContent>
                 {item.items.map((child) => (
                   <DropdownMenu.Item
-                    key={child.path}
+                    key={child.route.path}
                     onSelect={() => {
                       onNavigate?.()
-                      void navigate(child.path)
+                      void navigate(child.route.path)
                     }}
                     className={isItemActive(child) ? 'bg-primary-subtle! text-primary!' : undefined}
                   >
@@ -99,10 +99,10 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
             </DropdownMenu.Sub>
           ) : (
             <DropdownMenu.Item
-              key={item.path}
+              key={item.route.path}
               onSelect={() => {
                 onNavigate?.()
-                void navigate(item.path)
+                void navigate(item.route.path)
               }}
               className={isItemActive(item) ? 'bg-primary-subtle! text-primary!' : undefined}
             >

@@ -24,6 +24,8 @@ export const ROUTES = {
   // Route patterns, for <Route path> and useMatch.
   CONSIGNMENT_DETAIL_PATTERN: `${CONSIGNMENTS_PATH}/:consignmentId`,
   TASK_FORM_PATTERN: `${CONSIGNMENTS_PATH}/:consignmentId/tasks/:taskId`,
+  ADMIN_CONSIGNMENT_PATTERN: '/admin/consignments/:consignmentId',
+  ADMIN_CONSIGNMENT_VIEW_PATTERN: '/admin/consignments/:consignmentId/view',
 } as const
 
 // Pagination
