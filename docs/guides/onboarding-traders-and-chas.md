@@ -336,7 +336,7 @@ ThunderID.
 | `cha_persist: company "…" is not enabled as a CHA`    | Same: a trader picked a company whose `hasCha` was turned off since                                                                                         |
 | `ou_handle "…" is already used by another company`    | Two records claim the same OU. Each OU maps to exactly one company                                                                                          |
 | `otc`: `Failed to load configuration`                 | Running outside the pod without `CONFIG_PATH`, or a `{{env:…}}` placeholder in `config.yaml` is unset                                                       |
-| User created but can't sign in to the trader portal   | Wrong user type. `TraderApp` only admits `Private_User`                                                                                                     |
+| User created but can't sign in to the trader portal   | Wrong user type. `TraderApp` admits `Private_User` (traders and CHAs) and `Admin_User` (NSW admins)                                                         |
 
 ## Local development
 
