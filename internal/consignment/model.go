@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/pagination"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 )
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -198,4 +200,22 @@ type Filter struct {
 	Query           *string `json:"q,omitempty"`
 	Offset          *int    `json:"offset,omitempty"`
 	Limit           *int    `json:"limit,omitempty"`
+}
+
+// FlowOption is one flow a caller may start on a consignment, as the portal shows it.
+type FlowOption struct {
+	// TemplateID is the workflow definition the flow runs.
+	TemplateID string `json:"templateId"`
+	// Label is what the portal's button for the flow says.
+	Label string `json:"label"`
+}
+
+// flowOptions presents flows as the portal shows them, in order. None is an empty list, not
+// null.
+func flowOptions(flows []caseflow.UserFlow) []FlowOption {
+	options := make([]FlowOption, 0, len(flows))
+	for _, f := range flows {
+		options = append(options, FlowOption{TemplateID: f.ID, Label: f.Label})
+	}
+	return options
 }

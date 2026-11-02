@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -238,5 +239,17 @@ func TestLoad_AgencyModeNeedsNoSLPASecret(t *testing.T) {
 
 	if _, err := loadYAML(t, configYAML(t, "mode: tnsw\n", secret)); err == nil || !containsString(err.Error(), "slpa webhook") {
 		t.Fatalf("tnsw: expected the SLPA secret to be required, got: %v", err)
+	}
+}
+
+// The flows section is checked against the catalog, in every mode: a role the catalog
+// does not define would let nobody start the flow.
+func TestLoad_FlowsAreCheckedAgainstTheCatalog(t *testing.T) {
+	const flows = "flows:\n  users:\n    enabled: true\n    workflows:\n      - id: port-fee\n        label: Pay port fee\n        roles: [%s]\n"
+	if _, err := loadYAML(t, configYAML(t, fmt.Sprintf(flows, "trader"))); err != nil {
+		t.Fatalf("a role the catalog defines: Load() unexpected error: %v", err)
+	}
+	if _, err := loadYAML(t, configYAML(t, fmt.Sprintf(flows, "officer"))); err == nil || !containsString(err.Error(), "invalid flows configuration") {
+		t.Fatalf("a role the catalog does not define: expected a flows error, got: %v", err)
 	}
 }

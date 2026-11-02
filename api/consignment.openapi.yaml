@@ -203,9 +203,9 @@ paths:
       summary: Start a flow on one of the caller's own consignments
       description: |
         Starts one of the consignment's startable flows
-        (`DetailDTO.startableFlows`, set by the deployment's
-        `consignment.flows`), e.g. a port or agency fee payment, as its own
-        workflow on the consignment. Its tasks appear in the consignment's
+        (`DetailDTO.startableFlows`: the deployment's `flows.users` listed
+        for a role the caller owns the consignment in), e.g. a port or agency
+        fee payment, as its own workflow on the consignment. Its tasks appear in the consignment's
         `workflowNodes`. A consignment that has `FINISHED` still takes new
         flows; starting one sets it back to `IN_PROGRESS`.
 
@@ -506,7 +506,8 @@ components:
           type: array
           description: >-
             The flows the caller may start on the consignment with
-            `POST /api/v1/consignments/{id}/flows`.
+            `POST /api/v1/consignments/{id}/flows`: those listed for a role
+            the caller owns it in.
           items:
             $ref: '#/components/schemas/FlowOption'
 

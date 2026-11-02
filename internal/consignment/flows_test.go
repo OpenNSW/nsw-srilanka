@@ -23,8 +23,14 @@ import (
 
 var auxFlow = FlowOption{TemplateID: "aux_flow", Label: "Auxiliary flow"}
 
-// newFlowsService is a Service whose startable flows are auxFlow, with flows recording
-// every start.
+// userFlows are the flows newFlowsService offers: aux_flow to a trader or CHA, and
+// cha_flow to a CHA only.
+var userFlows = caseflow.UserFlows{Enabled: true, Workflows: []caseflow.UserFlow{
+	{ID: "aux_flow", Label: "Auxiliary flow", Roles: []string{"trader", "cha"}},
+	{ID: "cha_flow", Label: "CHA flow", Roles: []string{"cha"}},
+}}
+
+// newFlowsService is a Service offering userFlows, with flows recording every start.
 func newFlowsService(t *testing.T) (*Service, sqlmock.Sqlmock, *caseFlowsSpy) {
 	t.Helper()
 	db, sqlMock := setupTestDB(t)
@@ -32,7 +38,7 @@ func newFlowsService(t *testing.T) (*Service, sqlmock.Sqlmock, *caseFlowsSpy) {
 	companies.On("GetCompanyByID", mock.Anything, mock.Anything).
 		Return(&company.Record{ID: "co-trader", Name: "Trader Co", Data: []byte(`{}`)}, nil).Maybe()
 	svc := mustNewService(t, db, newExportRegistry(), nil, companies, nil, nil)
-	svc.flowOptions = []FlowOption{auxFlow}
+	svc.userFlows = userFlows
 	flows := &caseFlowsSpy{}
 	require.NoError(t, svc.RegisterCaseFlows(flows))
 	return svc, sqlMock, flows
@@ -68,12 +74,36 @@ func TestStartConsignmentFlow(t *testing.T) {
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 
-	t.Run("a flow that is not startable is refused before any read", func(t *testing.T) {
+	t.Run("a flow that is not listed is refused", func(t *testing.T) {
 		svc, sqlMock, flows := newFlowsService(t)
-		_, err := svc.StartConsignmentFlow(context.Background(), uuid.NewString(), "trade-export", "co-trader", []string{"Trader"})
+		id := uuid.NewString()
+		expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
+
+		_, err := svc.StartConsignmentFlow(context.Background(), id, "trade-export", "co-trader", []string{"Trader"})
 		assert.ErrorIs(t, err, ErrFlowNotAllowed)
 		assert.Empty(t, flows.reqs)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("a flow listed for another role is refused", func(t *testing.T) {
+		svc, sqlMock, flows := newFlowsService(t)
+		id := uuid.NewString()
+		expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
+
+		_, err := svc.StartConsignmentFlow(context.Background(), id, "cha_flow", "co-trader", []string{"Trader"})
+		assert.ErrorIs(t, err, ErrFlowNotAllowed)
+		assert.Empty(t, flows.reqs)
+	})
+
+	t.Run("nothing starts while the list is off", func(t *testing.T) {
+		svc, sqlMock, flows := newFlowsService(t)
+		svc.userFlows.Enabled = false
+		id := uuid.NewString()
+		expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
+
+		_, err := svc.StartConsignmentFlow(context.Background(), id, "aux_flow", "co-trader", []string{"Trader"})
+		assert.ErrorIs(t, err, ErrFlowNotAllowed)
+		assert.Empty(t, flows.reqs)
 	})
 
 	t.Run("another company is denied", func(t *testing.T) {
@@ -135,8 +165,11 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 	})
 
 	t.Run("not startable", func(t *testing.T) {
-		svc, _, _ := newFlowsService(t)
-		w := call(t, svc, `{"templateId":"trade-export"}`, uuid.NewString())
+		svc, sqlMock, _ := newFlowsService(t)
+		id := uuid.NewString()
+		expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
+
+		w := call(t, svc, `{"templateId":"trade-export"}`, id)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
@@ -178,33 +211,27 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 	})
 }
 
+// The detail offers each reader the flows listed for a role they own the consignment in.
 func TestDetailListsStartableFlows(t *testing.T) {
-	svc, sqlMock, _ := newFlowsService(t)
-	taskStore := new(MockTaskStore)
-	svc.taskStore = taskStore
-	id := uuid.NewString()
-	expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
-	taskStore.On("GetAllTasks", mock.Anything, id).Return(nil)
-
-	got, err := svc.GetConsignmentByID(context.Background(), id, "co-trader", []string{"Trader"})
-	require.NoError(t, err)
-	assert.Equal(t, []FlowOption{auxFlow}, got.StartableFlows)
-}
-
-func TestConfigValidate(t *testing.T) {
 	for name, tc := range map[string]struct {
-		flows   []FlowOption
-		wantErr bool
+		enabled bool
+		want    []FlowOption
 	}{
-		"none":        {nil, false},
-		"valid":       {[]FlowOption{auxFlow}, false},
-		"no template": {[]FlowOption{{Label: "Pay"}}, true},
-		"no label":    {[]FlowOption{{TemplateID: "aux_flow"}}, true},
-		"duplicate":   {[]FlowOption{auxFlow, auxFlow}, true},
+		"the trader's flows":  {true, []FlowOption{auxFlow}},
+		"none while it's off": {false, []FlowOption{}},
 	} {
-		err := Config{Flows: tc.flows}.Validate()
-		if (err != nil) != tc.wantErr {
-			t.Errorf("%s: err = %v, wantErr %v", name, err, tc.wantErr)
-		}
+		t.Run(name, func(t *testing.T) {
+			svc, sqlMock, _ := newFlowsService(t)
+			svc.userFlows.Enabled = tc.enabled
+			taskStore := new(MockTaskStore)
+			svc.taskStore = taskStore
+			id := uuid.NewString()
+			expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
+			taskStore.On("GetAllTasks", mock.Anything, id).Return(nil)
+
+			got, err := svc.GetConsignmentByID(context.Background(), id, "co-trader", []string{"Trader"})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got.StartableFlows)
+		})
 	}
 }

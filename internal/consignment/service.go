@@ -59,15 +59,15 @@ type Service struct {
 	// tasks closes a task from outside its workflow for ForceParkTaskNode.
 	tasks TaskCanceller
 	roles map[string]string // logical name ("trader"/"cha") -> IdP token role
-	// flowOptions are the flows a trader or CHA may start on a consignment (Config.Flows).
-	flowOptions []FlowOption
+	// userFlows are the flows a trader or CHA may start on a consignment (flows.users).
+	userFlows caseflow.UserFlows
 }
 
 // NewService creates a new instance of Service. roles is the global catalog's Roles
 // map; it must define "trader" and "cha" (validated via validateRoles, the same
 // function NewRouter uses) so GetConsignmentByID can tie a caller's matched company
-// slot to the JWT role required for that slot. flowOptions are the flows a trader or CHA
-// may start on a consignment (Config.Flows).
+// slot to the JWT role required for that slot. userFlows are the flows a trader or CHA may
+// start on a consignment (flows.users).
 func NewService(
 	db *gorm.DB,
 	artifacts *artifact.Set,
@@ -76,13 +76,13 @@ func NewService(
 	userService user.Service,
 	taskStore TaskStore,
 	roles map[string]string,
-	flowOptions []FlowOption,
+	userFlows caseflow.UserFlows,
 ) (*Service, error) {
 	if err := validateRoles(roles); err != nil {
 		return nil, err
 	}
 	return &Service{
-		flowOptions:    flowOptions,
+		userFlows:      userFlows,
 		db:             db,
 		artifacts:      artifacts,
 		chaService:     chaService,
@@ -193,7 +193,8 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		return nil, fmt.Errorf("failed to reload consignment: %w", err)
 	}
 
-	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment)
+	// Its creator is its trader.
+	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment, s.userFlows.Startable([]string{partyRoleTrader}))
 	if err != nil {
 		return nil, err
 	}
@@ -215,36 +216,44 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorize(consignment, callerCompanyID, callerRoles); err != nil {
+	owned, err := s.authorize(consignment, callerCompanyID, callerRoles)
+	if err != nil {
 		return nil, err
 	}
-	return s.buildConsignmentResponse(ctx, consignment)
+	return s.buildConsignmentResponse(ctx, consignment, s.userFlows.Startable(owned))
 }
 
 // authorize is GetConsignmentByID's access check (see there): the caller's company must be
 // the consignment's trader company with the "trader" role, or its CHA company with the "cha"
-// role. It returns ErrAccessDenied otherwise.
-func (s *Service) authorize(consignment *Consignment, callerCompanyID string, callerRoles []string) error {
+// role. It returns the logical roles the caller owns the consignment in, or ErrAccessDenied
+// when there are none.
+func (s *Service) authorize(consignment *Consignment, callerCompanyID string, callerRoles []string) ([]string, error) {
 	// The empty-callerCompanyID guard documents the invariant the check relies on (a
 	// resolved company always has a non-null id) and ensures an empty caller id can never
 	// match an unassigned (empty) CHA company.
 	if callerCompanyID == "" {
-		return ErrAccessDenied
+		return nil, ErrAccessDenied
 	}
 	chaCompanyID := ""
 	if consignment.CHACompanyID != nil {
 		chaCompanyID = *consignment.CHACompanyID
 	}
-	isTraderMatch := callerCompanyID == consignment.TraderCompanyID && slices.Contains(callerRoles, s.roles["trader"])
-	isCHAMatch := callerCompanyID == chaCompanyID && slices.Contains(callerRoles, s.roles["cha"])
-	if !isTraderMatch && !isCHAMatch {
-		return ErrAccessDenied
+	var owned []string
+	if callerCompanyID == consignment.TraderCompanyID && slices.Contains(callerRoles, s.roles[partyRoleTrader]) {
+		owned = append(owned, partyRoleTrader)
 	}
-	return nil
+	if callerCompanyID == chaCompanyID && slices.Contains(callerRoles, s.roles[partyRoleCHA]) {
+		owned = append(owned, partyRoleCHA)
+	}
+	if len(owned) == 0 {
+		return nil, ErrAccessDenied
+	}
+	return owned, nil
 }
 
-// StartConsignmentFlow starts one of the configured flows (Config.Flows) on a consignment for
-// a trader or CHA caller, under the same access check as GetConsignmentByID. The caller only
+// StartConsignmentFlow starts one of the configured flows (flows.users) on a consignment for
+// a trader or CHA caller, under the same access check as GetConsignmentByID, and only a flow
+// listed for a role the caller owns the consignment in. The caller only
 // picks the flow: its variables are set here, from the consignment (consignmentId and the
 // trader company, as the export flow gets), never from the request, so a caller cannot pre-set
 // state the flow trusts. Anything the caller supplies is collected by the flow's own tasks. A
@@ -253,9 +262,6 @@ func (s *Service) authorize(consignment *Consignment, callerCompanyID string, ca
 func (s *Service) StartConsignmentFlow(
 	ctx context.Context, consignmentID, templateID string, callerCompanyID string, callerRoles []string,
 ) (*FlowDTO, error) {
-	if !slices.ContainsFunc(s.flowOptions, func(o FlowOption) bool { return o.TemplateID == templateID }) {
-		return nil, fmt.Errorf("%w: %q", ErrFlowNotAllowed, templateID)
-	}
 	if s.flows == nil {
 		return nil, fmt.Errorf("no case flows registered for ConsignmentService")
 	}
@@ -263,8 +269,12 @@ func (s *Service) StartConsignmentFlow(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authorize(consignment, callerCompanyID, callerRoles); err != nil {
+	owned, err := s.authorize(consignment, callerCompanyID, callerRoles)
+	if err != nil {
 		return nil, err
+	}
+	if _, ok := s.userFlows.Find(templateID, owned); !ok {
+		return nil, fmt.Errorf("%w: %q", ErrFlowNotAllowed, templateID)
 	}
 
 	traderCompany, err := s.companyService.GetCompanyByID(ctx, consignment.TraderCompanyID)
@@ -292,7 +302,8 @@ func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID 
 	if err != nil {
 		return nil, err
 	}
-	detail, err := s.buildConsignmentResponse(ctx, consignment)
+	// The admin view starts no flows, but lists every one a trader or CHA could.
+	detail, err := s.buildConsignmentResponse(ctx, consignment, s.userFlows.Startable([]string{partyRoleTrader, partyRoleCHA}))
 	if err != nil {
 		return nil, err
 	}
@@ -397,8 +408,10 @@ func (s *Service) fetchConsignmentRecord(ctx context.Context, consignmentID stri
 	return &consignment, nil
 }
 
-func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Consignment) (*DetailDTO, error) {
-	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment)
+// buildConsignmentResponse builds consignment's detail. startable are the flows the reader
+// may start on it (DetailDTO.StartableFlows).
+func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Consignment, startable []caseflow.UserFlow) (*DetailDTO, error) {
+	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment, startable)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build consignment response DTO: %w", err)
 	}
@@ -540,10 +553,12 @@ func callerRolesOn(traderCompanyID, chaCompanyID string, filter Filter) []string
 	return roles
 }
 
-// buildConsignmentDetailDTO builds a DetailDTO from a Consignment.
+// buildConsignmentDetailDTO builds a DetailDTO from a Consignment. startable are the flows
+// the reader may start on it.
 func (s *Service) buildConsignmentDetailDTO(
 	ctx context.Context,
 	consignment *Consignment,
+	startable []caseflow.UserFlow,
 ) (*DetailDTO, error) {
 	nodeResponseDTOs, err := s.buildNodeDTOsFromTaskRecords(ctx, consignment.ID)
 	if err != nil {
@@ -571,7 +586,7 @@ func (s *Service) buildConsignmentDetailDTO(
 		CreatedAt:       consignment.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       consignment.UpdatedAt.Format(time.RFC3339),
 		WorkflowNodes:   nodeResponseDTOs,
-		StartableFlows:  append([]FlowOption{}, s.flowOptions...),
+		StartableFlows:  flowOptions(startable),
 	}, nil
 }
 
