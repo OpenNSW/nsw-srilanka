@@ -269,7 +269,7 @@ func TestHscodeSplitBuilderFunc_ReplacesDropsTheReplacedWorkflow(t *testing.T) {
 	}
 }
 
-func TestHscodeSplitBuilderFunc_RejectsAReplacesRuleThatDependsOnOrder(t *testing.T) {
+func TestHscodeSplitBuilderFunc_RejectsAnAmbiguousReplacesRule(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		replaces string

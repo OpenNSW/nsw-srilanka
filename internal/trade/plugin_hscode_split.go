@@ -130,9 +130,9 @@ func resolveTemplates(items []any, mappings map[string][]string) ([]string, erro
 	return templates, nil
 }
 
-// validateReplaces rejects a replaces rule that could depend on the order it is
-// read in: a workflow replacing itself, or one that replaces others while another
-// replaces it.
+// validateReplaces rejects a replaces rule with no single reading: a workflow
+// replacing itself, or one that replaces others while another replaces it, which
+// leaves open whether a workflow that is dropped still drops the ones it replaces.
 func validateReplaces(replaces map[string][]string) error {
 	replaced := make(map[string]bool)
 	for wf, others := range replaces {
