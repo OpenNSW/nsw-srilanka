@@ -35,7 +35,7 @@ func mountTNSW(
 	mux *http.ServeMux,
 	h tnswHandlers,
 	withAuth func(http.Handler) http.Handler,
-	withScope func(string) func(http.Handler) http.Handler,
+	withScope func(scopes.Name) func(http.Handler) http.Handler,
 ) {
 	// Uploads by machine clients, such as an agency forwarding its officers'
 	// files. Not served when this deployment has no storage of its own.

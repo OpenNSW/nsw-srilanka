@@ -317,6 +317,26 @@ backend:
         sltb: SLTB_TO_NSW
         slce: SLCE_TO_NSW
         govpay: GOVPAY_TO_NSW
+      # The scope each route requires, by logical name, as this deployment's IdP
+      # names it. Name one for every route this mode serves: the server refuses to
+      # start, listing the missing keys, while any is unset.
+      scopes:
+        taskRead: task:read
+        taskWrite: task:write
+        profileRead: profile:read
+        storageRead: storage:read
+        storageWrite: storage:write
+        storageInternalWrite: storage:internalwrite
+        consignmentRead: consignment:read
+        consignmentWrite: consignment:write
+        consignmentFlowWrite: consignment:flow:write
+        consignmentAdminRead: consignment:adminread
+        consignmentAdminWrite: consignment:adminwrite
+        companyRead: company:read
+        chaRead: cha:read
+        slceWebhooksWrite: slce-webhooks:write
+        paymentWebhooksValidate: payment-webhooks:validate
+        paymentWebhooksProcess: payment-webhooks:process
 
     # Workflow/form definitions and manifest.json, fetched at startup from
     # OpenNSW/one-trade-artifacts (tnsw/ base path) rather than baked into the
@@ -694,7 +714,7 @@ frontend:
     # The `resource` value must equal backend.config.authn.audience / the NSW_API resource-server identifier.
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     APP_URL: "https://trader.example.com"
-    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,hscode:read,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
     # The scope each screen and action needs: the portal shows it only to a user
     # the IdP granted that scope. A SCOPE_* key left unset hides its screen or
     # action from everyone (an agency portal leaves out the create, flow and admin keys).

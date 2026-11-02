@@ -46,8 +46,8 @@ next free slot; if main adds its own `000018`, renumber this one after the merge
 ## Running as an agency
 
 Set `mode: agency` in `config.yaml` (`backend.config` in the Helm values), then
-give it the agency's own catalog (the token roles and TNSW's client) and artifacts, and
-the agency API's identifier as its audience:
+give it the agency's own catalog (the token roles, TNSW's client and the scope each route
+requires) and artifacts, and the agency API's identifier as its audience:
 
 ```yaml
 catalog:
@@ -55,6 +55,14 @@ catalog:
     officer: Officer
   clients:
     tnsw: NSW_TO_AGENCY
+  scopes:
+    workflowInject: workflow:inject
+    consignmentRead: consignment:read
+    taskRead: task:read
+    taskWrite: task:write
+    profileRead: profile:read
+    storageRead: storage:read
+    storageWrite: storage:write
 artifactLoader:
   type: local
   local:

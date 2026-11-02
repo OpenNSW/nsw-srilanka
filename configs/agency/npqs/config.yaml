@@ -92,6 +92,17 @@ catalog:
     officer: NPQS Officer
   clients:
     tnsw: NSW_TO_NPQS
+  # The scope each route requires, by logical name, as this deployment's IdP
+  # names it. Name one for every route this mode serves: the server refuses to
+  # start, listing the missing keys, while any is unset.
+  scopes:
+    workflowInject: workflow:inject
+    consignmentRead: consignment:read
+    taskRead: task:read
+    taskWrite: task:write
+    profileRead: profile:read
+    storageRead: storage:read
+    storageWrite: storage:write
 
 # The npqs folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's

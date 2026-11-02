@@ -255,3 +255,19 @@ func TestLoad_FlowsAreCheckedAgainstTheCatalog(t *testing.T) {
 		t.Fatalf("a role the catalog does not define: expected a flows error, got: %v", err)
 	}
 }
+
+// catalog.scopes may only name the scopes routes require: a key that names none,
+// such as a typo, stops the load.
+func TestLoad_CatalogScopesAreChecked(t *testing.T) {
+	const scopesYAML = "catalog:\n  scopes:\n    %s: flows:start\n"
+	cfg, err := loadYAML(t, configYAML(t, fmt.Sprintf(scopesYAML, "consignmentFlowWrite")))
+	if err != nil {
+		t.Fatalf("a scope routes require: Load() unexpected error: %v", err)
+	}
+	if got := cfg.Catalog.Scopes["consignmentFlowWrite"]; got != "flows:start" {
+		t.Errorf("catalog.scopes.consignmentFlowWrite = %q, want %q", got, "flows:start")
+	}
+	if _, err := loadYAML(t, configYAML(t, fmt.Sprintf(scopesYAML, "consignmentFlowWirte"))); err == nil || !containsString(err.Error(), `scopes["consignmentFlowWirte"]`) {
+		t.Fatalf("a key that names no scope: expected a catalog error naming it, got: %v", err)
+	}
+}

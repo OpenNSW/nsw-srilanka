@@ -40,10 +40,10 @@ func mountAgency(
 	tasks agency.TaskLister,
 	roles map[string]string,
 	withAuth func(http.Handler) http.Handler,
-	withScope func(string) func(http.Handler) http.Handler,
+	withScope func(scopes.Name) func(http.Handler) http.Handler,
 ) {
 	svc := agency.NewService(agency.NewRepository(db), artifacts, wm)
-	mux.Handle("POST /api/v1/inject", withAuth(withScope(agency.ScopeWorkflowInject)(http.HandlerFunc(svc.HandleInject))))
+	mux.Handle("POST /api/v1/inject", withAuth(withScope(scopes.WorkflowInject)(http.HandlerFunc(svc.HandleInject))))
 
 	// ConsignmentRead is the read scope the portal's token already carries; the
 	// handler additionally requires the token role of any catalog role.

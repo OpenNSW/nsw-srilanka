@@ -1,7 +1,7 @@
 // Package catalog holds the deployment's global catalog: the single source of
 // truth mapping the stable logical names used across configuration onto one
-// deployment's concrete identifiers — IdP token roles and OAuth2 client ids
-// today, further sections later.
+// deployment's concrete identifiers — IdP token roles, OAuth2 client ids and the
+// scopes routes require today, further sections later.
 //
 // It is the catalog section of config.yaml, decoded with the rest of the config
 // and handed to consumers as data. Unknown keys are ignored, so the section may
@@ -22,6 +22,11 @@ type Catalog struct {
 	// Clients maps a logical principal name ("fcau") to the OAuth2 client id
 	// presented by an M2M caller ("FCAU_TO_NSW").
 	Clients map[string]string `yaml:"clients"`
+	// Scopes maps a logical scope ("consignmentRead") to the scope this deployment's
+	// IdP grants for it ("consignment:read"). Every route the deployment serves
+	// requires one: internal/scopes checks the keys when the config loads, and Build
+	// refuses to start while a served route's scope is missing.
+	Scopes map[string]string `yaml:"scopes"`
 }
 
 // RequireRoles reports an error unless roles — the catalog's Roles map — defines

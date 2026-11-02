@@ -523,11 +523,10 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to create authz: %w", err)
 	}
-	// withScope returns a middleware requiring the given scope; compose after withAuth
-	// so the authn context is already injected when the scope check runs.
-	withScope := func(scope string) func(http.Handler) http.Handler {
-		return authzr.RequireScope(scope)
-	}
+	// Each route requires the scope catalog.scopes names for its logical scope (see
+	// scopeGates).
+	gates := newScopeGates(scopes.NewResolver(globalCatalog.Scopes), authzr.RequireScope)
+	withScope := gates.withScope
 
 	mux := http.NewServeMux()
 
@@ -593,6 +592,16 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 			slpa:        slpaHandler,
 			files:       fileHandler,
 		}, withAuth, withScope)
+	}
+
+	// Every route this mode serves is wired now, so these are all the scopes it requires.
+	if err := gates.err(); err != nil {
+		_ = stopParentRunner()
+		_ = stopTask()
+		temporalClient.Close()
+		_ = authnManager.Close()
+		_ = database.Close(db)
+		return nil, err
 	}
 
 	// When using local storage, these endpoints serve as mocks for S3, at

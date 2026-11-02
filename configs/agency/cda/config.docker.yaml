@@ -95,6 +95,17 @@ catalog:
     officer: CDA Officer
   clients:
     tnsw: NSW_TO_CDA
+  # The scope each route requires, by logical name, as this deployment's IdP
+  # names it. Name one for every route this mode serves: the server refuses to
+  # start, listing the missing keys, while any is unset.
+  scopes:
+    workflowInject: workflow:inject
+    consignmentRead: consignment:read
+    taskRead: task:read
+    taskWrite: task:write
+    profileRead: profile:read
+    storageRead: storage:read
+    storageWrite: storage:write
 
 # The cda folder of a one-trade-artifacts clone, which compose bind-mounts
 # at /app/artifacts: ../one-trade-artifacts/cda by default, or set

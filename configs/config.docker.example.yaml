@@ -216,6 +216,26 @@ catalog:
     sltb: SLTB_TO_NSW
     slce: SLCE_TO_NSW
     govpay: GOVPAY_TO_NSW
+  # The scope each route requires, by logical name, as this deployment's IdP
+  # names it. Name one for every route this mode serves: the server refuses to
+  # start, listing the missing keys, while any is unset.
+  scopes:
+    taskRead: task:read
+    taskWrite: task:write
+    profileRead: profile:read
+    storageRead: storage:read
+    storageWrite: storage:write
+    storageInternalWrite: storage:internalwrite
+    consignmentRead: consignment:read
+    consignmentWrite: consignment:write
+    consignmentFlowWrite: consignment:flow:write
+    consignmentAdminRead: consignment:adminread
+    consignmentAdminWrite: consignment:adminwrite
+    companyRead: company:read
+    chaRead: cha:read
+    slceWebhooksWrite: slce-webhooks:write
+    paymentWebhooksValidate: payment-webhooks:validate
+    paymentWebhooksProcess: payment-webhooks:process
 
 # Where artifacts (workflow definitions, templates, manifest.json) are fetched
 # from at startup: local | github | s3. Only the settings for the selected type

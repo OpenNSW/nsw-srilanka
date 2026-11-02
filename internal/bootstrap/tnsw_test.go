@@ -41,10 +41,11 @@ func stubAuth(next http.Handler) http.Handler {
 // scopeRefusedHeader names the scope stubScope refused a request for.
 const scopeRefusedHeader = "X-Scope-Refused"
 
-// stubScope admits a request whose X-Scopes header names scope: callers present
-// the scopes they hold in that header. It refuses any other with 403, naming
-// scope in scopeRefusedHeader.
-func stubScope(scope string) func(http.Handler) http.Handler {
+// stubScope admits a request whose X-Scopes header names the logical scope name:
+// callers present the scopes they hold in that header. It refuses any other with
+// 403, naming name in scopeRefusedHeader.
+func stubScope(name scopes.Name) func(http.Handler) http.Handler {
+	scope := string(name)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !slices.Contains(strings.Fields(r.Header.Get("X-Scopes")), scope) {
@@ -71,10 +72,10 @@ func TestMountTNSW_InternalUpload(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mountTNSW(mux, tnswHandlers{files: nswstorage.NewFileHandler(nil, refsStub{}, nswstorage.WithMachineUploads(uploaderStub{}))}, stubAuth, stubScope)
-	if got := post(mux, scopes.StorageInternalWrite); got != http.StatusOK {
+	if got := post(mux, string(scopes.StorageInternalWrite)); got != http.StatusOK {
 		t.Errorf("with %s: status %d, want %d", scopes.StorageInternalWrite, got, http.StatusOK)
 	}
-	if got := post(mux, scopes.StorageWrite); got != http.StatusForbidden {
+	if got := post(mux, string(scopes.StorageWrite)); got != http.StatusForbidden {
 		t.Errorf("with only %s: status %d, want %d", scopes.StorageWrite, got, http.StatusForbidden)
 	}
 	if got := post(mux, ""); got != http.StatusForbidden {
@@ -84,7 +85,7 @@ func TestMountTNSW_InternalUpload(t *testing.T) {
 	// Without uploads of its own, a deployment does not serve the route.
 	mux = http.NewServeMux()
 	mountTNSW(mux, tnswHandlers{files: nswstorage.NewFileHandler(nil, refsStub{})}, stubAuth, stubScope)
-	if got := post(mux, scopes.StorageInternalWrite); got != http.StatusNotFound {
+	if got := post(mux, string(scopes.StorageInternalWrite)); got != http.StatusNotFound {
 		t.Errorf("with no uploads: status %d, want %d (not served)", got, http.StatusNotFound)
 	}
 }
@@ -104,10 +105,11 @@ func TestMountTNSW_StartFlowScope(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mountTNSW(mux, tnswHandlers{files: nswstorage.NewFileHandler(nil, refsStub{})}, stubAuth, stubScope)
-	if got := refusedFor(mux, scopes.ConsignmentFlowWrite); got != "" {
-		t.Errorf("with %s: refused for %q, want admitted", scopes.ConsignmentFlowWrite, got)
+	flow := string(scopes.ConsignmentFlowWrite)
+	if got := refusedFor(mux, flow); got != "" {
+		t.Errorf("with %s: refused for %q, want admitted", flow, got)
 	}
-	if got := refusedFor(mux, scopes.ConsignmentWrite); got != scopes.ConsignmentFlowWrite {
-		t.Errorf("with only %s: refused for %q, want %q", scopes.ConsignmentWrite, got, scopes.ConsignmentFlowWrite)
+	if got := refusedFor(mux, string(scopes.ConsignmentWrite)); got != flow {
+		t.Errorf("with only %s: refused for %q, want %q", string(scopes.ConsignmentWrite), got, flow)
 	}
 }

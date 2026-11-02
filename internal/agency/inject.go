@@ -21,11 +21,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig/taskconfigart"
 )
 
-// ScopeWorkflowInject gates POST /api/v1/inject. An inject starts one workflow (and
-// creates or joins its case as a side effect), so the scope names the workflow. It is
-// an M2M permission, kept apart from the officer's task:* scopes.
-const ScopeWorkflowInject = "workflow:inject"
-
 const (
 	errInvalidBody        = "invalid request body"
 	errTaskIDRequired     = "taskId is required"

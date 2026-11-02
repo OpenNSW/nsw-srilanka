@@ -21,6 +21,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
+	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 )
@@ -252,6 +253,9 @@ func (c *Config) validateAuxiliary() error {
 	}
 	if err := c.Flows.Validate(&c.Catalog); err != nil {
 		return fmt.Errorf("invalid flows configuration: %w", err)
+	}
+	if err := scopes.Validate(c.Catalog.Scopes); err != nil {
+		return fmt.Errorf("invalid catalog configuration: %w", err)
 	}
 	return nil
 }

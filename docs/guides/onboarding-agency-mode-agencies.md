@@ -372,13 +372,22 @@ backend:
       writeTimeout: 30s
       idleTimeout: 60s
     # Each role the agency's tasks name, mapped to its IdP role's name exactly as
-    # created in Step 2f, and tnsw to the TNSW-to-agency client, whose replies the
-    # tasks' waiting steps accept.
+    # created in Step 2f, tnsw to the TNSW-to-agency client, whose replies the
+    # tasks' waiting steps accept, and the scope each route requires, as the
+    # agency's API resource server names it.
     catalog:
       roles:
         officer: DEA Officer
       clients:
         tnsw: NSW_TO_DEA_M2M
+      scopes:
+        workflowInject: workflow:inject
+        consignmentRead: consignment:read
+        taskRead: task:read
+        taskWrite: task:write
+        profileRead: profile:read
+        storageRead: storage:read
+        storageWrite: storage:write
     services:
       - id: tnsw
         url: https://nsw-api.example.com
