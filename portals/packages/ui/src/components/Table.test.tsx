@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { LinkRow, RowLink } from './LinkRow'
@@ -49,12 +50,13 @@ describe('Table', () => {
     expect(screen.getByText('Opened')).toBeTruthy()
   })
 
-  it("reaches a LinkRow's page through its RowLink, for keyboard users", () => {
+  it("opens a LinkRow's page from the keyboard: Tab to its RowLink, then Enter", async () => {
+    const user = userEvent.setup()
     renderAt('/consignments')
 
-    const link = screen.getByRole('link', { name: 'CN-1' })
-    expect(link.getAttribute('href')).toBe('/consignments/CN-1')
-    fireEvent.click(link)
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('link', { name: 'CN-1' }))
+    await user.keyboard('{Enter}')
     expect(screen.getByText('Opened')).toBeTruthy()
   })
 })

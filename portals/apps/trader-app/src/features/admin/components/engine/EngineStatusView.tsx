@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, IconButton, Text, Tooltip } from '@radix-ui/themes'
-import { PageState } from '@portals/ui'
-import { DoubleArrowDownIcon, DoubleArrowUpIcon, EyeNoneIcon, EyeOpenIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { Badge, IconButton, Text, Tooltip } from '@radix-ui/themes'
+import { PageState, RefreshButton } from '@portals/ui'
+import { DoubleArrowDownIcon, DoubleArrowUpIcon, EyeNoneIcon, EyeOpenIcon } from '@radix-ui/react-icons'
 import { getWorkflowEngineStatus } from '@/features/admin/service'
 import type { EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
 import { NodeRow } from '@/features/admin/components/engine/NodeRow'
@@ -130,10 +130,7 @@ export function EngineStatusView({
             variables={status.global_variables}
             onOpen={setVariablesTarget}
           />
-          <Button variant="soft" color="blue" size="2" onClick={() => void refresh()} disabled={refreshing}>
-            <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
+          <RefreshButton label="Refresh" refreshing={refreshing} onClick={() => void refresh()} showLabel />
           <Tooltip content={expandSignal.expand ? 'Collapse all' : 'Expand all'}>
             <IconButton
               variant="ghost"

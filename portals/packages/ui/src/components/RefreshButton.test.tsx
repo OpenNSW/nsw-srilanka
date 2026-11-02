@@ -27,4 +27,18 @@ describe('RefreshButton', () => {
     expect(button.disabled).toBe(true)
     expect(button.querySelector('svg')?.getAttribute('class')).toContain('animate-spin')
   })
+
+  it('shows its label as text with showLabel', () => {
+    const onClick = vi.fn()
+    render(
+      <Theme>
+        <RefreshButton label="Refresh" refreshing={false} onClick={onClick} showLabel />
+      </Theme>,
+    )
+
+    const button = screen.getByRole('button', { name: 'Refresh' })
+    expect(button.textContent).toBe('Refresh')
+    fireEvent.click(button)
+    expect(onClick).toHaveBeenCalledOnce()
+  })
 })
