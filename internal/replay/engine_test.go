@@ -326,6 +326,78 @@ func (f *fakeGateway) Pay(_ context.Context, taskID, method, status string, _ ti
 	return nil
 }
 
+// An upload reserves the file as the actor, PUTs its bytes to the presigned URL
+// without the actor, and captures the file's reference.
+func TestDoUpload(t *testing.T) {
+	var reserveActor, putActor, putType, putBody string
+	var reserved map[string]any
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/storage":
+			reserveActor = r.Header.Get(AuthActorHeader)
+			_ = json.NewDecoder(r.Body).Decode(&reserved)
+			_ = json.NewEncoder(w).Encode(map[string]any{"key": "ref-1", "upload_url": srv.URL + "/content/k1?token=t"})
+		case r.Method == http.MethodPut && r.URL.Path == "/content/k1":
+			putActor = r.Header.Get(AuthActorHeader)
+			putType = r.Header.Get("Content-Type")
+			b, _ := io.ReadAll(r.Body)
+			putBody = string(b)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	r := New(srv.URL, srv.Client())
+	err := r.doUpload(context.Background(), &Upload{
+		Actor: "trader", Filename: "cert.pdf", MimeType: "application/pdf", Content: "%PDF-1.4", Into: "cert",
+	})
+	if err != nil {
+		t.Fatalf("doUpload: %v", err)
+	}
+	if r.Vars["cert"] != "ref-1" {
+		t.Errorf("cert = %v, want ref-1", r.Vars["cert"])
+	}
+	if reserveActor != "trader" || putActor != "" {
+		t.Errorf("actors: reserve %q, put %q; want trader, none", reserveActor, putActor)
+	}
+	want := map[string]any{"filename": "cert.pdf", "mime_type": "application/pdf", "size": float64(len("%PDF-1.4"))}
+	if !reflect.DeepEqual(reserved, want) {
+		t.Errorf("reservation = %v, want %v", reserved, want)
+	}
+	if putType != "application/pdf" || putBody != "%PDF-1.4" {
+		t.Errorf("put: Content-Type %q, body %q", putType, putBody)
+	}
+
+	if err := r.doUpload(context.Background(), &Upload{Content: "x"}); err == nil {
+		t.Error("expected error without into")
+	}
+}
+
+// A refused PUT fails the upload, and no reference is captured.
+func TestDoUploadRefusedPut(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"key": "ref-1", "upload_url": srv.URL + "/content/k1"})
+	}))
+	defer srv.Close()
+
+	r := New(srv.URL, srv.Client())
+	err := r.doUpload(context.Background(), &Upload{Filename: "a.pdf", MimeType: "application/pdf", Content: "x", Into: "cert"})
+	if err == nil {
+		t.Fatal("expected error when the PUT is refused")
+	}
+	if _, ok := r.Vars["cert"]; ok {
+		t.Error("a failed upload captured a reference")
+	}
+}
+
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
