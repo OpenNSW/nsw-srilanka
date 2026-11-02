@@ -61,6 +61,23 @@ describe('ProfileProvider', () => {
     expect(mockGetProfile).not.toHaveBeenCalled()
   })
 
+  it('drops the profile, and refetches nothing, once the user loses the scope to read it', async () => {
+    mockGetProfile.mockResolvedValue(makeProfile('user-1'))
+
+    const { result, rerender } = renderHook(() => useProfile(), { wrapper })
+    await waitFor(() => expect(result.current.profile).toEqual(makeProfile('user-1')))
+
+    auth.scope = 'openid consignment:adminread'
+    rerender()
+
+    expect(result.current.profile).toBeNull()
+    await act(async () => {
+      await result.current.refetch()
+    })
+    expect(result.current.profile).toBeNull()
+    expect(mockGetProfile).toHaveBeenCalledTimes(1)
+  })
+
   it('exposes a failed load as an error', async () => {
     mockGetProfile.mockRejectedValue(new Error('unauthorized'))
 
