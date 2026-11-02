@@ -37,8 +37,9 @@ mode: tnsw
 
 server:
   port: 8080
-  # debug | info | warn | error. Audit records (category=audit) are written
-  # at info, so warn or error drops them. Startup logs that at this level.
+  # debug | info | warn | error. Filters the system stream (category=system)
+  # and security lines on that stream. Audit (category=audit) is OTLP-only and
+  # is not filtered by this level; with export off, startup warns once.
   logLevel: debug
   # This API's own base URL, as its callers reach it.
   serviceURL: http://localhost:8080
