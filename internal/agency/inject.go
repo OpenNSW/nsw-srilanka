@@ -23,8 +23,8 @@ import (
 
 // ScopeWorkflowInject gates POST /api/v1/inject. An inject starts one workflow (and
 // creates or joins its case as a side effect), so the scope names the workflow. It is
-// an M2M permission, kept apart from the officer's nsw:task:* scopes.
-const ScopeWorkflowInject = "nsw:workflow:inject"
+// an M2M permission, kept apart from the officer's task:* scopes.
+const ScopeWorkflowInject = "workflow:inject"
 
 const (
 	errInvalidBody        = "invalid request body"

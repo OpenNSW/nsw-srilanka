@@ -41,7 +41,7 @@ paths:
         Where the task can be claimed, the response says who holds its claim
         (`claim`).
 
-        Requires scope `nsw:task:read`.
+        Requires scope `task:read`.
       operationId: getTask
       parameters:
         - $ref: '#/components/parameters/TaskID'
@@ -65,7 +65,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:task:read`.
+          description: Forbidden. The bearer token lacks scope `task:read`.
           content:
             application/json:
               schema:
@@ -108,7 +108,7 @@ paths:
         it stands for is what gets stored. A value that is not a reference,
         such as a raw storage key, is refused with 400.
 
-        Requires scope `nsw:task:write`.
+        Requires scope `task:write`.
       operationId: completeTaskStep
       parameters:
         - $ref: '#/components/parameters/TaskID'
@@ -203,7 +203,7 @@ paths:
 
         Declared file fields follow the same rule as a submission.
 
-        Requires scope `nsw:task:write`.
+        Requires scope `task:write`.
       operationId: saveTaskStepDraft
       parameters:
         - $ref: '#/components/parameters/TaskID'
@@ -297,7 +297,7 @@ paths:
         submitted, such as one an upload returned. A reference the dispatch
         carried can only be opened, so it can't be sent back.
 
-        Requires scope `nsw:task:write`.
+        Requires scope `task:write`.
       operationId: completeTaskStepByCallbackToken
       parameters:
         - name: token
@@ -393,7 +393,7 @@ paths:
 
         The task view changes with the claim, so refetch the task afterwards.
 
-        Requires scope `nsw:task:write`.
+        Requires scope `task:write`.
       operationId: claimTask
       parameters:
         - $ref: '#/components/parameters/TaskID'
@@ -414,7 +414,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            The bearer token lacks scope `nsw:task:write`, or the caller is a
+            The bearer token lacks scope `task:write`, or the caller is a
             client (only users can claim tasks).
           content:
             application/json:
@@ -455,7 +455,7 @@ paths:
         release it. Nobody releases another user's claim: they claim the task
         to take it over.
 
-        Requires scope `nsw:task:write`.
+        Requires scope `task:write`.
       operationId: releaseTask
       parameters:
         - $ref: '#/components/parameters/TaskID'
@@ -477,7 +477,7 @@ paths:
         '403':
           description: |
             Another user holds the claim, the bearer token lacks scope
-            `nsw:task:write`, or the caller is a client.
+            `task:write`, or the caller is a client.
           content:
             application/json:
               schema:

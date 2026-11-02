@@ -56,7 +56,7 @@ Put it directly under `## [Unreleased]` — moving in anything already there —
 
 The difference between a deployer's line and a restated PR title:
 
-- Deployer's line: "Resolving a parked workflow step needs the new `nsw:consignment:adminwrite` scope: add it to the `NSW Admin` role in ThunderID, and have admins sign in again. ([#489](https://github.com/OpenNSW/nsw-srilanka/pull/489))"
+- Deployer's line: "Resolving a parked workflow step needs the new `consignment:adminwrite` scope: add it to the `NSW Admin` role in ThunderID, and have admins sign in again. ([#489](https://github.com/OpenNSW/nsw-srilanka/pull/489))"
 - Restated title (avoid): "feat(admin): resolve nodes parked for admin intervention (backend) [Part 1/2] (#489)"
 
 Set `version.txt` to `vX.Y.Z`, the tag name; the CHANGELOG heading stays `X.Y.Z`. Merging the release PR is what releases that version.

@@ -229,7 +229,7 @@ backend:
       # browser opens as a document, such as text/html for the documents an
       # agency's HTML_DOCUMENT_GENERATOR generates and stores here (the route
       # is for files a deployment generates itself); only the clients named,
-      # holding nsw:storage:internalwrite, can store it.
+      # holding storage:internalwrite, can store it.
       allowedInternalUploadTypes:
         npqs:
           - text/html
@@ -359,8 +359,8 @@ backend:
             clientID: NSW_TO_NPQS
             clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.npqs.nsw-agency.local
       - id: fcau
@@ -373,8 +373,8 @@ backend:
             clientID: NSW_TO_FCAU
             clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.fcau.nsw-agency.local
       - id: cda
@@ -387,8 +387,8 @@ backend:
             clientID: NSW_TO_CDA
             clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.cda.nsw-agency.local
       - id: slpa
@@ -410,8 +410,8 @@ backend:
             clientID: NSW_TO_EFC
             clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.efc.nsw-agency.local
       - id: customs-asycuda
@@ -441,8 +441,8 @@ backend:
             clientID: NSW_TO_SLTB
             clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.sltb.nsw-agency.local
 
@@ -694,7 +694,7 @@ frontend:
     # The `resource` value must equal backend.config.authn.audience / the NSW_API resource-server identifier.
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     APP_URL: "https://trader.example.com"
-    IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,consignment:write,task:read,task:write,hscode:read,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
     SHOW_AUTOFILL_BUTTON: "false"
     # "true" shows the demo color-scheme picker in the footer; leave it off in a real deployment.
     SHOW_COLOR_SCHEME_SWITCHER: "false"
