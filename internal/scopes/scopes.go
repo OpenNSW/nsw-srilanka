@@ -1,9 +1,9 @@
 // Package scopes defines the NSW API OAuth2 scope constants.
 //
 // These values must stay in sync with the NSW_API resource server defined in
-// idp/bootstrap/10-nsw-platform.yaml (nsw:* namespace). Each constant corresponds to
-// a permission derived from a resource + action handle in the IdP, following
-// the pattern "nsw:<resource>:<action>".
+// idp/bootstrap/10-nsw-platform.yaml. Each constant corresponds to a permission
+// derived from a resource + action handle in the IdP, following the pattern
+// "<resource>:<action>".
 //
 // Scope constants are defined here (not in internal/authz) so they can be
 // imported from the composition root, tests, and any future service-layer
@@ -12,39 +12,39 @@ package scopes
 
 const (
 	// Consignment resource.
-	ConsignmentRead  = "nsw:consignment:read"
-	ConsignmentWrite = "nsw:consignment:write"
+	ConsignmentRead  = "consignment:read"
+	ConsignmentWrite = "consignment:write"
 	// ConsignmentAdminRead grants ops/admin visibility into any consignment's raw
 	// workflow-engine state, unlike ConsignmentRead which is scoped to the caller's
 	// own trader/CHA-owned consignments.
-	ConsignmentAdminRead = "nsw:consignment:adminread"
+	ConsignmentAdminRead = "consignment:adminread"
 	// ConsignmentAdminWrite grants ops/admin the ability to resolve a node parked
 	// in AWAITING_ADMIN (RETRY/COMPLETE/ABORT) on any consignment's workflow.
-	ConsignmentAdminWrite = "nsw:consignment:adminwrite"
+	ConsignmentAdminWrite = "consignment:adminwrite"
 
 	// Task resource.
-	TaskRead  = "nsw:task:read"
-	TaskWrite = "nsw:task:write"
+	TaskRead  = "task:read"
+	TaskWrite = "task:write"
 
 	// Reference data (read-only).
-	HSCodeRead  = "nsw:hscode:read"
-	CompanyRead = "nsw:company:read"
-	CHARead     = "nsw:cha:read"
+	HSCodeRead  = "hscode:read"
+	CompanyRead = "company:read"
+	CHARead     = "cha:read"
 
 	// Profile resource (the caller's own user profile).
-	ProfileRead = "nsw:profile:read"
+	ProfileRead = "profile:read"
 
 	// Storage resource.
-	StorageRead  = "nsw:storage:read"
-	StorageWrite = "nsw:storage:write"
+	StorageRead  = "storage:read"
+	StorageWrite = "storage:write"
 	// StorageInternalWrite is the upload scope for machine clients, on the
 	// internal upload route; StorageWrite is for users.
-	StorageInternalWrite = "nsw:storage:internalwrite"
+	StorageInternalWrite = "storage:internalwrite"
 
 	// SLCE webhook resource.
-	SLCEWebhooksWrite = "nsw:slce-webhooks:write"
+	SLCEWebhooksWrite = "slce-webhooks:write"
 
 	// Payment webhook resource.
-	PaymentWebhooksValidate = "nsw:payment-webhooks:validate"
-	PaymentWebhooksProcess  = "nsw:payment-webhooks:process"
+	PaymentWebhooksValidate = "payment-webhooks:validate"
+	PaymentWebhooksProcess  = "payment-webhooks:process"
 )

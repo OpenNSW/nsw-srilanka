@@ -36,7 +36,7 @@ paths:
         the fields to display. `data[]` must contain exactly one item named
         `refNo` (alphanumeric, ≤20 characters).
 
-        Requires scope `nsw:payment-webhooks:validate`.
+        Requires scope `payment-webhooks:validate`.
       operationId: govpayValidateReference
       parameters:
         - $ref: '#/components/parameters/GatewayID'
@@ -111,7 +111,7 @@ paths:
         read when present. The call itself records the payment as successful;
         its `amount` and `currency` must match the recorded ones.
 
-        Requires scope `nsw:payment-webhooks:process`.
+        Requires scope `payment-webhooks:process`.
       operationId: govpayWebhook
       parameters:
         - $ref: '#/components/parameters/GatewayID'

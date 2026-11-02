@@ -44,7 +44,7 @@ export function getTaskWorkflowEngineStatus(
 // (child_workflow_ids), 'task' for a task workflow (task_workflow_id), which is a separate ID space
 // with its own route, like the two engine-status functions above. Required rather than defaulted, so
 // a caller can't silently address a task workflow through the workflows route. Requires
-// nsw:consignment:adminwrite.
+// consignment:adminwrite.
 export async function resolveAdminIntervention(
   workflowId: string,
   stepId: string,
@@ -67,7 +67,7 @@ export async function resolveAdminIntervention(
 // - 'workflow' (a flow or a child branch): the node's whole task is closed, so the trader or
 //   officer cannot submit it.
 // - 'task' (a task workflow): only that step parks, and the task stays open.
-// Requires nsw:consignment:adminwrite.
+// Requires consignment:adminwrite.
 export async function forceParkNode(
   workflowId: string,
   stepId: string,

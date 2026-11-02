@@ -5,14 +5,14 @@
     "clientID": "TRADER_PORTAL_APP",
     "roles": ["Trader"],
     "scopes": [
-      "nsw:consignment:read",
-      "nsw:consignment:write",
-      "nsw:task:read",
-      "nsw:task:write",
-      "nsw:company:read",
-      "nsw:cha:read",
-      "nsw:storage:read",
-      "nsw:storage:write"
+      "consignment:read",
+      "consignment:write",
+      "task:read",
+      "task:write",
+      "company:read",
+      "cha:read",
+      "storage:read",
+      "storage:write"
     ]
   }
 }

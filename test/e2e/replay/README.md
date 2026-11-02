@@ -67,7 +67,7 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
   "identity": {
     "clientID": "TRADER_PORTAL_APP",
     "roles": ["Trader"],
-    "scopes": ["nsw:consignment:read", "nsw:consignment:write", "..."]
+    "scopes": ["consignment:read", "consignment:write", "..."]
   }
 }
 ```
@@ -80,7 +80,7 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
   "identity": {
     "clientID": "FCAU_TO_NSW",
     "roles": ["AgencyM2M"],
-    "scopes": ["nsw:task:write", "nsw:consignment:read", "..."]
+    "scopes": ["task:write", "consignment:read", "..."]
   },
   "inbound": {
     "endpoint": "POST /api/v1/inject",
@@ -328,4 +328,4 @@ Uploads the way the portal does: reserves the file (`POST /api/v1/storage`), the
 
 **401 on agency callback** — the mock posts with a real agency bearer. Ensure the agency's token carries the NSW API identifier as `aud`, the `authn.audience` in `configs/config.example.yaml`.
 
-**403 on agency callback** — the token lacks `nsw:task:write`, or its client ID isn't the one the config's `catalog` maps, under `clients`, to the agency the task names.
+**403 on agency callback** — the token lacks `task:write`, or its client ID isn't the one the config's `catalog` maps, under `clients`, to the agency the task names.
