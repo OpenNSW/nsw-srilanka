@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/fields"
@@ -43,9 +44,12 @@ type slpaCaseContainersConfig struct {
 	// RegistrationTemplateID is the ECDN task, whose form lists each
 	// container by the dummy number SLPA keys the order by.
 	RegistrationTemplateID string `json:"registration_template_id"`
-	// PairingTemplateIDs are the tasks that record which real container a dummy
-	// number was consolidated to, and whether that pairing was since deleted.
-	PairingTemplateIDs []string `json:"pairing_template_ids"`
+	// ConsolidationTemplateID is the task that pairs a dummy number with a real
+	// container: it records both, and SLPA's ID for the real one.
+	ConsolidationTemplateID string `json:"consolidation_template_id"`
+	// GatePassTemplateID is the task a trader deletes a pairing from. It records
+	// the delete against SLPA's ID for the real container.
+	GatePassTemplateID string `json:"gate_pass_template_id"`
 }
 
 // Execute records the case's containers under the output namespace as
@@ -83,7 +87,17 @@ func (p *SLPACaseContainersPlugin) Execute(ctx pluginContext, configRaw json.Raw
 	return nil
 }
 
+// pairing is a real container a dummy number was consolidated to, and when.
+type pairing struct {
+	sqid, number string
+	at           time.Time
+}
+
 // caseContainers pairs each registered dummy number with its real container.
+//
+// A dummy's pairing is its latest consolidation, unless a gate pass deleted that
+// real container after it. The gate pass does not record the dummy, so a delete
+// is matched to a pairing by SLPA's ID for the real container.
 func caseContainers(tasks []store.TaskRecord, cfg slpaCaseContainersConfig) []any {
 	// Oldest first, so the containers keep the order they were registered in and
 	// the latest pairing of a container is the one read last.
@@ -93,10 +107,11 @@ func caseContainers(tasks []store.TaskRecord, cfg slpaCaseContainersConfig) []an
 
 	var dummies []string
 	seen := map[string]bool{}
-	paired := map[string]string{}
+	paired := map[string]pairing{}
+	deletedAt := map[string]time.Time{}
 	for _, t := range tasks {
-		switch {
-		case t.TaskTemplateID == cfg.RegistrationTemplateID:
+		switch t.TaskTemplateID {
+		case cfg.RegistrationTemplateID:
 			form, _ := t.Data["userform"].(map[string]any)
 			for _, row := range fields.Rows(form["containers"]) {
 				dummy := strings.TrimSpace(fields.String(row, "containerNo"))
@@ -105,35 +120,35 @@ func caseContainers(tasks []store.TaskRecord, cfg slpaCaseContainersConfig) []an
 					dummies = append(dummies, dummy)
 				}
 			}
-		case slices.Contains(cfg.PairingTemplateIDs, t.TaskTemplateID):
+		case cfg.ConsolidationTemplateID:
 			dummy := strings.TrimSpace(fields.String(t.Data, "so_container_no"))
-			if dummy != "" {
-				paired[dummy] = pairedContainer(t.Data)
+			number := strings.TrimSpace(fields.String(t.Data, "container_no"))
+			if deleted, _ := t.Data["deleted"].(bool); dummy == "" || number == "" || deleted {
+				continue
+			}
+			paired[dummy] = pairing{sqid: fields.String(t.Data, "cap_sqid"), number: number, at: t.UpdatedAt}
+		case cfg.GatePassTemplateID:
+			consolidation, _ := t.Data["consolidation"].(map[string]any)
+			if deleted, _ := consolidation["deleted"].(bool); deleted {
+				if sqid := fields.String(t.Data, "cap_id"); sqid != "" {
+					deletedAt[sqid] = t.UpdatedAt
+				}
 			}
 		}
 	}
 
 	out := make([]any, 0, len(dummies))
 	for _, dummy := range dummies {
+		realNo := ""
+		if p, ok := paired[dummy]; ok {
+			if at, deleted := deletedAt[p.sqid]; !deleted || at.Before(p.at) {
+				realNo = p.number
+			}
+		}
 		out = append(out, map[string]any{
 			"container_no":      dummy,
-			"real_container_no": paired[dummy],
+			"real_container_no": realNo,
 		})
 	}
 	return out
-}
-
-// pairedContainer reads the real container a pairing task holds, or "" when it
-// holds none: a consolidation not yet saved, or one the trader deleted. The
-// consolidation records a delete as deleted, the gate pass as
-// consolidation.deleted.
-func pairedContainer(data map[string]any) string {
-	consolidation, _ := data["consolidation"].(map[string]any)
-	if deleted, _ := data["deleted"].(bool); deleted {
-		return ""
-	}
-	if deleted, _ := consolidation["deleted"].(bool); deleted {
-		return ""
-	}
-	return strings.TrimSpace(fields.String(data, "container_no"))
 }
