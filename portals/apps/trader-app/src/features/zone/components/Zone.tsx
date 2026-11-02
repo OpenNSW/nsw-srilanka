@@ -1,5 +1,6 @@
 import type { ZoneAction, ZoneComponent } from '@/features/zone/types'
 import { isStepperUiSchema } from '@opennsw/jsonforms-renderers'
+import { Surface } from '@portals/ui'
 import { renderZoneComponent } from './renderers'
 
 type Props = {
@@ -21,7 +22,7 @@ export function Zone({ component, onAction }: Props) {
       {component.type === 'FORM' && isStepperUiSchema(component.payload.uiSchema) ? (
         renderZoneComponent(component, { onAction })
       ) : (
-        <div className="bg-app-surface rounded-2xl shadow-md">{renderZoneComponent(component, { onAction })}</div>
+        <Surface>{renderZoneComponent(component, { onAction })}</Surface>
       )}
     </section>
   )

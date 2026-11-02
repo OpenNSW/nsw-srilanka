@@ -67,6 +67,10 @@ compiles its TypeScript source, so it has no build step.
   @import '@portals/ui/theme.css';
   ```
 
+- `pnpm --filter @portals/ui test:coverage` runs its tests with coverage: a
+  per-file table in the terminal, and an HTML report in
+  `packages/ui/coverage/index.html`.
+
 ---
 
 ## Development Workflow

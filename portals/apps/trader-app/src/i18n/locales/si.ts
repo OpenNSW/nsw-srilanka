@@ -87,7 +87,6 @@ const si: Locale = {
           settingUp: 'ඔබගේ භාණ්ඩ තොගය සකසමින් පවතී...',
         },
         backToList: 'භාණ්ඩ තොග වෙත ආපසු',
-        tryAgain: 'නැවත උත්සාහ කරන්න',
         refresh: 'නැවුම් කරන්න',
         refreshing: 'නැවුම් කරමින්...',
         title: 'භාණ්ඩ තොග විස්තරය',

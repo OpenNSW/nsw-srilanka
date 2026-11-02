@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
+import { Badge, Button, IconButton, Text, Tooltip } from '@radix-ui/themes'
+import { PageState } from '@portals/ui'
 import { DoubleArrowDownIcon, DoubleArrowUpIcon, EyeNoneIcon, EyeOpenIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { getWorkflowEngineStatus } from '@/features/admin/service'
 import type { EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
@@ -89,25 +90,17 @@ export function EngineStatusView({
   }, [workflowId])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Spinner size="3" />
-        <Text size="3" color="gray" className="ml-3">
-          Loading engine status…
-        </Text>
-      </div>
-    )
+    return <PageState variant="loading" title="Loading engine status…" />
   }
 
   if (error || !status) {
     return (
-      <div className="bg-app-surface rounded-lg shadow p-8 text-center">
-        <Text size="5" color="red" weight="medium" className="block mb-2">
-          {error === 'notFound' ? 'No workflow execution found' : 'Failed to load engine status'}
-        </Text>
-        <Button variant="soft" onClick={() => void refresh()}>
-          Try again
-        </Button>
+      <div className="bg-app-surface rounded-lg shadow">
+        <PageState
+          variant="error"
+          title={error === 'notFound' ? 'No workflow execution found' : 'Failed to load engine status'}
+          onRetry={() => void refresh()}
+        />
       </div>
     )
   }
