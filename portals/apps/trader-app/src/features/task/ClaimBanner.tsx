@@ -1,6 +1,7 @@
 import { AlertDialog, Badge, Button, Flex, Spinner, Text } from '@radix-ui/themes'
 import { LockClosedIcon, LockOpen1Icon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
+import { Surface } from '@portals/ui'
 import type { TaskClaim } from '@/features/zone/types'
 
 type Props = {
@@ -43,7 +44,7 @@ export function ClaimBanner({ claim, completed, busy, error, onClaim, onRelease 
   }
 
   return (
-    <div className="rounded-2xl bg-app-surface shadow-sm px-4 py-3">
+    <Surface elevation="sm" className="px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {badge}
         {!completed && !claim.holder && (
@@ -92,6 +93,6 @@ export function ClaimBanner({ claim, completed, busy, error, onClaim, onRelease 
           {error}
         </Text>
       )}
-    </div>
+    </Surface>
   )
 }

@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
+import { Button, IconButton, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { ClaimBanner } from './ClaimBanner'
@@ -9,7 +9,7 @@ import { zoneWidthClass } from '@/features/zone/width'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
-import { Breadcrumb, type BreadcrumbItem, LoadError } from '@portals/ui'
+import { Breadcrumb, type BreadcrumbItem, Surface, PageState } from '@portals/ui'
 
 export function TaskDetailScreen() {
   const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()
@@ -55,11 +55,8 @@ export function TaskDetailScreen() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-full p-6">
-        <Spinner size="3" />
-        <Text size="3" color="gray" className="ml-3">
-          {t('tasks.loading')}
-        </Text>
+      <div className="p-6">
+        <PageState variant="loading" title={t('tasks.loading')} />
       </div>
     )
   }
@@ -67,13 +64,19 @@ export function TaskDetailScreen() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-2xl shadow-md p-8 flex flex-col items-center gap-4">
-          <LoadError message={t('tasks.error.fetchFailed')} onRetry={refetch} />
-          <Button variant="soft" color="gray" onClick={goToTasks}>
-            <ArrowLeftIcon />
-            {t('tasks.goBack')}
-          </Button>
-        </div>
+        <Surface>
+          <PageState
+            variant="error"
+            title={t('tasks.error.fetchFailed')}
+            onRetry={refetch}
+            actions={
+              <Button variant="soft" color="gray" onClick={goToTasks}>
+                <ArrowLeftIcon />
+                {t('tasks.goBack')}
+              </Button>
+            }
+          />
+        </Surface>
       </div>
     )
   }
@@ -81,17 +84,18 @@ export function TaskDetailScreen() {
   if (!zoneView) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-2xl shadow-md p-6 text-center">
-          <Text size="4" color="gray" weight="medium">
-            {t('tasks.error.notFound')}
-          </Text>
-          <div className="mt-4">
-            <Button variant="soft" onClick={goToTasks}>
-              <ArrowLeftIcon />
-              {t('tasks.goBack')}
-            </Button>
-          </div>
-        </div>
+        <Surface>
+          <PageState
+            variant="empty"
+            title={t('tasks.error.notFound')}
+            actions={
+              <Button variant="soft" color="gray" onClick={goToTasks}>
+                <ArrowLeftIcon />
+                {t('tasks.goBack')}
+              </Button>
+            }
+          />
+        </Surface>
       </div>
     )
   }
