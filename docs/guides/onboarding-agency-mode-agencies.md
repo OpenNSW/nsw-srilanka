@@ -195,10 +195,10 @@ In **APIs**, use **Add resource server**:
 3. **Permission Delimiter**: **Colon ( : )**. It can't be changed later.
 4. **Organization**: the agency's OU.
 
-Then, under **Resources**, add a resource with handle `nsw`, and under it these
-sub-resources (**Add sub-resource**) and actions (**Add Action**):
+Then, under **Resources**, add these resources at the top level, with no parent, and
+their actions (**Add Action**):
 
-| Sub-resource  | Actions         |
+| Resource      | Actions         |
 | ------------- | --------------- |
 | `consignment` | `read`          |
 | `task`        | `read`, `write` |
