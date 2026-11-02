@@ -155,9 +155,13 @@ func (p *Provider) Handler(operation string, next http.Handler) http.Handler {
 		opts = append(opts, otelhttp.WithTracerProvider(p.tp))
 	}
 	instrumented := otelhttp.NewHandler(tagged, operation, opts...)
-	// A filter would remove metrics as well as traces. Override only the tracer
-	// for probes so uptime/status metrics and route labels remain available.
-	probeOpts := append(opts, otelhttp.WithTracerProvider(noop.NewTracerProvider()))
+	// A filter would remove metrics as well as traces. Give probes only the no-op
+	// tracer so metrics remain available without relying on option precedence.
+	probeOpts := []otelhttp.Option{
+		otelhttp.WithMeterProvider(p.mp),
+		otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
+		otelhttp.WithTracerProvider(noop.NewTracerProvider()),
+	}
 	probe := otelhttp.NewHandler(tagged, operation, probeOpts...)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == "/health" {
