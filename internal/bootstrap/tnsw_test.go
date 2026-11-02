@@ -38,12 +38,17 @@ func stubAuth(next http.Handler) http.Handler {
 	})
 }
 
+// scopeRefusedHeader names the scope stubScope refused a request for.
+const scopeRefusedHeader = "X-Scope-Refused"
+
 // stubScope admits a request whose X-Scopes header names scope: callers present
-// the scopes they hold in that header.
+// the scopes they hold in that header. It refuses any other with 403, naming
+// scope in scopeRefusedHeader.
 func stubScope(scope string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !slices.Contains(strings.Fields(r.Header.Get("X-Scopes")), scope) {
+				w.Header().Set(scopeRefusedHeader, scope)
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
@@ -84,24 +89,25 @@ func TestMountTNSW_InternalUpload(t *testing.T) {
 	}
 }
 
-// Starting a flow takes the flow scope, which traders and CHAs hold, not the
-// write scope, which only traders hold for creating consignments.
+// Starting a flow takes the flow scope, not the write scope that creating a
+// consignment takes.
 func TestMountTNSW_StartFlowScope(t *testing.T) {
-	post := func(mux *http.ServeMux, scope string) int {
+	// refusedFor returns the scope the scope check refused the request for, or ""
+	// when it admitted it.
+	refusedFor := func(mux *http.ServeMux, scope string) string {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/consignments/c1/flows", strings.NewReader(`{"templateId":"t"}`))
 		req.Header.Set("X-Scopes", scope)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
-		return rec.Code
+		return rec.Header().Get(scopeRefusedHeader)
 	}
 
 	mux := http.NewServeMux()
 	mountTNSW(mux, tnswHandlers{files: nswstorage.NewFileHandler(nil, refsStub{})}, stubAuth, stubScope)
-	// Past the scope check, the handler refuses the stub's M2M caller with 401.
-	if got := post(mux, scopes.ConsignmentFlowWrite); got != http.StatusUnauthorized {
-		t.Errorf("with %s: status %d, want %d (past the scope check)", scopes.ConsignmentFlowWrite, got, http.StatusUnauthorized)
+	if got := refusedFor(mux, scopes.ConsignmentFlowWrite); got != "" {
+		t.Errorf("with %s: refused for %q, want admitted", scopes.ConsignmentFlowWrite, got)
 	}
-	if got := post(mux, scopes.ConsignmentWrite); got != http.StatusForbidden {
-		t.Errorf("with only %s: status %d, want %d", scopes.ConsignmentWrite, got, http.StatusForbidden)
+	if got := refusedFor(mux, scopes.ConsignmentWrite); got != scopes.ConsignmentFlowWrite {
+		t.Errorf("with only %s: refused for %q, want %q", scopes.ConsignmentWrite, got, scopes.ConsignmentFlowWrite)
 	}
 }

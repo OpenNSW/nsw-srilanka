@@ -24,8 +24,7 @@ paths:
         immediately starts its workflow — no CHA company or HS code is
         collected up front; the workflow's own tasks collect those later.
 
-        Requires scope `nsw:consignment:write`, which only traders hold, and
-        the trader role.
+        Requires scope `nsw:consignment:write` and the trader role.
       operationId: createConsignment
       requestBody:
         required: false
@@ -222,7 +221,7 @@ paths:
         consignment the caller's company/role does not own is reported as
         not found.
 
-        Requires scope `nsw:consignment:flow:write`, which traders and CHAs hold.
+        Requires scope `nsw:consignment:flow:write`.
       operationId: startConsignmentFlow
       parameters:
         - $ref: '#/components/parameters/ConsignmentID'
