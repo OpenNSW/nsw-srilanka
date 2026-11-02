@@ -11,12 +11,28 @@ send** (an `extensions` block on a step).
 Set them under `notification.providers` in the server's `config.yaml` (see
 `configs/config.example.yaml`). Restart the server after changing it.
 
+Every provider is optional. The dev configs leave the section commented out,
+so a local stack needs no gateway credentials: the extension still runs and
+logs each notification as skipped. A channel whose block is left out has no
+provider, and a notification on it is logged as failed.
+
+Email goes out through one of two providers, never both:
+
+- `smtp` sends straight to an SMTP server, as below.
+- `email` sends through PingMailer's API (`baseURL`, an `oauth2` `auth` block,
+  `smtpHost`, `smtpPort`, `sender`). It needs a PingMailer that takes the
+  rendered `subject`, `text_body` and `html_body`.
+
 ```yaml
 notification:
   providers:
-    email:
-      baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    smtp:
+      host: smtp.example.com
+      # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+      # tlsMode: starttls # starttls (default), tls or none
+      username: no-reply@example.com
+      password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
+      sender: no-reply@example.com
     sms:
       baseURL: https://smsservice.lk
       userName: "..."

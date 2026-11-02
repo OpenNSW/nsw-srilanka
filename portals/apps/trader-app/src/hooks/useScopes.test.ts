@@ -3,10 +3,10 @@ import { grantedScopes } from '@/hooks/useScopes'
 
 describe('grantedScopes', () => {
   it('reads the space-separated scopes of a token response', () => {
-    expect([...grantedScopes('openid  nsw:consignment:read nsw:task:read')]).toEqual([
+    expect([...grantedScopes('openid  consignment:read task:read')]).toEqual([
       'openid',
-      'nsw:consignment:read',
-      'nsw:task:read',
+      'consignment:read',
+      'task:read',
     ])
   })
 

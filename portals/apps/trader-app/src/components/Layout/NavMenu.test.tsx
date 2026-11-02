@@ -9,7 +9,7 @@ vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { scope: auth.sco
 
 describe('NavMenu', () => {
   it('links the consignments list for a user granted to read consignments', () => {
-    auth.scope = 'openid nsw:consignment:read'
+    auth.scope = 'openid consignment:read'
     render(
       <MemoryRouter>
         <NavMenu />
@@ -20,7 +20,7 @@ describe('NavMenu', () => {
   })
 
   it('lists nothing for a user granted none of its destinations', () => {
-    auth.scope = 'openid nsw:consignment:adminread'
+    auth.scope = 'openid consignment:adminread'
     const { container } = render(
       <MemoryRouter>
         <NavMenu />

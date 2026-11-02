@@ -14,7 +14,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 EFC keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `EFC_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`). EFC generates no files itself, so its client doesn't hold `nsw:storage:internalwrite`, the scope of TNSW's internal upload route. `storage.proxy.allowedUploadTypes` is what its officers may upload.
+TNSW as `EFC_TO_NSW`. Officers' uploads go to TNSW's upload route (`storage:write`). EFC generates no files itself, so its client doesn't hold `storage:internalwrite`, the scope of TNSW's internal upload route. `storage.proxy.allowedUploadTypes` is what its officers may upload.
 
 The YAML's `services` list registers `tnsw` for storage and the workflows'
 `notify_decision` callbacks (`POST /api/v1/callbacks/{callbackToken}`).
@@ -66,13 +66,13 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates EFC for this deployment, on the `EFC API` resource server
 (`https://api.efc.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                            | Client               | Grant                                                                                                                            |
-| --------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Officer `efc_officer`             | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`               |
-| TNSW injecting and replying       | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on EFC's parked steps, which its catalog maps `tnsw` to |
-| EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                      |
+| Caller                            | Client               | Grant                                                                                                                    |
+| --------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Officer `efc_officer`             | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
+| TNSW injecting and replying       | `NSW_TO_EFC`         | `NswToEfcM2M` role: `workflow:inject`, and `task:write` to reply on EFC's parked steps, which its catalog maps `tnsw` to |
+| EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `task:write` and `storage:read`/`write` on TNSW                                                      |
 
-TNSW's `config.yaml` services entry `efc` requests `nsw:workflow:inject` and `nsw:task:write` with
+TNSW's `config.yaml` services entry `efc` requests `workflow:inject` and `task:write` with
 `resource=https://api.efc.nsw-agency.local` (see `configs/config*.example.yaml`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose

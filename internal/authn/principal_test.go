@@ -75,7 +75,7 @@ func TestPrincipalFromAuthContext_UserFlattensDeclaredClaims(t *testing.T) {
 			ID:        "u1",
 			IDPUserID: "idp1",
 			Roles:     []string{"Trader"},
-			Scopes:    []string{"nsw:task:read"},
+			Scopes:    []string{"task:read"},
 			ExtraClaims: coreauthn.ExtraClaims{
 				"email":        "trader@example.com",
 				"phone_number": "+94771234567",
@@ -97,7 +97,7 @@ func TestPrincipalFromAuthContext_UserFlattensDeclaredClaims(t *testing.T) {
 	if len(p.Roles) != 1 || p.Roles[0] != "Trader" {
 		t.Fatalf("unexpected roles: %#v", p.Roles)
 	}
-	if len(p.Scopes) != 1 || p.Scopes[0] != "nsw:task:read" {
+	if len(p.Scopes) != 1 || p.Scopes[0] != "task:read" {
 		t.Fatalf("unexpected scopes: %#v", p.Scopes)
 	}
 }
@@ -119,7 +119,7 @@ func TestPrincipalFromAuthContext_ClientCarriesNoIdentityClaims(t *testing.T) {
 		Client: &coreauthn.ClientContext{
 			ClientID: "GOVPAY_TO_NSW",
 			Roles:    []string{"PaymentWebhookM2M"},
-			Scopes:   []string{"nsw:payment-webhooks:process"},
+			Scopes:   []string{"payment-webhooks:process"},
 		},
 	})
 	if p == nil {
@@ -153,7 +153,7 @@ func TestScopePrincipalFromContext(t *testing.T) {
 		Kind:   KindUser,
 		UserID: "u1",
 		Roles:  []string{"Trader"},
-		Scopes: []string{"nsw:consignment:read"},
+		Scopes: []string{"consignment:read"},
 	})
 	sp, ok := ScopePrincipalFromContext(ctx)
 	if !ok {
@@ -165,7 +165,7 @@ func TestScopePrincipalFromContext(t *testing.T) {
 	if len(sp.Roles()) != 1 || sp.Roles()[0] != "Trader" {
 		t.Fatalf("Roles() = %#v", sp.Roles())
 	}
-	if len(sp.Scopes()) != 1 || sp.Scopes()[0] != "nsw:consignment:read" {
+	if len(sp.Scopes()) != 1 || sp.Scopes()[0] != "consignment:read" {
 		t.Fatalf("Scopes() = %#v", sp.Scopes())
 	}
 }
@@ -225,7 +225,7 @@ func TestCoreProfileShim_CarriesExtraClaims(t *testing.T) {
 	id, err := coreProfileShim{svc: svc}.GetOrCreateUser(context.Background(), &coreauthn.UserPrincipal{
 		Subject: "idp1",
 		Roles:   []string{"Officer"},
-		Scopes:  []string{"nsw:task:read"},
+		Scopes:  []string{"task:read"},
 		ExtraClaims: coreauthn.ExtraClaims{
 			"email":        "officer@example.com",
 			"phone_number": "+94771234567",

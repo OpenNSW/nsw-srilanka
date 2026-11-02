@@ -3,12 +3,12 @@ import { firstPermittedPath, permittedNav, type NavItem, type NavItemOrGroup } f
 
 const consignments: NavItem = {
   labelKey: 'nav.consignments',
-  route: { path: '/consignments', scope: 'nsw:consignment:read' },
+  route: { path: '/consignments', scope: 'consignment:read' },
   icon: null,
 }
 const engineStatus: NavItem = {
   labelKey: 'nav.menu',
-  route: { path: '/admin', scope: 'nsw:consignment:adminread' },
+  route: { path: '/admin', scope: 'consignment:adminread' },
   icon: null,
 }
 const adminGroup: NavItemOrGroup = { labelKey: 'nav.menu', icon: null, items: [engineStatus] }
@@ -21,8 +21,8 @@ const granting =
 
 describe('permittedNav', () => {
   it('keeps only the destinations whose scope is granted', () => {
-    expect(permittedNav(structure, granting('nsw:consignment:read'))).toEqual([consignments])
-    expect(permittedNav(structure, granting('nsw:consignment:read', 'nsw:consignment:adminread'))).toEqual(structure)
+    expect(permittedNav(structure, granting('consignment:read'))).toEqual([consignments])
+    expect(permittedNav(structure, granting('consignment:read', 'consignment:adminread'))).toEqual(structure)
   })
 
   it('drops a group left with no destinations', () => {
@@ -32,13 +32,11 @@ describe('permittedNav', () => {
 
 describe('firstPermittedPath', () => {
   it('is the first destination the user may open, in nav order', () => {
-    expect(firstPermittedPath(structure, granting('nsw:consignment:read', 'nsw:consignment:adminread'))).toBe(
-      '/consignments',
-    )
-    expect(firstPermittedPath(structure, granting('nsw:consignment:adminread'))).toBe('/admin')
+    expect(firstPermittedPath(structure, granting('consignment:read', 'consignment:adminread'))).toBe('/consignments')
+    expect(firstPermittedPath(structure, granting('consignment:adminread'))).toBe('/admin')
   })
 
   it('is null when the user may open none', () => {
-    expect(firstPermittedPath(structure, granting('nsw:task:read'))).toBeNull()
+    expect(firstPermittedPath(structure, granting('task:read'))).toBeNull()
   })
 })

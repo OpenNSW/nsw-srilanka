@@ -7,7 +7,7 @@ vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { scope: auth.sco
 
 function NewConsignment() {
   return (
-    <RequireScope scope="nsw:consignment:write" fallback={<p>Restricted</p>}>
+    <RequireScope scope="consignment:write" fallback={<p>Restricted</p>}>
       <button>New consignment</button>
     </RequireScope>
   )
@@ -15,7 +15,7 @@ function NewConsignment() {
 
 describe('RequireScope', () => {
   it('renders its children for a user granted the scope', () => {
-    auth.scope = 'openid nsw:consignment:read nsw:consignment:write'
+    auth.scope = 'openid consignment:read consignment:write'
     render(<NewConsignment />)
 
     expect(screen.getByRole('button', { name: 'New consignment' })).toBeTruthy()
@@ -23,7 +23,7 @@ describe('RequireScope', () => {
   })
 
   it('renders the fallback for a user without the scope', () => {
-    auth.scope = 'openid nsw:consignment:read nsw:consignment:flow:write'
+    auth.scope = 'openid consignment:read consignment:flow:write'
     render(<NewConsignment />)
 
     expect(screen.queryByRole('button', { name: 'New consignment' })).toBeNull()
@@ -31,7 +31,7 @@ describe('RequireScope', () => {
   })
 
   it('renders the fallback when the deployment sets no scope for it', () => {
-    auth.scope = 'openid nsw:consignment:read nsw:consignment:write'
+    auth.scope = 'openid consignment:read consignment:write'
     render(
       <RequireScope scope={undefined} fallback={<p>Restricted</p>}>
         <button>New consignment</button>
@@ -45,7 +45,7 @@ describe('RequireScope', () => {
   it('renders nothing without a fallback', () => {
     auth.scope = ''
     const { container } = render(
-      <RequireScope scope="nsw:consignment:write">
+      <RequireScope scope="consignment:write">
         <button>New consignment</button>
       </RequireScope>,
     )

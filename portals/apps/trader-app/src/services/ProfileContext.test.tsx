@@ -29,7 +29,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe('ProfileProvider', () => {
   beforeEach(() => {
-    auth.scope = 'openid nsw:profile:read'
+    auth.scope = 'openid profile:read'
   })
 
   afterEach(() => {
@@ -52,7 +52,7 @@ describe('ProfileProvider', () => {
   })
 
   it('loads no profile for a user not granted to read it', () => {
-    auth.scope = 'openid nsw:consignment:adminread'
+    auth.scope = 'openid consignment:adminread'
 
     const { result } = renderHook(() => useProfile(), { wrapper })
 

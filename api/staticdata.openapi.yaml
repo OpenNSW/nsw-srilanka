@@ -7,7 +7,7 @@ info:
     of the artifact registry, keyed by (id, version).
 
     Requires a JWT bearer token (see `securitySchemes.BearerAuth`) carrying
-    scope `nsw:task:read` — reused from the task domain since static data is
+    scope `task:read` — reused from the task domain since static data is
     consumed alongside rendered tasks, not a distinct resource of its own.
   version: 1.0.0
 
@@ -25,7 +25,7 @@ paths:
         `(id, version)` identifies immutable content — but marked `private`
         since this endpoint is scope-protected.
 
-        Requires scope `nsw:task:read`.
+        Requires scope `task:read`.
       operationId: getStaticData
       parameters:
         - name: id
@@ -65,7 +65,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:task:read`.
+          description: Forbidden. The bearer token lacks scope `task:read`.
           content:
             application/json:
               schema:

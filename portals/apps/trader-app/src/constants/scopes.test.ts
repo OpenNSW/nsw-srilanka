@@ -8,11 +8,11 @@ describe('ACCESS_SCOPES', () => {
   })
 
   it('reads the scope of each screen and action from the runtime config', async () => {
-    window.__APP_CONFIG__ = { ...TEST_APP_CONFIG, SCOPE_CONSIGNMENTS_CREATE: ' nsw:consignment:create ' }
+    window.__APP_CONFIG__ = { ...TEST_APP_CONFIG, SCOPE_CONSIGNMENTS_CREATE: ' consignment:create ' }
     const { ACCESS_SCOPES } = await import('@/constants/scopes')
 
-    expect(ACCESS_SCOPES.CONSIGNMENTS_CREATE).toBe('nsw:consignment:create')
-    expect(ACCESS_SCOPES.CONSIGNMENTS_VIEW).toBe('nsw:consignment:read')
+    expect(ACCESS_SCOPES.CONSIGNMENTS_CREATE).toBe('consignment:create')
+    expect(ACCESS_SCOPES.CONSIGNMENTS_VIEW).toBe('consignment:read')
   })
 
   it('leaves a key the deployment does not set without a scope', async () => {

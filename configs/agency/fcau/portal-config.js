@@ -8,14 +8,14 @@ window.__APP_CONFIG__ = {
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.fcau.nsw-agency.local',
   APP_URL: 'http://localhost:5175',
   IDP_SCOPES:
-    'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:storage:read,nsw:storage:write,nsw:profile:read',
+    'openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read',
   // The scope each screen and action this portal shows needs. A SCOPE_* key left unset
   // (here: creating consignments, their flows, the admin views) hides its
   // screen or action from everyone.
-  SCOPE_CONSIGNMENTS_VIEW: 'nsw:consignment:read',
-  SCOPE_TASKS_VIEW: 'nsw:task:read',
-  SCOPE_TASKS_ACTIONS: 'nsw:task:write',
-  SCOPE_PROFILE_VIEW: 'nsw:profile:read',
+  SCOPE_CONSIGNMENTS_VIEW: 'consignment:read',
+  SCOPE_TASKS_VIEW: 'task:read',
+  SCOPE_TASKS_ACTIONS: 'task:write',
+  SCOPE_PROFILE_VIEW: 'profile:read',
   SHOW_AUTOFILL_BUTTON: 'false',
   APP_MODE: 'agency',
 }

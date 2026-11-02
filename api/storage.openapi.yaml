@@ -26,10 +26,10 @@ info:
     credentials.
 
     Files users upload, and an agency's officers through its proxy, are
-    reserved on `POST /api/v1/storage`, with scope `nsw:storage:write`. A
+    reserved on `POST /api/v1/storage`, with scope `storage:write`. A
     machine client stores the files it generates itself, such as an agency's
     documents, on `POST /api/v1/internal/storage` on TNSW, with scope
-    `nsw:storage:internalwrite`.
+    `storage:internalwrite`.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -58,7 +58,7 @@ paths:
         first. A machine client's own generated files use
         `POST /api/v1/internal/storage`.
 
-        Requires scope `nsw:storage:write`.
+        Requires scope `storage:write`.
       operationId: reserveUpload
       requestBody:
         required: true
@@ -89,7 +89,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:storage:write`.
+          description: Forbidden. The bearer token lacks scope `storage:write`.
           content:
             application/json:
               schema:
@@ -132,7 +132,7 @@ paths:
         name is matched to the type by `storage.uploadTypeExtensions`, as on
         `POST /api/v1/storage`. Served by TNSW only.
 
-        Requires scope `nsw:storage:internalwrite`.
+        Requires scope `storage:internalwrite`.
       operationId: reserveInternalUpload
       requestBody:
         required: true
@@ -163,7 +163,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:storage:internalwrite`.
+          description: Forbidden. The bearer token lacks scope `storage:internalwrite`.
           content:
             application/json:
               schema:
@@ -196,7 +196,7 @@ paths:
         `{key}` must be a file reference issued to the caller. A storage key
         grants nothing on its own.
 
-        Requires scope `nsw:storage:read`.
+        Requires scope `storage:read`.
       operationId: getDownloadURL
       parameters:
         - name: key
@@ -226,7 +226,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            The bearer token lacks scope `nsw:storage:read`; `{key}` is not
+            The bearer token lacks scope `storage:read`; `{key}` is not
             a file reference issued to the caller (someone else's reference,
             a raw storage key or any other value get the same answer); or it
             is a user's upload reference, which can only be submitted:
