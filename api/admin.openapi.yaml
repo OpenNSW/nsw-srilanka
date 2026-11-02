@@ -26,7 +26,7 @@ paths:
         (the export flow, flows a trader started, notices); open one with
         `GET /api/v1/admin/workflows/{id}/engine-status`.
 
-        Requires scope `nsw:consignment:adminread`.
+        Requires scope `consignment:adminread`.
       operationId: adminGetConsignmentByID
       parameters:
         - $ref: '#/components/parameters/ConsignmentID'
@@ -50,7 +50,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
+          description: Forbidden. The bearer token lacks scope `consignment:adminread`.
           content:
             application/json:
               schema:
@@ -85,7 +85,7 @@ paths:
         `global_variables` may hold business/PII data, which is why this is
         gated on the admin scope rather than the trader/CHA read scope.
 
-        Requires scope `nsw:consignment:adminread`.
+        Requires scope `consignment:adminread`.
       operationId: getWorkflowEngineStatus
       parameters:
         - $ref: '#/components/parameters/WorkflowID'
@@ -109,7 +109,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
+          description: Forbidden. The bearer token lacks scope `consignment:adminread`.
           content:
             application/json:
               schema:
@@ -138,7 +138,7 @@ paths:
         obtained from `EngineNodeDTO.task_workflow_id` on the TASK node that
         spawned it.
 
-        Requires scope `nsw:consignment:adminread`.
+        Requires scope `consignment:adminread`.
       operationId: getTaskWorkflowEngineStatus
       parameters:
         - name: id
@@ -167,7 +167,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
+          description: Forbidden. The bearer token lacks scope `consignment:adminread`.
           content:
             application/json:
               schema:
@@ -211,7 +211,7 @@ paths:
         `204` although only the first takes effect; resolution is expected to
         be done by one admin at a time.
 
-        Requires scope `nsw:consignment:adminwrite`.
+        Requires scope `consignment:adminwrite`.
       operationId: resolveAdminIntervention
       parameters:
         - name: id
@@ -254,7 +254,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
+          description: Forbidden. The bearer token lacks scope `consignment:adminwrite`.
           content:
             application/json:
               schema:
@@ -309,7 +309,7 @@ paths:
         for a callback that will never come, force-park that step instead
         with `POST /api/v1/admin/task/{id}/steps/{stepId}/force-park`.
 
-        Requires scope `nsw:consignment:adminwrite`.
+        Requires scope `consignment:adminwrite`.
       operationId: forceParkTaskNode
       parameters:
         - name: id
@@ -354,7 +354,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
+          description: Forbidden. The bearer token lacks scope `consignment:adminwrite`.
           content:
             application/json:
               schema:
@@ -407,7 +407,7 @@ paths:
         `204` although only the first takes effect; resolution is expected to
         be done by one admin at a time.
 
-        Requires scope `nsw:consignment:adminwrite`.
+        Requires scope `consignment:adminwrite`.
       operationId: resolveTaskWorkflowAdminIntervention
       parameters:
         - name: id
@@ -450,7 +450,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
+          description: Forbidden. The bearer token lacks scope `consignment:adminwrite`.
           content:
             application/json:
               schema:
@@ -497,7 +497,7 @@ paths:
         `EngineNodeDTO.step_id` from that task workflow's engine status, while
         it is `RUNNING`.
 
-        Requires scope `nsw:consignment:adminwrite`.
+        Requires scope `consignment:adminwrite`.
       operationId: forceParkTaskWorkflowStep
       parameters:
         - name: id
@@ -539,7 +539,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
+          description: Forbidden. The bearer token lacks scope `consignment:adminwrite`.
           content:
             application/json:
               schema:

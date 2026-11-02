@@ -14,7 +14,7 @@
 #   kubectl create secret generic nsw-secrets \
 #     --from-literal=db-password=... \
 #     --from-literal=slpa-webhook-secret=... \
-#     --from-literal=notification-email-token=... \
+#     --from-literal=notification-smtp-password=... \
 #     --from-literal=notification-sms-password=... \
 #     --from-literal=m2m-npqs-secret=... \
 #     --from-literal=m2m-fcau-secret=... \
@@ -81,9 +81,13 @@ backend:
     SLPA_WEBHOOK_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: slpa-webhook-secret }
-    NOTIFICATION_EMAIL_TOKEN:
+    NOTIFICATION_EMAIL_CLIENT_SECRET:
       valueFrom:
-        secretKeyRef: { name: nsw-secrets, key: notification-email-token }
+        secretKeyRef: { name: nsw-secrets, key: notification-email-client-secret }
+    # Only with notification.providers.smtp in place of email.
+    # NOTIFICATION_SMTP_PASSWORD:
+    #   valueFrom:
+    #     secretKeyRef: { name: nsw-secrets, key: notification-smtp-password }
     NOTIFICATION_SMS_PASSWORD:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: notification-sms-password }
@@ -225,7 +229,7 @@ backend:
       # browser opens as a document, such as text/html for the documents an
       # agency's HTML_DOCUMENT_GENERATOR generates and stores here (the route
       # is for files a deployment generates itself); only the clients named,
-      # holding nsw:storage:internalwrite, can store it.
+      # holding storage:internalwrite, can store it.
       allowedInternalUploadTypes:
         npqs:
           - text/html
@@ -355,8 +359,8 @@ backend:
             clientID: NSW_TO_NPQS
             clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.npqs.nsw-agency.local
       - id: fcau
@@ -369,8 +373,8 @@ backend:
             clientID: NSW_TO_FCAU
             clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.fcau.nsw-agency.local
       - id: cda
@@ -383,8 +387,8 @@ backend:
             clientID: NSW_TO_CDA
             clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.cda.nsw-agency.local
       - id: slpa
@@ -406,8 +410,8 @@ backend:
             clientID: NSW_TO_EFC
             clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.efc.nsw-agency.local
       - id: customs-asycuda
@@ -437,8 +441,8 @@ backend:
             clientID: NSW_TO_SLTB
             clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.sltb.nsw-agency.local
 
@@ -544,12 +548,34 @@ backend:
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyyMM}", padding: 5}
 
-    # Email/SMS gateways, one settings block per channel.
+    # Email/SMS gateways, one settings block per channel. Optional: a channel
+    # left out sends nothing.
     notification:
       providers:
+        # Email: set email (through PingMailer's API) or smtp (straight to an
+        # SMTP server), not both. The schemas are in
+        # github.com/OpenNSW/core/notification. Use email where the cluster
+        # can't reach the SMTP server's submission port (587).
         email:
-          baseURL: "https://email.example.com"
-          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+          baseURL: "https://api-server.mail.svc.cluster.local:8000" # PingMailer API server
+          # path: "/notify" # optional, this is the default
+          # allowInsecureHTTP: true # only if baseURL is plain http (in-cluster)
+          auth:
+            type: oauth2
+            oauth2:
+              tokenURL: "https://idp.example.com/oauth2/token"
+              clientID: "replace-with-pingmailer-client-id"
+              clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+          smtpHost: "smtp.example.com" # SMTP server PingMailer relays to
+          smtpPort: 587
+          sender: "no-reply@example.com"
+        # smtp:
+        #   host: "smtp.example.com"
+        #   # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+        #   # tlsMode: "starttls" # starttls (default), tls or none
+        #   username: "no-reply@example.com"
+        #   password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
+        #   sender: "no-reply@example.com"
         sms:
           baseURL: "https://sms.example.com"
           userName: "nsw"
@@ -668,7 +694,7 @@ frontend:
     # The `resource` value must equal backend.config.authn.audience / the NSW_API resource-server identifier.
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     APP_URL: "https://trader.example.com"
-    IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:consignment:flow:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,hscode:read,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
     SHOW_AUTOFILL_BUTTON: "false"
     # "true" shows the demo color-scheme picker in the footer; leave it off in a real deployment.
     SHOW_COLOR_SCHEME_SWITCHER: "false"

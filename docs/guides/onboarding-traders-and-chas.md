@@ -30,7 +30,7 @@ flowchart LR
         gC --> rC
     end
 
-    token(["Access token<br/>ouHandle · roles · nsw:* scopes"])
+    token(["Access token<br/>ouHandle · roles · API scopes"])
 
     subgraph tnsw["TNSW backend"]
         catalog["config.yaml catalog<br/>roles.trader → Trader<br/>roles.cha → CHA"]
@@ -50,8 +50,8 @@ flowchart LR
   that handle, the user can sign in but owns nothing.
 - **What a user may do comes from the groups.** `Traders` grants the `Trader` role and
   `CHA` grants the `CHA` role (`idp/bootstrap/10-nsw-platform.yaml`). Each role grants
-  `nsw:*` scopes on the NSW API: both get `nsw:consignment:flow:write` to start a flow on a
-  consignment, and only `Trader` gets `nsw:consignment:write` to create one. The `catalog`
+  scopes on the NSW API: both get `consignment:flow:write` to start a flow on a
+  consignment, and only `Trader` gets `consignment:write` to create one. The `catalog`
   section of `config.yaml` maps the role names the backend expects (`trader`, `cha`) to
   these IdP role names.
 - **Whether traders can pick a company as their CHA comes from `has_cha`.** The CHA picker
@@ -306,16 +306,16 @@ ThunderID.
 
 ## Troubleshooting
 
-| Symptom                                                   | Likely cause                                                                                                                          |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| User signs in, but no company on the profile              | No `company_records` row with this `ou_handle`. Check `otc company view` against the token's `ouHandle`                               |
-| `403` on consignments or tasks                            | User not in `Traders` / `CHA`, or `catalog.roles` in `config.yaml` doesn't match the IdP role names                                   |
-| Token has no `nsw:*` scopes / `invalid_target` at sign-in | The portal isn't sending `resource=https://api.nsw-srilanka.local`; see [idp/README.md](../../idp/README.md#api-authorization-oauth2) |
-| Company missing from the CHA picker                       | `hasCha` is `false`                                                                                                                   |
-| `cha_persist: company "…" is not enabled as a CHA`        | Same: a trader picked a company whose `hasCha` was turned off since                                                                   |
-| `ou_handle "…" is already used by another company`        | Two records claim the same OU. Each OU maps to exactly one company                                                                    |
-| `otc`: `Failed to load configuration`                     | Running outside the pod without `CONFIG_PATH`, or a `{{env:…}}` placeholder in `config.yaml` is unset                                 |
-| User created but can't sign in to the trader portal       | Wrong user type. `TraderApp` only admits `Private_User`                                                                               |
+| Symptom                                               | Likely cause                                                                                                                          |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| User signs in, but no company on the profile          | No `company_records` row with this `ou_handle`. Check `otc company view` against the token's `ouHandle`                               |
+| `403` on consignments or tasks                        | User not in `Traders` / `CHA`, or `catalog.roles` in `config.yaml` doesn't match the IdP role names                                   |
+| Token has no API scopes / `invalid_target` at sign-in | The portal isn't sending `resource=https://api.nsw-srilanka.local`; see [idp/README.md](../../idp/README.md#api-authorization-oauth2) |
+| Company missing from the CHA picker                   | `hasCha` is `false`                                                                                                                   |
+| `cha_persist: company "…" is not enabled as a CHA`    | Same: a trader picked a company whose `hasCha` was turned off since                                                                   |
+| `ou_handle "…" is already used by another company`    | Two records claim the same OU. Each OU maps to exactly one company                                                                    |
+| `otc`: `Failed to load configuration`                 | Running outside the pod without `CONFIG_PATH`, or a `{{env:…}}` placeholder in `config.yaml` is unset                                 |
+| User created but can't sign in to the trader portal   | Wrong user type. `TraderApp` only admits `Private_User`                                                                               |
 
 ## Local development
 
