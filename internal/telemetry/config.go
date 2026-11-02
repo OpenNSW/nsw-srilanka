@@ -14,8 +14,10 @@ type Config struct {
 	// Endpoint is the OTLP/HTTP base URL without a signal path
 	// (e.g. http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
 	// or http://otel-collector:4318). /v1/metrics, /v1/traces and /v1/logs are
-	// appended. A legacy full .../v1/metrics URL is accepted and stripped to
-	// the base.
+	// appended. Full URLs ending in one of those three signal paths are also
+	// accepted and stripped to the base. Queries/fragments are rejected; pass
+	// authentication through Headers. A /v1 path segment must be part of one
+	// complete signal suffix, never an incomplete or nested signal path.
 	Endpoint string `yaml:"endpoint"`
 	// ServiceName is the service.name resource attribute. Required when
 	// Endpoint is set so TNSW, CDA and EFC can be told apart.
@@ -56,20 +58,36 @@ func (c Config) baseURL() (string, error) {
 	if raw == "" {
 		return "", nil
 	}
+	if strings.Contains(raw, "#") {
+		return "", fmt.Errorf("otel.endpoint must not contain a fragment")
+	}
 	u, err := url.ParseRequestURI(raw)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return "", fmt.Errorf("otel.endpoint must be a valid absolute http(s) URL")
 	}
-	path := strings.TrimSuffix(u.Path, "/")
+	if u.RawQuery != "" || u.ForceQuery {
+		return "", fmt.Errorf("otel.endpoint must not contain a query; use otel.headers for authentication")
+	}
+	// Work on the escaped path so removing a signal suffix does not turn an
+	// encoded slash in an organization/proxy prefix into a path separator.
+	path := strings.TrimSuffix(u.EscapedPath(), "/")
 	for _, suffix := range []string{"/v1/metrics", "/v1/traces", "/v1/logs"} {
 		if strings.HasSuffix(path, suffix) {
 			path = strings.TrimSuffix(path, suffix)
 			break
 		}
 	}
-	u.Path = path
-	u.RawQuery = ""
-	u.Fragment = ""
+	decodedPath, err := url.PathUnescape(path)
+	if err != nil {
+		return "", fmt.Errorf("otel.endpoint has an invalid escaped path")
+	}
+	// Base prefixes are deployment-specific. A remaining /v1 segment, however,
+	// is an incomplete, unsupported, or repeated OTLP signal path.
+	if strings.Contains(decodedPath+"/", "/v1/") {
+		return "", fmt.Errorf("otel.endpoint must use a base path or end in /v1/metrics, /v1/traces, or /v1/logs")
+	}
+	u.Path = decodedPath
+	u.RawPath = path
 	return strings.TrimSuffix(u.String(), "/"), nil
 }
 

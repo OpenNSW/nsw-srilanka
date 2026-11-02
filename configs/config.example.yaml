@@ -631,6 +631,8 @@ flows:
 # Endpoint is the OTLP/HTTP base without /v1/{metrics,traces,logs} — those paths
 # are appended. serviceName is required when endpoint is set so TNSW, CDA and
 # EFC can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# Queries, fragments, and incomplete/nested /v1 signal paths fail startup.
+# Put authentication in headers, not in the endpoint URL.
 # otel:
 #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
 #   serviceName: tnsw-api

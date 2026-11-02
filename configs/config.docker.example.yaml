@@ -622,6 +622,8 @@ flows:
 # OTLP/HTTP) base URL when one is reachable from this stack; leave commented
 # for local compose. serviceName is required when endpoint is set so TNSW, CDA
 # and EFC can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# Queries, fragments, and incomplete/nested /v1 signal paths fail startup.
+# Put authentication in headers, not in the endpoint URL.
 # otel:
 #   endpoint: http://openobserve:5080/api/default
 #   serviceName: tnsw-api
