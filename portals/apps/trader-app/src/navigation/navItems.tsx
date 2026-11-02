@@ -55,5 +55,5 @@ export function firstPermittedPath(
 ): string | null {
   const first = permittedNav(structure, hasScope)[0]
   if (!first) return null
-  return isNavGroup(first) ? (first.items[0]?.route.path ?? null) : first.route.path
+  return isNavGroup(first) ? first.items[0].route.path : first.route.path
 }

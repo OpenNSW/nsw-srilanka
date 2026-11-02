@@ -4,7 +4,9 @@ import { Button } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import type { ZoneRendererProps } from '@/features/zone/types'
 
-export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
+// RedirectRenderer sends the browser to the payment session's checkout. Only an
+// interactive zone does: one the user may act on. Otherwise it shows the content alone.
+export function RedirectRenderer({ payload, interactive }: ZoneRendererProps<'REDIRECT'> & { interactive: boolean }) {
   const { t } = useTranslation()
   const { checkout_url, content } = payload
   const sessionKey = `nsw:redirected:${checkout_url}`
@@ -19,7 +21,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
   })
 
   useEffect(() => {
-    if (!checkout_url || hasRedirected) return
+    if (!interactive || !checkout_url || hasRedirected) return
     let storageSaved = false
     try {
       sessionStorage.setItem(sessionKey, 'true')
@@ -30,7 +32,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
     if (storageSaved && (checkout_url.startsWith('https://') || checkout_url.startsWith('http://'))) {
       window.location.href = checkout_url
     }
-  }, [checkout_url, hasRedirected, sessionKey])
+  }, [interactive, checkout_url, hasRedirected, sessionKey])
 
   const handleGoToSession = () => {
     if (checkout_url && (checkout_url.startsWith('https://') || checkout_url.startsWith('http://'))) {
@@ -47,7 +49,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
     setHasRedirected(false)
   }
 
-  if (hasRedirected) {
+  if (interactive && hasRedirected) {
     return (
       <div className="rounded-2xl bg-primary-subtle/40 p-6 text-sm text-foreground-muted shadow-sm transition-all duration-300">
         <div className="flex items-center gap-3 mb-4">
@@ -128,7 +130,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
 
   return (
     <div className="rounded-2xl bg-primary-subtle/40 p-6 text-sm text-foreground-muted">
-      <p className="mb-3 font-medium text-primary">{t('tasks.redirect.redirecting')}</p>
+      {interactive && <p className="mb-3 font-medium text-primary">{t('tasks.redirect.redirecting')}</p>}
       <ReactMarkdown
         components={{
           a: ({ children, href }) => (

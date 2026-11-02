@@ -30,10 +30,15 @@ export function ConsignmentTasks({
   steps,
   consignmentId,
   consignmentState,
+  canOpenTasks,
+  canActOnTasks,
 }: {
   steps: WorkflowNode[]
   consignmentId: string
   consignmentState?: ConsignmentState
+  // Whether the user may open a task, and act on one (see TaskRow).
+  canOpenTasks: boolean
+  canActOnTasks: boolean
 }) {
   const { t } = useTranslation()
 
@@ -79,7 +84,14 @@ export function ConsignmentTasks({
             />
             <ul className="space-y-3">
               {groups.needsAction.map((step) => (
-                <TaskRow key={step.id} step={step} consignmentId={consignmentId} needsAction />
+                <TaskRow
+                  key={step.id}
+                  step={step}
+                  consignmentId={consignmentId}
+                  canOpen={canOpenTasks}
+                  canAct={canActOnTasks}
+                  needsAction
+                />
               ))}
             </ul>
           </section>
@@ -93,7 +105,13 @@ export function ConsignmentTasks({
             />
             <ul className="space-y-3">
               {groups.waiting.map((step) => (
-                <TaskRow key={step.id} step={step} consignmentId={consignmentId} />
+                <TaskRow
+                  key={step.id}
+                  step={step}
+                  consignmentId={consignmentId}
+                  canOpen={canOpenTasks}
+                  canAct={canActOnTasks}
+                />
               ))}
             </ul>
           </section>
@@ -110,7 +128,13 @@ export function ConsignmentTasks({
         {groups.done.length > 0 ? (
           <ul className="space-y-3">
             {groups.done.map((step) => (
-              <TaskRow key={step.id} step={step} consignmentId={consignmentId} />
+              <TaskRow
+                key={step.id}
+                step={step}
+                consignmentId={consignmentId}
+                canOpen={canOpenTasks}
+                canAct={canActOnTasks}
+              />
             ))}
           </ul>
         ) : (

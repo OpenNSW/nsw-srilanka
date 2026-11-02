@@ -23,10 +23,17 @@ export function TaskRow({
   step,
   consignmentId,
   needsAction = false,
+  canOpen,
+  canAct,
 }: {
   step: WorkflowNode
   consignmentId: string
   needsAction?: boolean
+  // Whether the user may open a task. Without it the row has no link.
+  canOpen: boolean
+  // Whether the user may act on a task. Without it a task that needs action
+  // offers View, not Continue.
+  canAct: boolean
 }) {
   const { t } = useTranslation()
   const name = step.workflowNodeTemplate.name || t('workflow.untitledTask')
@@ -68,7 +75,7 @@ export function TaskRow({
         {when && <p className="mt-0.5 text-xs text-foreground-muted">{when}</p>}
         {note}
       </div>
-      {needsAction ? (
+      {!canOpen ? null : needsAction && canAct ? (
         step.state !== 'LOCKED' && (
           <Button asChild size="2">
             <Link to={href} aria-label={t('workflow.continueTask', { name })}>

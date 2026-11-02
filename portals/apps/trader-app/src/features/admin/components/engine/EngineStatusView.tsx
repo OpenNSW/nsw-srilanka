@@ -110,8 +110,9 @@ export function EngineStatusView({
 
   // Resolving a node takes over the flow's view rather than opening a dialog — there's enough
   // detail here (last error, cached task result, variables patch) that a modal crowds it. Back and
-  // Cancel both just clear resolveTarget, returning to this same debugger view underneath.
-  if (resolveTarget) {
+  // Cancel both just clear resolveTarget, returning to this same debugger view underneath. A user
+  // who can no longer intervene is shown the debugger view instead.
+  if (resolveTarget && canIntervene) {
     return <ResolveAdminInterventionView target={resolveTarget} onBack={() => setResolveTarget(null)} />
   }
 

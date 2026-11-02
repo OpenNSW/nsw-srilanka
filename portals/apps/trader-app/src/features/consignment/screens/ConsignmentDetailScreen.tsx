@@ -12,6 +12,8 @@ import { ROUTES } from '@/constants'
 import { Breadcrumb, type BreadcrumbItem, CopyableId, LoadingOverlay, Surface, PageState } from '@portals/ui'
 import { ACCESS_SCOPES } from '@/constants/scopes'
 import { RequireScope } from '@/components/RequireScope'
+import { useScopes } from '@/hooks/useScopes'
+import { APP_ROUTES } from '@/navigation/routes'
 
 interface ConsignmentDetailScreenProps {
   // Keeps this view's results apart from other views of the same consignment.
@@ -37,6 +39,7 @@ export function ConsignmentDetailScreen({
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { hasScope } = useScopes()
   // An agency's officers work on cases: the same records, under their own name.
   const up = parent ?? { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: ROUTES.CONSIGNMENTS }
   const untitled = t(isAgencyMode ? 'cases.detail.title' : 'consignments.detail.title')
@@ -159,6 +162,8 @@ export function ConsignmentDetailScreen({
               steps={workflowNodes}
               consignmentId={consignmentId!}
               consignmentState={consignment.state}
+              canOpenTasks={hasScope(APP_ROUTES.task.scope)}
+              canActOnTasks={hasScope(ACCESS_SCOPES.TASKS_ACTIONS)}
             />
           ) : (
             <PageState
