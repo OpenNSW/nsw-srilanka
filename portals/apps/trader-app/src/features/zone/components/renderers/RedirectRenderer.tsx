@@ -4,8 +4,8 @@ import { Button } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import type { ZoneRendererProps } from '@/features/zone/types'
 
-// RedirectRenderer sends the browser to the payment session's checkout. Only an
-// interactive zone does: one the user may act on. Otherwise it shows the content alone.
+// RedirectRenderer sends the browser to the payment session's checkout when its
+// zone is interactive, and otherwise only shows the content.
 export function RedirectRenderer({ payload, interactive }: ZoneRendererProps<'REDIRECT'> & { interactive: boolean }) {
   const { t } = useTranslation()
   const { checkout_url, content } = payload

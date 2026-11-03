@@ -7,7 +7,6 @@ import { APP_ROUTES, type AppRoute } from '@/navigation/routes'
 
 export interface NavItem {
   labelKey: ParseKeys
-  // Where it leads, and the ability that lists it: the one the route's screen needs.
   route: AppRoute
   icon: ReactNode
 }
@@ -35,8 +34,8 @@ export const NAV_STRUCTURE: NavItemOrGroup[] = [
   },
 ]
 
-// The destinations in structure that a user who can do these abilities may
-// open. A group left with no items is dropped.
+// The destinations in structure whose route's ability can permits. A group
+// left with no items is dropped.
 export function permittedNav(structure: NavItemOrGroup[], can: (ability: Ability) => boolean): NavItemOrGroup[] {
   return structure.flatMap((item): NavItemOrGroup[] => {
     if (!isNavGroup(item)) return can(item.route.ability) ? [item] : []
@@ -45,8 +44,8 @@ export function permittedNav(structure: NavItemOrGroup[], can: (ability: Ability
   })
 }
 
-// The path of the first destination in nav order that a user who can do these
-// abilities may open, or null when there is none.
+// The path of the first permitted destination in nav order, or null when there
+// is none.
 export function firstPermittedPath(structure: NavItemOrGroup[], can: (ability: Ability) => boolean): string | null {
   const first = permittedNav(structure, can)[0]
   if (!first) return null

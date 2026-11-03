@@ -4,8 +4,6 @@ import type { Ability } from '@/hooks/useCan'
 // A signed-in route: its path, and the ability its screen needs.
 export interface AppRoute {
   path: string
-  // Its screen, and any nav destination for it, are shown only to a user who
-  // may do this.
   ability: Ability
 }
 

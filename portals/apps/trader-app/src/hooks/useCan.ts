@@ -22,8 +22,8 @@ export function grantedScopes(scope: string | undefined): ReadonlySet<string> {
   return new Set((scope ?? '').split(' ').filter(Boolean))
 }
 
-// Whether the signed-in user may do an ability, for checking several at once.
-// The scopes are the IdP's grant, from the token response; when the IdP leaves
+// The signed-in user's abilities, for a component that checks several. The
+// scopes are the IdP's grant from the token response; when the IdP leaves
 // `scope` out, oidc-client-ts takes it to have granted every requested scope.
 export function useAbilities(): { can: (ability: Ability) => boolean } {
   const scope = useAuth().user?.scope
@@ -34,7 +34,6 @@ export function useAbilities(): { can: (ability: Ability) => boolean } {
   }, [scope])
 }
 
-// Whether the signed-in user may do ability.
 export function useCan(ability: Ability): boolean {
   return useAbilities().can(ability)
 }

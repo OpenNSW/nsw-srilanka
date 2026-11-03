@@ -53,7 +53,6 @@ function ProtectedLayout() {
   )
 }
 
-// A route's screen, shown only to a user who has the route's ability.
 function restrictTo(route: AppRoute, screen: ReactNode) {
   return (
     <Can I={route.ability} fallback={<AccessRestrictedScreen />}>

@@ -2,7 +2,7 @@ import { Button } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { useSignOutHandler } from '@/hooks/useSignOutHandler'
 
-// Shown in place of a screen the signed-in user's scopes don't reach.
+// Shown in place of a screen the signed-in user may not open.
 export function AccessRestrictedScreen() {
   const handleSignOut = useSignOutHandler()
   const { t } = useTranslation()
