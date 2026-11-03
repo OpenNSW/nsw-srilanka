@@ -24,26 +24,26 @@ function renderServices(list = flows) {
 }
 
 describe('AuxiliaryServices', () => {
-  it('starts open, with a card per service', () => {
+  it('starts closed', () => {
     renderServices()
 
-    const toggle = screen.getByRole('button', { expanded: true })
+    const toggle = screen.getByRole('button', { expanded: false })
     expect(toggle.getAttribute('aria-controls')).toBe('auxiliary-services-list')
-    expect(screen.getByText('SLPA sundry payment')).toBeTruthy()
-    expect(screen.getByText('Add a Cargo Dispatch Note')).toBeTruthy()
+    expect(screen.queryByRole('list')).toBeNull()
   })
 
-  it('folds the list away and back from its header', () => {
+  it('opens to a card per service from its header, and folds them away again', () => {
     renderServices()
-    const toggle = screen.getByRole('button', { expanded: true })
-
-    fireEvent.click(toggle)
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByRole('list')).toBeNull()
+    const toggle = screen.getByRole('button', { expanded: false })
 
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.getByText('SLPA sundry payment')).toBeTruthy()
+
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('list')).toBeNull()
   })
 
   it('shows nothing when no service can be started', () => {

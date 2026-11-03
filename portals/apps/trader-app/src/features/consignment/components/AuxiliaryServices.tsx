@@ -18,7 +18,7 @@ interface AuxiliaryServicesProps {
 // confirmed first.
 export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<FlowOption | null>(null)
   const [starting, setStarting] = useState(false)
   const [failed, setFailed] = useState<FlowOption | null>(null)
@@ -43,31 +43,24 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
   return (
     <Surface className="mt-6 overflow-hidden">
       <section aria-labelledby="auxiliary-services-title">
-        {/* The header opens and closes the list, an accordion that starts open. */}
+        {/* The header opens and closes the list, an accordion that starts closed. Its text is
+            sized as the steps card's headings are. */}
         <h2 id="auxiliary-services-title">
           <button
             type="button"
             aria-expanded={open}
             aria-controls="auxiliary-services-list"
             onClick={() => setOpen((o) => !o)}
-            className="group flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-app-surface sm:p-6"
+            className="group flex w-full items-center gap-2 p-4 text-left text-sm font-semibold text-foreground transition-colors hover:bg-app-surface sm:px-6"
           >
-            <span className="flex-shrink-0 rounded-xl border border-info/30 bg-info-subtle p-2.5 text-info-strong">
-              <LayersIcon aria-hidden width={20} height={20} />
-            </span>
-            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
-              <span className="text-lg font-semibold tracking-tight text-foreground">
-                {t('consignments.detail.flows.title')}
-              </span>
-              <Badge color="blue" variant="soft" radius="full">
-                {t('consignments.detail.flows.available', { count: flows.length })}
-              </Badge>
-            </span>
+            <LayersIcon aria-hidden className="text-info-strong" />
+            <span>{t('consignments.detail.flows.title')}</span>
+            <Badge color="gray" variant="soft" radius="full">
+              {t('consignments.detail.flows.available', { count: flows.length })}
+            </Badge>
             <ChevronDownIcon
               aria-hidden
-              width={20}
-              height={20}
-              className={`flex-shrink-0 text-foreground-muted transition-transform duration-200 group-hover:text-foreground ${
+              className={`ml-auto flex-shrink-0 text-foreground-muted transition-transform duration-200 group-hover:text-foreground ${
                 open ? 'rotate-180' : ''
               }`}
             />
@@ -85,17 +78,14 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
             {flows.map((flow) => (
               <li
                 key={flow.templateId}
-                className="flex flex-col gap-4 rounded-xl border border-border bg-app-surface p-4 transition-colors hover:border-info/40 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-app-surface px-4 py-3 transition-colors hover:border-info/40"
               >
-                <div className="flex min-w-0 items-center gap-3.5">
-                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-info-subtle text-info-strong">
-                    <CubeIcon aria-hidden width={18} height={18} />
-                  </span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <CubeIcon aria-hidden className="flex-shrink-0 text-info-strong" />
                   <span className="font-semibold text-foreground">{flow.label}</span>
                 </div>
                 <Button
                   size="2"
-                  className="self-end sm:self-auto"
                   onClick={() => setPending(flow)}
                   disabled={starting}
                   aria-label={t('consignments.detail.flows.startService', { label: flow.label })}
@@ -106,9 +96,7 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
               </li>
             ))}
           </ul>
-          <p className="mt-4 border-t border-border pt-3 text-xs text-foreground-muted">
-            {t('consignments.detail.flows.footer')}
-          </p>
+          <p className="mt-6 text-sm text-foreground-muted">{t('consignments.detail.flows.footer')}</p>
         </div>
       </section>
 
