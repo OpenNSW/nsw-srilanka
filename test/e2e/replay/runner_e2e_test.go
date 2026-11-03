@@ -37,10 +37,8 @@ func TestReplay_ConsignmentFlows(t *testing.T) {
 	runFlow(t, h, "consignment_flows.json")
 }
 
-// TestReplay_CDAApplicationApprove drives the CDA coconut-certificate branch
-// end-to-end: submit the application → mock agency posts an "approve" callback
-// with product_type_dc (the payment path) → select payment method → mock
-// gateway confirms the payment → pay-fee COMPLETED.
+// TestReplay_CDAApplicationApprove drives the CDA coconut-certificate DC path:
+// CusDec assessed signal → submit application → approve → pay fee COMPLETED.
 func TestReplay_CDAApplicationApprove(t *testing.T) {
 	skipUnlessE2E(t)
 	h := newHarness(t)
@@ -48,12 +46,20 @@ func TestReplay_CDAApplicationApprove(t *testing.T) {
 }
 
 // TestReplay_CDAApplicationRework sends the CDA application back with
-// needs_more_info, then the trader resubmits and the agency approves, asserting
-// the workflow still advances to the pay-fee task.
+// needs_more_info, then the trader resubmits and the agency approves through
+// fee payment.
 func TestReplay_CDAApplicationRework(t *testing.T) {
 	skipUnlessE2E(t)
 	h := newHarness(t)
 	runFlow(t, h, "cda_application_rework.json")
+}
+
+// TestReplay_CDAApplicationValueAdded covers product_type=value_added_dc, which
+// skips the application fee and goes straight to the ASYCUDA green-check task.
+func TestReplay_CDAApplicationValueAdded(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "cda_application_value_added.json")
 }
 
 // runFlow loads a flow file from flows/ and executes it against the harness.
@@ -69,8 +75,9 @@ func runFlow(t *testing.T, h *harness, file string) {
 	r.Logf = t.Logf
 	r.Agency = h.agency          // drives `callback` steps (external-agency flows)
 	r.PaymentGateway = h.gateway // drives `pay` steps (payment flows)
+	r.Signaller = h.signaller    // drives `signal` steps (CusDec assessed stand-in)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	if err := r.Run(ctx, flow); err != nil {
 		t.Fatalf("flow %q failed: %v", flow.Name, err)
