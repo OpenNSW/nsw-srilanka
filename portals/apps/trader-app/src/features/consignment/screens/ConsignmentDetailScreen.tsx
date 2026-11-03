@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, Badge, IconButton, Tooltip } from '@radix-ui/themes'
-import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { Button, Badge } from '@radix-ui/themes'
+import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { isAgencyMode } from '@/features/case/mode'
 import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
@@ -9,7 +9,15 @@ import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { useConsignment } from '@/features/consignment/hooks.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { ROUTES } from '@/constants'
-import { Breadcrumb, type BreadcrumbItem, CopyableId, LoadingOverlay, Surface, PageState } from '@portals/ui'
+import {
+  Breadcrumb,
+  type BreadcrumbItem,
+  CopyableId,
+  LoadingOverlay,
+  PageState,
+  RefreshButton,
+  Surface,
+} from '@portals/ui'
 
 interface ConsignmentDetailScreenProps {
   // Keeps this view's results apart from other views of the same consignment.
@@ -100,18 +108,7 @@ export function ConsignmentDetailScreen({
     <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-6 pb-10">
       <div className="flex items-center justify-between gap-4">
         <Breadcrumb items={[up, { label: consignment.name || untitled }]} />
-        <Tooltip content={t('consignments.detail.refresh')}>
-          <IconButton
-            type="button"
-            variant="soft"
-            color="gray"
-            onClick={refetch}
-            disabled={refreshing}
-            aria-label={t('consignments.detail.refresh')}
-          >
-            <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-          </IconButton>
-        </Tooltip>
+        <RefreshButton label={t('consignments.detail.refresh')} refreshing={refreshing} onClick={refetch} />
       </div>
 
       <div className="mt-10 mb-8 flex flex-wrap items-start justify-between gap-4">
