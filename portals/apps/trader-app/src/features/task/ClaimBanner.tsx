@@ -1,7 +1,8 @@
-import { AlertDialog, Badge, Button, Flex, Spinner, Text } from '@radix-ui/themes'
+import { useState } from 'react'
+import { Button, Spinner, Text } from '@radix-ui/themes'
 import { LockClosedIcon, LockOpen1Icon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import { Surface } from '@portals/ui'
+import { ConfirmDialog, StatusBadge, Surface } from '@portals/ui'
 import type { TaskClaim } from '@/features/zone/types'
 
 type Props = {
@@ -23,27 +24,28 @@ type Props = {
 // A claim is a hint for other users: it never locks the task.
 export function ClaimBanner({ claim, completed, canChange, busy, error, onClaim, onRelease }: Props) {
   const { t } = useTranslation()
+  const [confirmingTakeOver, setConfirmingTakeOver] = useState(false)
   const changeable = canChange && !completed
   const name = claim.holder?.name || t('tasks.claim.anotherUser')
 
   let badge
   if (claim.mine) {
     badge = (
-      <Badge size="2" color="green" variant="soft">
+      <StatusBadge tone="success" size="2">
         {t('tasks.claim.claimedByYou')}
-      </Badge>
+      </StatusBadge>
     )
   } else if (claim.holder) {
     badge = (
-      <Badge size="2" color="amber" variant="soft">
+      <StatusBadge tone="warning" size="2">
         {t('tasks.claim.claimedBy', { name })}
-      </Badge>
+      </StatusBadge>
     )
   } else {
     badge = (
-      <Badge size="2" color="gray" variant="soft">
+      <StatusBadge tone="neutral" size="2">
         {t('tasks.claim.unclaimed')}
-      </Badge>
+      </StatusBadge>
     )
   }
 
@@ -64,32 +66,34 @@ export function ClaimBanner({ claim, completed, canChange, busy, error, onClaim,
           </Button>
         )}
         {changeable && claim.holder && !claim.mine && (
-          <AlertDialog.Root>
-            <AlertDialog.Trigger>
-              <Button variant="soft" size="2" disabled={busy} className="cursor-pointer">
-                {busy ? <Spinner size="1" /> : <LockClosedIcon />}
-                {t('tasks.claim.takeOver')}
-              </Button>
-            </AlertDialog.Trigger>
-            <AlertDialog.Content maxWidth="450px">
-              <AlertDialog.Title>{t('tasks.claim.takeOverTitle')}</AlertDialog.Title>
-              <AlertDialog.Description size="2">
-                {claim.holder.name
+          <>
+            <Button
+              variant="soft"
+              size="2"
+              onClick={() => setConfirmingTakeOver(true)}
+              disabled={busy}
+              className="cursor-pointer"
+            >
+              {busy ? <Spinner size="1" /> : <LockClosedIcon />}
+              {t('tasks.claim.takeOver')}
+            </Button>
+            <ConfirmDialog
+              open={confirmingTakeOver}
+              onOpenChange={setConfirmingTakeOver}
+              title={t('tasks.claim.takeOverTitle')}
+              description={
+                claim.holder.name
                   ? t('tasks.claim.takeOverConfirm', { name: claim.holder.name })
-                  : t('tasks.claim.takeOverConfirmUnnamed')}
-              </AlertDialog.Description>
-              <Flex gap="3" mt="4" justify="end">
-                <AlertDialog.Cancel>
-                  <Button variant="soft" color="gray">
-                    {t('tasks.claim.cancel')}
-                  </Button>
-                </AlertDialog.Cancel>
-                <AlertDialog.Action>
-                  <Button onClick={onClaim}>{t('tasks.claim.takeOver')}</Button>
-                </AlertDialog.Action>
-              </Flex>
-            </AlertDialog.Content>
-          </AlertDialog.Root>
+                  : t('tasks.claim.takeOverConfirmUnnamed')
+              }
+              confirmLabel={t('tasks.claim.takeOver')}
+              cancelLabel={t('tasks.claim.cancel')}
+              onConfirm={() => {
+                setConfirmingTakeOver(false)
+                onClaim()
+              }}
+            />
+          </>
         )}
       </div>
       {error && (

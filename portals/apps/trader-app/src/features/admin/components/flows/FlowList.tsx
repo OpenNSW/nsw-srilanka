@@ -1,12 +1,13 @@
-import { Badge, Text } from '@radix-ui/themes'
+import { Text } from '@radix-ui/themes'
+import { StatusBadge, type StatusTone } from '@portals/ui'
 import type { ConsignmentFlow } from '@/features/admin/types'
 import { formatDateTime } from '@/features/consignment/utils'
 import { humanizeStatus } from '@/utils/formatStatus'
 
-const FLOW_STATUS_COLOR: Record<ConsignmentFlow['status'], 'gray' | 'orange' | 'green'> = {
-  STARTING: 'gray',
-  STARTED: 'orange',
-  COMPLETED: 'green',
+const FLOW_STATUS_TONE: Record<ConsignmentFlow['status'], StatusTone> = {
+  STARTING: 'neutral',
+  STARTED: 'info',
+  COMPLETED: 'success',
 }
 
 const FLOW_ROW_GRID = 'grid grid-cols-[1fr_130px_170px_1.5fr] gap-2 items-center'
@@ -50,9 +51,7 @@ export function FlowList({
                 {flow.templateName}
               </div>
               <div className="p-3">
-                <Badge size="1" color={FLOW_STATUS_COLOR[flow.status]}>
-                  {humanizeStatus(flow.status)}
-                </Badge>
+                <StatusBadge tone={FLOW_STATUS_TONE[flow.status]}>{humanizeStatus(flow.status)}</StatusBadge>
               </div>
               <div className="p-3 text-xs text-foreground-muted">{formatDateTime(flow.createdAt)}</div>
               <div className="p-3 text-xs font-mono text-foreground-muted break-all">{flow.workflowId}</div>

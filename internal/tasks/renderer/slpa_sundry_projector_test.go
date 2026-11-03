@@ -93,3 +93,34 @@ func TestSundryProjector_CarriesTheTradersEntries(t *testing.T) {
 
 	assert.Equal(t, entered, form.Data)
 }
+
+func containerField(t *testing.T, form uiprojector.FormContent) map[string]any {
+	t.Helper()
+	schema := form.Schema.(map[string]any)
+	lines := schema["properties"].(map[string]any)["lines"].(map[string]any)
+	return lines["items"].(map[string]any)["properties"].(map[string]any)["containerNo"].(map[string]any)
+}
+
+// Each container is picked by its dummy number, which is what SLPA keys the
+// order by, with the real container beside it once there is one.
+func TestSundryProjector_OffersTheConsignmentsContainers(t *testing.T) {
+	form, _ := projectSundry(t, map[string]any{
+		"containers": map[string]any{"containers": []any{
+			map[string]any{"container_no": "CBEX1E68944-20261102-01", "real_container_no": "MSCU8492019"},
+			map[string]any{"container_no": "CBEX1E68944-20261102-02", "real_container_no": ""},
+			map[string]any{"real_container_no": "TGHU1111111"},
+		}},
+	})
+
+	assert.Equal(t, []any{
+		map[string]any{"const": "CBEX1E68944-20261102-01", "title": "CBEX1E68944-20261102-01 - MSCU8492019"},
+		map[string]any{"const": "CBEX1E68944-20261102-02", "title": "CBEX1E68944-20261102-02"},
+	}, containerField(t, form)["oneOf"])
+}
+
+// With no containers on the case the trader types the number, as before.
+func TestSundryProjector_LeavesTheContainerFieldAsAuthoredWithNoContainers(t *testing.T) {
+	form, _ := projectSundry(t, map[string]any{"containers": map[string]any{"containers": []any{}}})
+
+	assert.NotContains(t, containerField(t, form), "oneOf")
+}

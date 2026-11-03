@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Badge, Button } from '@radix-ui/themes'
+import { Button } from '@radix-ui/themes'
+import { StatusBadge, type StatusTone } from '@portals/ui'
 import { ChevronRightIcon } from '@radix-ui/react-icons'
 import type { AdminWorkflowKind, EngineEdge, EngineNode, EngineNodeStatus } from '@/features/admin/types'
 import { formatDateTime } from '@/features/consignment/utils'
@@ -16,12 +17,13 @@ import {
 } from '@/features/admin/components/engine/shared'
 import { useExpandableWorkflow } from '@/features/admin/components/engine/useExpandableWorkflow'
 
-const NODE_STATUS_COLOR: Record<EngineNodeStatus, 'gray' | 'orange' | 'green' | 'red' | 'amber'> = {
-  NOT_STARTED: 'gray',
-  RUNNING: 'orange',
-  COMPLETED: 'green',
-  FAILED: 'red',
-  AWAITING_ADMIN: 'amber',
+// Running is info, as an in-progress task is on the trader screens; waiting on an admin is warning.
+const NODE_STATUS_TONE: Record<EngineNodeStatus, StatusTone> = {
+  NOT_STARTED: 'neutral',
+  RUNNING: 'info',
+  COMPLETED: 'success',
+  FAILED: 'danger',
+  AWAITING_ADMIN: 'warning',
 }
 
 // One engine node's row. A native engine child (SPLIT_TASK/BATCH_SPLIT/PARALLEL_SPLIT) gets a
@@ -114,7 +116,7 @@ export function NodeRow({
           </button>
         </div>
         <div className="px-3 flex flex-col items-start gap-1">
-          <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
+          <StatusBadge tone={NODE_STATUS_TONE[node.status]}>{node.status}</StatusBadge>
           {canIntervene && node.status === 'AWAITING_ADMIN' && (
             <Button
               variant="soft"

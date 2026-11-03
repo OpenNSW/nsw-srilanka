@@ -463,6 +463,7 @@ permissions:
     permissions:
       - consignment:adminread
       - consignment:adminwrite
+      - profile:read
 assignments:
   - id: 01a13912-d377-73d1-a3e4-a5877421ca85
     type: group

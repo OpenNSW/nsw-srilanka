@@ -11,3 +11,16 @@ window.__APP_CONFIG__ = { ...TEST_APP_CONFIG }
 afterEach(() => {
   cleanup()
 })
+
+// Radix components call these browser APIs, which jsdom leaves out.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+const elementStubs = { hasPointerCapture: () => false, releasePointerCapture: () => {}, scrollIntoView: () => {} }
+for (const [name, stub] of Object.entries(elementStubs)) {
+  if (!(name in Element.prototype)) {
+    Object.defineProperty(Element.prototype, name, { value: stub, configurable: true, writable: true })
+  }
+}

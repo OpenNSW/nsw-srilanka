@@ -12,6 +12,17 @@ overrides:
   # GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g.
   fast-uri: '^3.1.8'
 
+# Declare dependencies a package uses but leaves out of its package.json, so
+# they resolve to the right version rather than whichever one pnpm hoists.
+packageExtensions:
+  # @jsonforms/react's types import ajv (JsonForms.d.ts) without depending on
+  # it. Left to hoisting, the ajv@6 that ESLint pulls in can win, and
+  # FormRenderer's additionalErrors then fails to type-check against ajv@6's
+  # ErrorObject. Same range as @jsonforms/core.
+  '@jsonforms/react':
+    dependencies:
+      ajv: '^8.18.0'
+
 allowBuilds:
   '@swc/core': true
   core-js: false
