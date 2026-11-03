@@ -37,6 +37,14 @@ func (f fakeCaseRepo) ListCases(_ context.Context, o Owner, _, _ int) ([]Case, i
 	return out, int64(len(out)), nil
 }
 
+func (f fakeCaseRepo) GetAnyCase(_ context.Context, id string) (*Case, error) {
+	c, ok := f.cases[id]
+	if !ok {
+		return nil, ErrCaseNotFound
+	}
+	return &c, nil
+}
+
 func (f fakeCaseRepo) GetCase(_ context.Context, o Owner, id string) (*Case, error) {
 	c, ok := f.cases[id]
 	if !ok || !f.owns(o, id) {

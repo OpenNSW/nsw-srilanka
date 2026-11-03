@@ -1,4 +1,4 @@
-package consignment
+package workflowadmin
 
 import (
 	"context"
@@ -16,10 +16,9 @@ import (
 	workflow "github.com/OpenNSW/core/workflow"
 )
 
-func TestConsignmentService_GetEngineStatus(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_GetEngineStatus(t *testing.T) {
 	mockWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -69,10 +68,9 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 
 // A parked node's category and mappings pass straight through — the resolve UI reads them to tell
 // an admin why the node parked and which workflow variables a RETRY reads or a COMPLETE writes.
-func TestConsignmentService_GetEngineStatus_ParkContext(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_GetEngineStatus_ParkContext(t *testing.T) {
 	mockWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -112,10 +110,9 @@ func TestConsignmentService_GetEngineStatus_ParkContext(t *testing.T) {
 	mockWM.AssertExpectations(t)
 }
 
-func TestConsignmentService_GetEngineStatus_NotFound(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_GetEngineStatus_NotFound(t *testing.T) {
 	mockWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -127,9 +124,8 @@ func TestConsignmentService_GetEngineStatus_NotFound(t *testing.T) {
 	mockWM.AssertExpectations(t)
 }
 
-func TestConsignmentService_GetEngineStatus_NoWorkflowManager(t *testing.T) {
-	db, _ := setupTestDB(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+func TestService_GetEngineStatus_NoWorkflowManager(t *testing.T) {
+	svc := newTestService(nil)
 
 	_, err := svc.GetEngineStatus(context.Background(), uuid.NewString())
 	assert.Error(t, err)
@@ -138,11 +134,10 @@ func TestConsignmentService_GetEngineStatus_NoWorkflowManager(t *testing.T) {
 // A TASK node's TaskWorkflowID is filled in from the task store, keyed off
 // workflow.VarCaseID rather than the queried workflow ID itself — this matters when
 // GetEngineStatus is called on a nested child branch, not just the consignment root.
-func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T) {
 	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
-	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
+	svc := newTestService(mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -178,10 +173,9 @@ func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T)
 	mockTaskStore.AssertExpectations(t)
 }
 
-func TestConsignmentService_GetTaskWorkflowEngineStatus(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_GetTaskWorkflowEngineStatus(t *testing.T) {
 	mockTaskWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterTaskWorkflowManager(mockTaskWM))
 
 	ctx := context.Background()
@@ -204,10 +198,9 @@ func TestConsignmentService_GetTaskWorkflowEngineStatus(t *testing.T) {
 	mockTaskWM.AssertExpectations(t)
 }
 
-func TestConsignmentService_GetTaskWorkflowEngineStatus_NotFound(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_GetTaskWorkflowEngineStatus_NotFound(t *testing.T) {
 	mockTaskWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterTaskWorkflowManager(mockTaskWM))
 
 	ctx := context.Background()
@@ -219,31 +212,20 @@ func TestConsignmentService_GetTaskWorkflowEngineStatus_NotFound(t *testing.T) {
 	mockTaskWM.AssertExpectations(t)
 }
 
-func TestConsignmentService_GetTaskWorkflowEngineStatus_NoManager(t *testing.T) {
-	db, _ := setupTestDB(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+func TestService_GetTaskWorkflowEngineStatus_NoManager(t *testing.T) {
+	svc := newTestService(nil)
 
 	_, err := svc.GetTaskWorkflowEngineStatus(context.Background(), "task-wf-officer_review")
 	assert.Error(t, err)
 }
 
-func TestConsignmentService_RegisterTaskWorkflowManager_AlreadyRegistered(t *testing.T) {
-	db, _ := setupTestDB(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
-	require.NoError(t, svc.RegisterTaskWorkflowManager(new(MockWM)))
-
-	err := svc.RegisterTaskWorkflowManager(new(MockWM))
-	assert.Error(t, err)
-}
-
-// TestConsignmentService_ResolveAdminIntervention_RoutesByStepID: a resolve names only the parked
+// TestService_ResolveAdminIntervention_RoutesByStepID: a resolve names only the parked
 // step (EngineNodeDTO.StepID). The service finds the node parked under it and sends core a signal
 // carrying both, since core matches pending resolutions on the ActivationID and silently drops a
 // signal that names no current parking.
-func TestConsignmentService_ResolveAdminIntervention_RoutesByStepID(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_ResolveAdminIntervention_RoutesByStepID(t *testing.T) {
 	mockWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -275,10 +257,9 @@ func TestConsignmentService_ResolveAdminIntervention_RoutesByStepID(t *testing.T
 // A resolve naming an earlier parking of the node — it was resolved and has parked again under a
 // new step ID since the admin loaded the engine status — is rejected rather than applied to the
 // newer parking, and no signal is sent.
-func TestConsignmentService_ResolveAdminIntervention_StaleStepID(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_ResolveAdminIntervention_StaleStepID(t *testing.T) {
 	mockWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -302,11 +283,10 @@ func TestConsignmentService_ResolveAdminIntervention_StaleStepID(t *testing.T) {
 
 // A node parked inside a task workflow is resolved through the task workflow manager, routed by
 // its step ID the same way, and the root manager is never consulted.
-func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_UsesTaskManager(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_ResolveTaskWorkflowAdminIntervention_UsesTaskManager(t *testing.T) {
 	rootWM, taskWM := new(MockWM), new(MockWM)
 	rootWM.Test(t) // any call to it fails the test
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(rootWM))
 	require.NoError(t, svc.RegisterTaskWorkflowManager(taskWM))
 
@@ -334,11 +314,10 @@ func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_UsesTaskManager
 	rootWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
 }
 
-func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_NoTaskManager(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_ResolveTaskWorkflowAdminIntervention_NoTaskManager(t *testing.T) {
 	rootWM := new(MockWM)
 	rootWM.Test(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(rootWM))
 
 	_, err := svc.ResolveTaskWorkflowAdminIntervention(context.Background(), "task-wf-1", workflow.AdminResolutionSignal{
@@ -350,10 +329,9 @@ func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_NoTaskManager(t
 	rootWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
 }
 
-func TestConsignmentService_ResolveAdminIntervention_UnknownStepID(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_ResolveAdminIntervention_UnknownStepID(t *testing.T) {
 	mockWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -376,10 +354,9 @@ func TestConsignmentService_ResolveAdminIntervention_UnknownStepID(t *testing.T)
 	mockWM.AssertExpectations(t)
 }
 
-func TestConsignmentService_ResolveAdminIntervention_NodeNotAwaitingAdmin(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_ResolveAdminIntervention_NodeNotAwaitingAdmin(t *testing.T) {
 	mockWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -402,10 +379,9 @@ func TestConsignmentService_ResolveAdminIntervention_NodeNotAwaitingAdmin(t *tes
 	mockWM.AssertExpectations(t)
 }
 
-func TestConsignmentService_ResolveAdminIntervention_GatewayCompleteUnsupported(t *testing.T) {
-	db, _ := setupTestDB(t)
+func TestService_ResolveAdminIntervention_GatewayCompleteUnsupported(t *testing.T) {
 	mockWM := new(MockWM)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()

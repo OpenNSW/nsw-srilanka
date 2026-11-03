@@ -1,4 +1,4 @@
-package consignment
+package workflowadmin
 
 import (
 	"context"
@@ -44,7 +44,7 @@ type forceParkRoute struct {
 	own     managerSlot
 	other   managerSlot
 	park    func(s *Service) func(ctx context.Context, workflowID, stepID, reason string) (string, error)
-	handler func(r *Router) http.HandlerFunc
+	handler func(r *Handler) http.HandlerFunc
 	// cancels says whether the route closes the node's task before parking it.
 	cancels bool
 }
@@ -55,14 +55,14 @@ var forceParkRoutes = []forceParkRoute{
 		park: func(s *Service) func(context.Context, string, string, string) (string, error) {
 			return s.ForceParkTaskNode
 		},
-		handler: func(r *Router) http.HandlerFunc { return r.HandleForceParkTaskNode },
+		handler: func(r *Handler) http.HandlerFunc { return r.HandleForceParkTaskNode },
 	},
 	{
 		name: "task workflow route", own: taskManager, other: rootManager, cancels: false,
 		park: func(s *Service) func(context.Context, string, string, string) (string, error) {
 			return s.ForceParkTaskWorkflowStep
 		},
-		handler: func(r *Router) http.HandlerFunc { return r.HandleForceParkTaskWorkflowStep },
+		handler: func(r *Handler) http.HandlerFunc { return r.HandleForceParkTaskWorkflowStep },
 	},
 }
 
@@ -73,8 +73,7 @@ func forceParkFixture(t *testing.T, route forceParkRoute, cancelErr error) (*Ser
 	calls := &[]string{}
 	mockWM, otherWM := new(MockWM), new(MockWM)
 	otherWM.Test(t) // any call on the other manager fails the test
-	db, _ := setupTestDB(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, route.own(svc, mockWM))
 	require.NoError(t, route.other(svc, otherWM))
 	require.NoError(t, svc.RegisterTaskCanceller(&fakeTaskCanceller{calls: calls, err: cancelErr}))
@@ -223,8 +222,7 @@ func TestForcePark_WorkflowNotFound(t *testing.T) {
 }
 
 func TestForceParkTaskNode_NoTaskCanceller(t *testing.T) {
-	db, _ := setupTestDB(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	require.NoError(t, svc.RegisterWorkflowManager(new(MockWM)))
 
 	_, err := svc.ForceParkTaskNode(context.Background(), resolveTestWorkflowID, resolveTestStepID, "reason")
@@ -259,7 +257,7 @@ func TestRouter_HandleForcePark_MapsResults(t *testing.T) {
 			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
 				svc, mockWM, calls := forceParkFixture(t, route, nil)
 				client, _ := nswaudit.NewWithCapture()
-				r := mustNewRouter(t, svc, nil, nil, client)
+				r := NewHandler(svc, client)
 				mockWM.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(tt.instance, tt.statusErr)
 				expectPark(mockWM, calls, tt.parkErr)
 
@@ -291,7 +289,7 @@ func TestRouter_HandleForcePark_RejectsInvalidRequest(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
 				client, _ := nswaudit.NewWithCapture()
-				r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, client)
+				r := NewHandler(newTestService(nil), client)
 				req := newForceParkRequest(tt.body)
 				req.SetPathValue("stepId", tt.stepID)
 

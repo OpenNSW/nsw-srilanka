@@ -2,9 +2,10 @@ openapi: 3.0.3
 info:
   title: NSW Sri Lanka / Admin API
   description: |
-    OpenAPI 3.0 specification for the ops/admin views of any consignment —
-    full detail, its flows, and each flow's raw workflow-engine state, with no
-    trader/CHA ownership check.
+    OpenAPI 3.0 specification for the ops/admin views of any consignment (in
+    TNSW) or case (in an agency) — full detail, its flows, and each flow's raw
+    workflow-engine state, with no ownership check. The workflow routes are the
+    same in TNSW and the agencies.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -57,6 +58,57 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: No such consignment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/cases/{id}:
+    get:
+      summary: "[Admin] Get any agency case, every task on it and its flows"
+      description: |
+        An agency's ops/admin view of **any** case, with no ownership check,
+        unlike `GET /api/v1/cases/{id}`, which shows an officer only the cases
+        their OU owns and the tasks their roles may read. This lists every task
+        on the case. `flows` lists the case's top-level workflows; open one with
+        `GET /api/v1/admin/workflows/{id}/engine-status`. Served in agency mode.
+
+        Requires scope `consignment:adminread`.
+      operationId: adminGetCaseByID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The case ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCaseDetail'
+        '401':
+          description: Unauthorized. Missing or invalid bearer token, or not a user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `consignment:adminread`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such case.
           content:
             application/json:
               schema:
@@ -723,9 +775,43 @@ components:
               items:
                 $ref: '#/components/schemas/FlowDTO'
 
+    AdminCaseDetail:
+      type: object
+      description: An agency case, every task on it, and its flows.
+      required:
+        - id
+        - state
+        - createdAt
+        - updatedAt
+        - workflowNodes
+        - flows
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        state:
+          $ref: '#/components/schemas/State'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        workflowNodes:
+          type: array
+          description: Every task on the case but system ones, whatever their read roles.
+          items:
+            $ref: '#/components/schemas/WorkflowNodeResponseDTO'
+        flows:
+          type: array
+          description: The case's top-level workflows, oldest first.
+          items:
+            $ref: '#/components/schemas/FlowDTO'
+
     FlowDTO:
       type: object
-      description: One top-level workflow (flow) of a consignment.
+      description: One top-level workflow (flow) of a consignment or case.
       required:
         - workflowId
         - templateId

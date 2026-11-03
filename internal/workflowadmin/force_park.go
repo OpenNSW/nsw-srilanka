@@ -1,4 +1,4 @@
-package consignment
+package workflowadmin
 
 import (
 	"context"
@@ -17,33 +17,13 @@ var ErrNodeNotWaiting = errors.New("node is not waiting on its step")
 // ErrForceParkUnsupportedNodeType is returned by the force-park methods for a node that isn't a TASK.
 var ErrForceParkUnsupportedNodeType = errors.New("force-park is supported only for TASK nodes")
 
-// TaskCanceller closes a task from outside its workflow. core's orchestrator.TaskManager implements
-// it.
-type TaskCanceller interface {
-	// CancelTask marks the task cancelled and terminates its workflow. It returns an error wrapping
-	// orchestrator.ErrTaskNotOpen if the task has completed or does not exist.
-	CancelTask(ctx context.Context, taskID, reason string) error
-}
-
-// RegisterTaskCanceller registers what ForceParkTaskNode closes a task with.
-func (s *Service) RegisterTaskCanceller(c TaskCanceller) error {
-	if s.tasks != nil {
-		return fmt.Errorf("task canceller already registered for ConsignmentService")
-	}
-	if c == nil {
-		return fmt.Errorf("task canceller cannot be nil")
-	}
-	s.tasks = c
-	return nil
-}
-
-// ForceParkTaskNode moves a TASK node on a consignment workflow that is waiting on its task into
+// ForceParkTaskNode moves a TASK node on a flow (or a child workflow of one) that is waiting on its task into
 // AWAITING_ADMIN, and closes that task. An admin then resolves the node like any parked node: RETRY
 // starts a new task under a new step, COMPLETE moves on with a variables patch as the node's output,
 // ABORT fails the workflow. Use it when the whole task has to go, for example to rebuild it from
 // amended data. To override a single step and let the task carry on, use ForceParkTaskWorkflowStep.
 //
-// workflowID is the consignment's root workflow or one of its child-branch workflows, and stepID is
+// workflowID is a case's flow or one of its child-branch workflows, and stepID is
 // the node's step_id from that workflow's engine status. It returns the node's ID in the workflow
 // definition, for the caller's audit record.
 //
@@ -52,7 +32,7 @@ func (s *Service) RegisterTaskCanceller(c TaskCanceller) error {
 // the node is already visibly parked and repeating the request finishes closing the task.
 func (s *Service) ForceParkTaskNode(ctx context.Context, workflowID, stepID, reason string) (nodeID string, err error) {
 	if s.tasks == nil {
-		return "", fmt.Errorf("no task canceller registered for ConsignmentService")
+		return "", fmt.Errorf("no task canceller registered for workflowadmin.Service")
 	}
 	return forceParkStep(ctx, s.wm, workflowID, stepID, reason, func() error {
 		// The task is named after the step that started it (see core's TaskManager.StartTask). If

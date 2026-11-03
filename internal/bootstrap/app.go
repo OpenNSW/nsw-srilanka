@@ -70,6 +70,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
+	"github.com/OpenNSW/nsw-srilanka/internal/workflowadmin"
 
 	"go.temporal.io/sdk/client"
 	"gorm.io/gorm"
@@ -375,29 +376,9 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to register workflow manager with flow service: %w", err)
 	}
-	if !agencyMode {
-		if err := consignmentService.RegisterWorkflowManager(parentRunner); err != nil {
-			_ = stopParentRunner()
-			_ = stopTask()
-			temporalClient.Close()
-			_ = database.Close(db)
-			return nil, fmt.Errorf("failed to register workflow manager with consignment service: %w", err)
-		}
-		if err := consignmentService.RegisterTaskWorkflowManager(task.Runner); err != nil {
-			_ = stopParentRunner()
-			_ = stopTask()
-			temporalClient.Close()
-			_ = database.Close(db)
-			return nil, fmt.Errorf("failed to register task workflow manager with consignment service: %w", err)
-		}
-		if err := consignmentService.RegisterTaskCanceller(tm); err != nil {
-			_ = stopParentRunner()
-			_ = stopTask()
-			temporalClient.Close()
-			_ = database.Close(db)
-			return nil, fmt.Errorf("failed to register task canceller with consignment service: %w", err)
-		}
-	}
+	// The admin views and overrides of the workflows both managers run, in TNSW and in an
+	// agency alike.
+	workflowAdmin := workflowadmin.NewHandler(workflowadmin.NewService(parentRunner, task.Runner, tm, task.Store), auditor)
 
 	// -------------------------------------------------------------------
 	// Stage 6: Identity Provider (IDP) Authentication Manager
@@ -571,6 +552,19 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	mux.Handle("POST /api/v1/tasks/{id}/claim", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleClaimTask)))))
 	mux.Handle("POST /api/v1/tasks/{id}/release", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleReleaseTask)))))
 
+	// Admin routes, gated on the admin scopes rather than the case's ownership: a small admin
+	// group that can read any workflow's engine state, and resolve or force-park its nodes.
+	// {id} is a flow or a child workflow of one; under /task/, a TASK node's own task workflow,
+	// a separate ID space on the task workflow manager (see EngineNodeDTO.TaskWorkflowID).
+	// Resolving and force-parking can change workflow data or force a path the interpreter
+	// never chose, so they sit behind ConsignmentAdminWrite, stricter than the read.
+	mux.Handle("GET /api/v1/admin/workflows/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(workflowAdmin.HandleGetWorkflowEngineStatus))))
+	mux.Handle("GET /api/v1/admin/task/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(workflowAdmin.HandleGetTaskWorkflowEngineStatus))))
+	mux.Handle("POST /api/v1/admin/workflows/{id}/steps/{stepId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(workflowAdmin.HandleResolveAdminIntervention))))
+	mux.Handle("POST /api/v1/admin/task/{id}/steps/{stepId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(workflowAdmin.HandleResolveTaskWorkflowAdminIntervention))))
+	mux.Handle("POST /api/v1/admin/workflows/{id}/steps/{stepId}/force-park", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(workflowAdmin.HandleForceParkTaskNode))))
+	mux.Handle("POST /api/v1/admin/task/{id}/steps/{stepId}/force-park", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(workflowAdmin.HandleForceParkTaskWorkflowStep))))
+
 	mux.Handle("GET /api/v1/static-data/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(staticDataHandler.HandleGet))))
 
 	mux.Handle("GET /api/v1/users/me", withAuth(withScope(scopes.ProfileRead)(http.HandlerFunc(profileHandler.HandleGetProfile))))
@@ -582,7 +576,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
-		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, withAuth, withScope)
+		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, auditor, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,

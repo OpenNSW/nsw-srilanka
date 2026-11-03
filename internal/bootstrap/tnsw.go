@@ -51,31 +51,10 @@ func mountTNSW(
 	mux.Handle("POST /api/v1/consignments/{id}/flows", withAuth(withScope(scopes.ConsignmentFlowWrite)(http.HandlerFunc(h.consignment.HandleStartConsignmentFlow))))
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(h.consignment.HandleGetConsignments))))
 
-	// Ops/admin views of consignment data — gated behind the dedicated admin scope, not the
-	// trader/CHA-facing consignment read scope, and with no per-consignment ownership check.
-	// Kept together (and as their own handlers, not scope branches on the routes above) so this
-	// distinct trust boundary — a small admin group that can read any consignment — stays easy
-	// to audit as a group rather than spread through the general consignment API.
-	// A consignment's flows are listed by the route below; each is opened here by its
-	// workflow ID, as is any child workflow of one.
-	mux.Handle("GET /api/v1/admin/workflows/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(h.consignment.HandleGetWorkflowEngineStatus))))
+	// The admin view of a consignment, behind the admin scope and with no ownership check: it
+	// lists the consignment's flows, which the shared admin routes (see Build) open by
+	// workflow ID.
 	mux.Handle("GET /api/v1/admin/consignments/{id}", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(h.consignment.HandleAdminGetConsignmentByID))))
-	// A TASK node's independent per-task ("micro") workflow — separate ID space and
-	// workflow.Manager from the flow/child-workflow route above (see
-	// EngineNodeDTO.TaskWorkflowID).
-	mux.Handle("GET /api/v1/admin/task/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(h.consignment.HandleGetTaskWorkflowEngineStatus))))
-	// Resolving a parked node can mutate workflow data (GlobalVariablesPatch) or force it down a path the
-	// interpreter never chose (Complete/Abort), so this sits behind ConsignmentAdminWrite, a
-	// stricter scope than the read-only admin views above.
-	mux.Handle("POST /api/v1/admin/workflows/{id}/steps/{stepId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(h.consignment.HandleResolveAdminIntervention))))
-	// Same, for a node inside a task workflow, which lives in its own ID space on the task workflow
-	// manager (mirrors the two engine-status routes above).
-	mux.Handle("POST /api/v1/admin/task/{id}/steps/{stepId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(h.consignment.HandleResolveTaskWorkflowAdminIntervention))))
-	// Force-parking takes a waiting TASK node's task away from whoever is working on it and parks
-	// the node for the resolve route above, so it sits behind the same scope.
-	mux.Handle("POST /api/v1/admin/workflows/{id}/steps/{stepId}/force-park", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(h.consignment.HandleForceParkTaskNode))))
-	// Same, for one step inside a task workflow: the step parks and the task stays open.
-	mux.Handle("POST /api/v1/admin/task/{id}/steps/{stepId}/force-park", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(h.consignment.HandleForceParkTaskWorkflowStep))))
 
 	// Payment webhook endpoints. Requires valid JWT issued from nsw-srilanka's IDP with the appropriate scope. The gatewayId path param is used to resolve the correct payment gateway configuration for the webhook.
 	// Authenticating the caller as the gateway itself is the gateway's own job:

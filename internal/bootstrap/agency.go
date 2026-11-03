@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
@@ -25,6 +26,7 @@ func mountAgency(
 	clientFlows caseflow.ClientFlows,
 	tasks agency.TaskLister,
 	cat *catalog.Catalog,
+	auditor nswaudit.Auditor,
 	withAuth func(http.Handler) http.Handler,
 	withScope func(string) func(http.Handler) http.Handler,
 ) {
@@ -36,4 +38,10 @@ func mountAgency(
 	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifacts, cat.Roles)
 	mux.Handle("GET /api/v1/cases", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleListCases))))
 	mux.Handle("GET /api/v1/cases/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleGetCase))))
+
+	// The admin view of a case, behind the admin scope and with no ownership check, as TNSW's
+	// admin consignment view: it lists every task and the case's flows, which the shared admin
+	// routes (see Build) open by workflow ID.
+	adminCases := agency.NewAdminCaseHandler(agency.NewCaseRepository(db), tasks, flows, artifacts, auditor)
+	mux.Handle("GET /api/v1/admin/cases/{id}", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(adminCases.HandleGetCase))))
 }
