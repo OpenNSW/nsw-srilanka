@@ -25,8 +25,8 @@ import (
 // CHA-enabled, and records it, replacing an earlier selection. It also still writes the
 // consignment's cha_company_id column, until a later migration drops it.
 //
-// Access to the consignment is company-wide — any user at the selected CHA company can act on
-// it — so only the CHA company is recorded; no individual CHA user is assigned.
+// Access to the consignment is company-wide — any user in the selected CHA company's OU can
+// act on it — so only the company's OU is recorded; no individual CHA user is assigned.
 //
 // It also hands the chosen CHA's details on as the task's "cha" output (see chaSeed), so the
 // agency flows can prefill the declarant's details from them. Which of the company's data
@@ -96,7 +96,7 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, config json.RawMes
 		return plugins.Permanent(plugins.ErrorTypeInput, fmt.Errorf("cha_persist: consignment name exceeds maximum length of 255 characters"))
 	}
 
-	if err := p.assignCHA(ctx.Context, consignmentID, chaCompanyID, name); err != nil {
+	if err := p.assignCHA(ctx.Context, consignmentID, chaCompanyID, record.OUHandle, name); err != nil {
 		return err
 	}
 
@@ -107,9 +107,9 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, config json.RawMes
 	return nil
 }
 
-// assignCHA records the CHA company as the case's "cha" party and, when name is not empty,
-// names the case, in one transaction.
-func (p *CHAPersistPlugin) assignCHA(ctx context.Context, consignmentID, chaCompanyID, name string) error {
+// assignCHA records the CHA company's OU (chaOUHandle) as the case's "cha" party and, when
+// name is not empty, names the case, in one transaction.
+func (p *CHAPersistPlugin) assignCHA(ctx context.Context, consignmentID, chaCompanyID, chaOUHandle, name string) error {
 	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&consignment.Consignment{}).
 			Where("id = ?", consignmentID).
@@ -123,8 +123,8 @@ func (p *CHAPersistPlugin) assignCHA(ctx context.Context, consignmentID, chaComp
 		if err := caseparty.Assign(ctx, tx, caseparty.Party{
 			CaseID: consignmentID,
 			Role:   "cha",
-			Type:   caseparty.TypeCompany,
-			ID:     chaCompanyID,
+			Type:   caseparty.TypeOU,
+			ID:     chaOUHandle,
 		}); err != nil {
 			return fmt.Errorf("cha_persist: %w", err)
 		}

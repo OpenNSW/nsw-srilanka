@@ -36,10 +36,10 @@ func TestAssignReplacesTheHolder(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO "case_parties" \("case_id","role","party_type","party_id","assigned_by","created_at","updated_at"\) `+
 		`VALUES .* ON CONFLICT \("case_id","role"\) DO UPDATE SET "party_type"="excluded"."party_type","party_id"="excluded"."party_id",`+
 		`"assigned_by"="excluded"."assigned_by","updated_at"="excluded"."updated_at"`).
-		WithArgs("C1", "cha", TypeCompany, "cha-co", by, sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs("C1", "cha", TypeOU, "cha-ou", by, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	err := Assign(context.Background(), db, Party{CaseID: "C1", Role: "cha", Type: TypeCompany, ID: "cha-co", AssignedBy: &by})
+	err := Assign(context.Background(), db, Party{CaseID: "C1", Role: "cha", Type: TypeOU, ID: "cha-ou", AssignedBy: &by})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestAssignReplacesTheHolder(t *testing.T) {
 
 func TestAssignRequiresEveryKey(t *testing.T) {
 	db, mock := newMockDB(t)
-	full := Party{CaseID: "C1", Role: "cha", Type: TypeCompany, ID: "cha-co"}
+	full := Party{CaseID: "C1", Role: "cha", Type: TypeOU, ID: "cha-ou"}
 	for name, p := range map[string]Party{
 		"no case id":    {Role: full.Role, Type: full.Type, ID: full.ID},
 		"no role":       {CaseID: full.CaseID, Type: full.Type, ID: full.ID},
@@ -69,10 +69,10 @@ func TestAssignRequiresEveryKey(t *testing.T) {
 func TestRolesOf(t *testing.T) {
 	db, mock := newMockDB(t)
 	mock.ExpectQuery(`SELECT "role" FROM "case_parties" WHERE case_id = \$1 AND \(party_type = \$2 AND party_id = \$3\)`).
-		WithArgs("C1", TypeCompany, "acme").
+		WithArgs("C1", TypeOU, "acme").
 		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("trader").AddRow("cha"))
 
-	roles, err := NewRepository(db).RolesOf(context.Background(), "C1", Company("acme"))
+	roles, err := NewRepository(db).RolesOf(context.Background(), "C1", OU("acme"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,10 +89,10 @@ func TestRolesOfAnyParty(t *testing.T) {
 	db, mock := newMockDB(t)
 	mock.ExpectQuery(`SELECT "role" FROM "case_parties" WHERE case_id = \$1 AND `+
 		`\(\(party_type = \$2 AND party_id = \$3\) OR \(party_type = \$4 AND party_id = \$5\)\)`).
-		WithArgs("C1", TypeCompany, "acme", TypeUser, "user-1").
+		WithArgs("C1", TypeOU, "acme", TypeUser, "user-1").
 		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("officer"))
 
-	roles, err := NewRepository(db).RolesOf(context.Background(), "C1", Company("acme"), Ref{Type: TypeUser, ID: "user-1"})
+	roles, err := NewRepository(db).RolesOf(context.Background(), "C1", OU("acme"), Ref{Type: TypeUser, ID: "user-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestRolesOfNoMatch(t *testing.T) {
 	mock.ExpectQuery(`SELECT "role" FROM "case_parties"`).
 		WillReturnRows(sqlmock.NewRows([]string{"role"}))
 
-	roles, err := NewRepository(db).RolesOf(context.Background(), "gone", Company("acme"))
+	roles, err := NewRepository(db).RolesOf(context.Background(), "gone", OU("acme"))
 	if err != nil {
 		t.Fatalf("got error %v, want none", err)
 	}
@@ -126,7 +126,7 @@ func TestRolesOfPropagatesFailures(t *testing.T) {
 	boom := errors.New("connection refused")
 	mock.ExpectQuery(`SELECT "role" FROM "case_parties"`).WillReturnError(boom)
 
-	if _, err := NewRepository(db).RolesOf(context.Background(), "C1", Company("acme")); !errors.Is(err, boom) {
+	if _, err := NewRepository(db).RolesOf(context.Background(), "C1", OU("acme")); !errors.Is(err, boom) {
 		t.Errorf("got %v, want the underlying error", err)
 	}
 }
@@ -136,7 +136,7 @@ func TestRolesOfSkipsTheQuery(t *testing.T) {
 	db, mock := newMockDB(t)
 	repo := NewRepository(db)
 	for name, call := range map[string]func() (map[string]bool, error){
-		"no case id": func() (map[string]bool, error) { return repo.RolesOf(context.Background(), "", Company("acme")) },
+		"no case id": func() (map[string]bool, error) { return repo.RolesOf(context.Background(), "", OU("acme")) },
 		"no parties": func() (map[string]bool, error) { return repo.RolesOf(context.Background(), "C1") },
 	} {
 		roles, err := call()

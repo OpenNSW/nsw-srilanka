@@ -5,10 +5,12 @@
 //
 // It resolves the principal eagerly (cheap) but defers ownership to a resolver
 // the extension invokes only when a user rule matches by role, so clients,
-// role-mismatches, and non-authz tasks incur no ownership lookup. It depends only
-// on narrow interfaces (bootstrap injects the concrete services), so the task
-// HTTP surface, the authz policy evaluator, and the consignment/company domains
-// each stay unaware of one another.
+// role-mismatches, and non-authz tasks incur no ownership lookup. A user owns a
+// task's case in every role their OU holds on it (case_parties): in TNSW the OUs of
+// the trader and CHA companies; in an agency, the agency's own OU. It depends only
+// on a narrow interface (bootstrap injects the concrete repository), so the task
+// HTTP surface, the authz policy evaluator, and the case-party domain each stay
+// unaware of one another.
 package authzgate
 
 import (
@@ -29,26 +31,18 @@ type CaseRoles interface {
 	RolesOf(ctx context.Context, caseID string, parties ...caseparty.Ref) (map[string]bool, error)
 }
 
-// CompanyResolver resolves a user's company id from their OU handle. It must
-// return ("", nil) — not an error — when the user has no company profile, so a
-// missing profile denies cleanly rather than surfacing as a 500.
-type CompanyResolver interface {
-	CompanyIDByOUHandle(ctx context.Context, ouHandle string) (string, error)
-}
-
 // Middleware attaches the authz.Input (principal facts + a lazy ownership
 // resolver) for task-write requests.
 type Middleware struct {
-	roles   CaseRoles
-	company CompanyResolver
+	roles CaseRoles
 }
 
-// NewMiddleware builds the middleware. roles and company are both required.
-func NewMiddleware(roles CaseRoles, company CompanyResolver) (*Middleware, error) {
-	if roles == nil || company == nil {
-		return nil, errors.New("authzgate: case roles and company resolver are required")
+// NewMiddleware builds the middleware. roles is required.
+func NewMiddleware(roles CaseRoles) (*Middleware, error) {
+	if roles == nil {
+		return nil, errors.New("authzgate: case roles are required")
 	}
-	return &Middleware{roles: roles, company: company}, nil
+	return &Middleware{roles: roles}, nil
 }
 
 // Handler wraps next (the task-write handler), attaching the authz Input.
@@ -88,20 +82,11 @@ func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 // role; that is the only point at which the DB is touched.
 func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
 	return func(ctx context.Context, caseID string) (map[string]bool, error) {
-		owned := map[string]bool{}
-		// Nothing (or nobody) to match against: no task, or a caller with no OU
-		// handle. Skip the lookups entirely.
+		// No task, so no case to own; no OU, so no party to hold a role on it.
 		if caseID == "" || ouHandle == "" {
-			return owned, nil
+			return map[string]bool{}, nil
 		}
-		userCompanyID, err := m.company.CompanyIDByOUHandle(ctx, ouHandle)
-		if err != nil {
-			return nil, err
-		}
-		if userCompanyID == "" {
-			return owned, nil // no company profile — owns nothing; skip ownership lookup
-		}
-		// The caller owns a case in every role their company holds on it.
-		return m.roles.RolesOf(ctx, caseID, caseparty.Company(userCompanyID))
+		// The caller owns a case in every role their OU holds on it.
+		return m.roles.RolesOf(ctx, caseID, caseparty.OU(ouHandle))
 	}
 }

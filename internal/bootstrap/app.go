@@ -491,16 +491,10 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
-	// extension and the read evaluator to consume. In TNSW a company owns a task in
-	// every role it holds on the task's case (case_parties: the consignment's trader
-	// and CHA); in an agency an officer owns every injected workflow's tasks (see
-	// agency.go).
-	var taskAuthzGate taskGate
-	if agencyMode {
-		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
-	} else {
-		taskAuthzGate, err = authzgate.NewMiddleware(caseparty.NewRepository(db), companyIDResolver{svc: companyService})
-	}
+	// extension and the read evaluator to consume. A user owns a task in every role
+	// their OU holds on the task's case (case_parties): in TNSW the OUs of the
+	// consignment's trader and CHA companies; in an agency, the agency's own OU.
+	taskAuthzGate, err := authzgate.NewMiddleware(caseparty.NewRepository(db))
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
@@ -687,12 +681,6 @@ type parentTaskActivator interface {
 // parentUpstreamService is the narrow surface wireParentRunner needs to notify
 // a downstream domain when a parent workflow completes: *caseflow.Service in TNSW,
 // agency.CompletionHandler in an agency.
-// taskGate is Layer 1 of task authorization on the task routes: authzgate's
-// trader/CHA middleware in TNSW, agency.RoleGate in an agency.
-type taskGate interface {
-	Handler(next http.Handler) http.Handler
-}
-
 type parentUpstreamService interface {
 	CompletionHandler(workflowID string, finalContext map[string]any) error
 }
@@ -800,25 +788,6 @@ func (n userDisplayNames) GetDisplayName(ctx context.Context, userID string) (st
 		return "", err
 	}
 	return rec.Email, nil
-}
-
-// companyIDResolver adapts the company service to authzgate.CompanyResolver. A
-// missing company profile is reported as ("", nil) so it denies cleanly rather
-// than surfacing as a 500.
-type companyIDResolver struct{ svc company.Service }
-
-func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle string) (string, error) {
-	rec, err := r.svc.GetCompanyByOUHandle(ctx, ouHandle)
-	if err != nil {
-		if errors.Is(err, company.ErrCompanyNotFound) {
-			return "", nil
-		}
-		return "", err
-	}
-	if rec == nil {
-		return "", nil
-	}
-	return rec.ID, nil
 }
 
 // caseFlowStarter opens flows on a case for the SLC Edge webhooks, which name
