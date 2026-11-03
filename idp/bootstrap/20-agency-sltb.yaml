@@ -45,6 +45,12 @@ resources:
       - name: Read
         handle: read
         description: Read action
+      - name: Admin Read
+        handle: adminread
+        description: Admin Read action
+      - name: Admin Write
+        handle: adminwrite
+        description: Admin Write action
   - name: Task
     handle: task
     description: Task resource
@@ -112,6 +118,29 @@ resource_type: group
 id: 01a13912-d449-7b79-b0f7-e53a66a23138
 name: SLTB Officers
 description: SLTB officers group
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+---
+# File: SLTB_Admin.yaml
+resource_type: role
+id: e374b74d-4b13-44b7-917c-977b5ccf1a60
+name: SLTB Admin
+description: Role for SLTB admins, who view any case and its workflows and resolve or force-park their nodes
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+permissions:
+  - resourceServerId: 01a13912-ceab-7150-a63e-8413aa996b77
+    permissions:
+      - consignment:adminread
+      - consignment:adminwrite
+      - profile:read
+assignments:
+  - id: bd042c8c-0daa-448a-a030-c310da8e2782
+    type: group
+---
+# File: SLTB_Admins.yaml
+resource_type: group
+id: bd042c8c-0daa-448a-a030-c310da8e2782
+name: SLTB Admins
+description: SLTB admins group
 ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
 ---
 # File: SLTBPortalApp.yaml
@@ -195,6 +224,8 @@ inboundAuthConfig:
         - role
         - ou
         - consignment:read
+        - consignment:adminread
+        - consignment:adminwrite
         - task:read
         - task:write
         - profile:read
