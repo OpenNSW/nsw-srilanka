@@ -1,6 +1,7 @@
 # Agency: CDA. Its OU, API resource server, officer role and group, officer portal,
-# and the two M2M clients with their roles (CDA_TO_NSW calls TNSW; NSW_TO_CDA injects
-# into the agency and replies on its parked steps). Needs 10-nsw-platform.yaml.
+# and the NSW_TO_CDA M2M client with its role (it injects into the agency and replies
+# on its parked steps). CDA's own client for calling TNSW, CDA_TO_NSW, is in
+# 15-tnsw-agency-clients.yaml. Needs 10-nsw-platform.yaml.
 #
 # LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
 # image's own documents as one upsert import (see idp/README.md). Client IDs and the
@@ -104,23 +105,6 @@ permissions:
       - workflow:inject
 assignments:
   - id: 01a13912-e0bf-7d20-9066-ad0591a1771b
-    type: app
----
-# File: CdaToNswM2M.yaml
-resource_type: role
-id: 37dad9a4-7208-42d6-972d-c3c1702ad595
-name: CdaToNswM2M
-description: Role for CDA machine-to-machine clients calling the NSW API
-ouId: 01a13912-d209-78da-9de0-dd544935e1ae
-permissions:
-  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
-    permissions:
-      - consignment:read
-      - storage:read
-      - storage:write
-      - task:write
-assignments:
-  - id: 01a13912-e039-7385-947d-9c38ce44e56d
     type: app
 ---
 # File: CDA_Officers.yaml
@@ -237,61 +221,6 @@ inboundAuthConfig:
           - family_name
         role:
           - roles
----
-# File: CDA_TO_NSW_M2M.yaml
-resource_type: application
-id: 01a13912-e039-7385-947d-9c38ce44e56d
-ouId: 01a13912-d209-78da-9de0-dd544935e1ae
-name: CDA_TO_NSW_M2M
-description: Machine-to-machine integration for CDA to NSW
-type: m2m
-authFlowId: 01900000-0000-7000-8000-000000000061
-registrationFlowId: 01900000-0000-7000-8000-000000000064
-isRegistrationFlowEnabled: false
-recoveryFlowId: 01900000-0000-7000-8000-000000000067
-isRecoveryFlowEnabled: false
-signOutFlowId: 01900000-0000-7000-8000-00000000006a
-assertion:
-  validityPeriod: 3600
-loginConsent:
-  validityPeriod: 0
-inboundAuthConfig:
-  - type: oauth2
-    config:
-      clientId: CDA_TO_NSW
-      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
-      grantTypes:
-        - client_credentials
-      tokenEndpointAuthMethod: client_secret_basic
-      pkceRequired: false
-      publicClient: false
-      requirePushedAuthorizationRequests: false
-      dpopBoundAccessTokens: false
-      includeActClaim: false
-      token:
-        accessToken:
-          userConfig:
-            validityPeriod: 3600
-          clientConfig:
-            validityPeriod: 3600
-        idToken:
-          validityPeriod: 3600
-        refreshToken:
-          validityPeriod: 86400
-      scopes:
-        - task:write
-        - consignment:read
-        - storage:read
-        - storage:write
-      userInfo:
-        responseType: JSON
-      scopeClaims:
-        profile:
-        roles:
-          - roles
-        address:
-        email:
-        phone:
 ---
 # File: NSW_TO_CDA_M2M.yaml
 resource_type: application
