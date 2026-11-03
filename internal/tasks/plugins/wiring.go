@@ -140,6 +140,8 @@ type FileFetcher interface {
 type CustomsSubmissions struct {
 	Declarations  cusdec.Submissions
 	DispatchNotes cdn.Submissions
+	// Cases finds a case's registered declaration (CUSTOMS_CASE_DECLARATION).
+	Cases CaseDeclarations
 }
 
 // Register installs the taskv2 plugins on reg.
@@ -181,6 +183,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeCustomsCusdecRetrieve, NewAPICallPluginWithInterpreter(mgr, cusdec.NewRetrieveInterpreter())},
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter(customs.DispatchNotes))},
 		{TaskTypeCustomsBoatNotePrefill, NewBoatNotePrefillPlugin(mgr)},
+		{TaskTypeCustomsCaseDeclaration, NewCaseDeclarationPlugin(customs.Cases)},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeSLPASundryOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},

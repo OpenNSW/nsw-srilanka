@@ -91,6 +91,7 @@ inboundAuthConfig:
         - ou
         - consignment:read
         - consignment:write
+        - consignment:flow:write
         - task:read
         - task:write
         - hscode:read
@@ -334,13 +335,21 @@ resources:
         description: Read action
       - name: Write
         handle: write
-        description: Write action
+        description: Create a consignment
       - name: Admin Read
         handle: adminread
         description: Admin Read action
       - name: Admin Write
         handle: adminwrite
         description: Admin Write action
+  - name: Flow
+    handle: flow
+    description: Auxiliary flows within consignment
+    parent: consignment
+    actions:
+      - name: Write
+        handle: write
+        description: Start a flow on a consignment
   - name: Task
     handle: task
     description: Task resource
@@ -406,6 +415,7 @@ permissions:
     permissions:
       - cha:read
       - company:read
+      - consignment:flow:write
       - consignment:read
       - consignment:write
       - hscode:read
@@ -429,8 +439,8 @@ permissions:
     permissions:
       - cha:read
       - company:read
+      - consignment:flow:write
       - consignment:read
-      - consignment:write
       - hscode:read
       - profile:read
       - storage:read

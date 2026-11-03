@@ -56,7 +56,7 @@ func Prefill(ctx context.Context, call Caller, in Input) Result {
 
 	form := declarationFields(in.Declaration)
 
-	refs := activeCDNRefs(in.CDNRefs)
+	refs := document.ActiveCDNRefs(in.CDNRefs)
 	if len(refs) == 0 {
 		slog.WarnContext(ctx, "boat note prefill: declaration lists no active dispatch notes; using the consignment's")
 		form["containers"] = rowsOrEmpty(in.Fallback)
@@ -176,31 +176,6 @@ func containerRow(number string, note map[string]any) map[string]any {
 	setString(row, "container_number", document.Text(note, "containerNumber"))
 	setString(row, "customs_seal_no", document.Text(note, "sealNo"))
 	return row
-}
-
-// cancelledStatus is ASYCUDA World's status for a cancelled dispatch note
-// (§7.7), the only one listed against a declaration that is not live: a note
-// whose integration failed is never registered, so it is never listed (§7.2).
-const cancelledStatus = "Cancelled"
-
-// activeCDNRefs reads the dispatch notes listed against the declaration
-// (cdnRefs), leaving out any Customs cancelled.
-func activeCDNRefs(cdnRefs []map[string]any) []document.Reference {
-	var refs []document.Reference
-	for _, r := range cdnRefs {
-		if strings.EqualFold(document.Str(r, "status"), cancelledStatus) {
-			continue
-		}
-		n, err := document.WholeNumber(r["number"])
-		if err != nil {
-			continue
-		}
-		ref := document.Reference{Office: document.Text(r, "office"), Year: document.Text(r, "year"), Serial: document.Text(r, "serial"), Number: n}
-		if ref.IsValid() {
-			refs = append(refs, ref)
-		}
-	}
-	return refs
 }
 
 func party(p map[string]any) string {
