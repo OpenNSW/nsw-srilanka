@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { Badge, Text } from '@radix-ui/themes'
+import { Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
-import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { formatDateTime } from '@/features/consignment/utils.ts'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
+import { ConsignmentName } from '@/features/consignment/components/ConsignmentName'
 import { ROUTES } from '@/constants'
 import { useQuery } from '@/hooks/useQuery'
-import { LinkRow, LoadingOverlay, PageHeader, PaginationControl, RowLink, Surface, PageState } from '@portals/ui'
+import { LinkRow, LoadingOverlay, PageHeader, PageState, PaginationControl, RowLink, Surface, Table } from '@portals/ui'
+import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
 
 // The officer's list of cases. A trimmed ConsignmentScreen: no create button, no
 // trade-flow filter, no role switch — an officer sees every case.
@@ -23,8 +25,6 @@ export function CaseListScreen() {
   const cases: CaseSummary[] = error ? [] : (data?.items ?? [])
   const totalCount = data?.total ?? 0
 
-  const th = 'px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider'
-
   return (
     <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
       <PageHeader title={t('cases.list.title')} count={totalCount} />
@@ -37,51 +37,32 @@ export function CaseListScreen() {
           ) : cases.length === 0 ? (
             <PageState variant="empty" title={t('cases.list.empty')} />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-app-surface-muted">
-                    <th className={th}>{t('cases.list.table.id')}</th>
-                    <th className={th}>{t('cases.list.table.state')}</th>
-                    <th className={th}>{t('cases.list.table.created')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {cases.map((c) => (
-                    <LinkRow key={c.id} to={ROUTES.CONSIGNMENT_DETAIL(c.id)}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <RowLink to={ROUTES.CONSIGNMENT_DETAIL(c.id)}>
-                          {c.name ? (
-                            <div className="flex flex-col">
-                              <Text size="2" weight="bold" className="text-info-strong">
-                                {c.name}
-                              </Text>
-                              <Text size="1" color="gray" className="font-mono mt-0.5">
-                                {c.id}
-                              </Text>
-                            </div>
-                          ) : (
-                            <Text size="2" weight="medium" className="text-info-strong font-mono">
-                              {c.id}
-                            </Text>
-                          )}
-                        </RowLink>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge size="1" color={getStateColor(c.state)}>
-                          {formatState(c.state)}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Text size="2" color="gray">
-                          {c.createdAt ? formatDateTime(c.createdAt) : '-'}
-                        </Text>
-                      </td>
-                    </LinkRow>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <Table.Header>
+                <Table.HeaderCell>{t('cases.list.table.id')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('cases.list.table.state')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('cases.list.table.created')}</Table.HeaderCell>
+              </Table.Header>
+              <Table.Body>
+                {cases.map((c) => (
+                  <LinkRow key={c.id} to={ROUTES.CONSIGNMENT_DETAIL(c.id)}>
+                    <Table.Cell>
+                      <RowLink to={ROUTES.CONSIGNMENT_DETAIL(c.id)}>
+                        <ConsignmentName name={c.name} id={c.id} />
+                      </RowLink>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <ConsignmentStateBadge state={c.state} />
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text size="2" color="gray">
+                        {c.createdAt ? formatDateTime(c.createdAt) : '-'}
+                      </Text>
+                    </Table.Cell>
+                  </LinkRow>
+                ))}
+              </Table.Body>
+            </Table>
           )}
         </div>
         <div className="bg-app-surface/60">
