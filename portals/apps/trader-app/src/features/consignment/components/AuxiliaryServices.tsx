@@ -1,26 +1,29 @@
 import { useState } from 'react'
-import { Button, Text } from '@radix-ui/themes'
+import { Button, Select, Text } from '@radix-ui/themes'
 import { ConfirmDialog, Surface } from '@portals/ui'
 import { useTranslation } from 'react-i18next'
 import type { FlowOption } from '@/features/consignment/types.ts'
 
-interface StartFlowButtonsProps {
+interface AuxiliaryServicesProps {
   flows: FlowOption[]
   // Starts the flow (useConsignment's startFlow), rejecting if it could not.
   onStart: (templateId: string) => Promise<void>
 }
 
-// One button per flow the caller may start on the consignment (DetailDTO.startableFlows), in
-// a section of their own below the workflow steps: they are services beside the consignment's
-// own flow, such as an SLPA sundry payment. A started flow cannot be withdrawn, so each start
-// is confirmed first.
-export function StartFlowButtons({ flows, onStart }: StartFlowButtonsProps) {
+// The flows the caller may start on the consignment (DetailDTO.startableFlows), offered in a
+// section of their own below the workflow steps: they are services beside the consignment's
+// own flow, such as an SLPA sundry payment. The trader picks one from a list and starts it. A
+// started flow cannot be withdrawn, so each start is confirmed first.
+export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
   const { t } = useTranslation()
+  const [selectedId, setSelectedId] = useState('')
   const [pending, setPending] = useState<FlowOption | null>(null)
   const [starting, setStarting] = useState(false)
   const [failed, setFailed] = useState<FlowOption | null>(null)
 
   if (flows.length === 0) return null
+
+  const selected = flows.find((flow) => flow.templateId === selectedId) ?? null
 
   const start = async (flow: FlowOption) => {
     setStarting(true)
@@ -28,6 +31,7 @@ export function StartFlowButtons({ flows, onStart }: StartFlowButtonsProps) {
     try {
       await onStart(flow.templateId)
       setPending(null)
+      setSelectedId('')
     } catch (err) {
       console.error('Failed to start flow:', err)
       setPending(null)
@@ -39,22 +43,33 @@ export function StartFlowButtons({ flows, onStart }: StartFlowButtonsProps) {
 
   return (
     <Surface className="mt-6">
-      <section aria-labelledby="start-flows-title" className="p-4 sm:p-6">
-        <h2 id="start-flows-title" className="text-sm font-semibold text-foreground">
+      <section aria-labelledby="auxiliary-services-title" className="p-4 sm:p-6">
+        <h2 id="auxiliary-services-title" className="text-sm font-semibold text-foreground">
           {t('consignments.detail.flows.title')}
         </h2>
-        <p className="mt-1 text-sm text-foreground-muted">{t('consignments.detail.flows.description')}</p>
         {failed && (
           <Text as="p" size="2" color="red" className="mt-3">
             {t('consignments.detail.flows.failed', { label: failed.label })}
           </Text>
         )}
-        <div className="mt-4 flex items-center gap-2 flex-wrap">
-          {flows.map((flow) => (
-            <Button key={flow.templateId} variant="soft" size="2" onClick={() => setPending(flow)} disabled={starting}>
-              {flow.label}
-            </Button>
-          ))}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Select.Root value={selectedId} onValueChange={setSelectedId} disabled={starting}>
+            <Select.Trigger
+              className="min-w-64"
+              placeholder={t('consignments.detail.flows.placeholder')}
+              aria-label={t('consignments.detail.flows.title')}
+            />
+            <Select.Content>
+              {flows.map((flow) => (
+                <Select.Item key={flow.templateId} value={flow.templateId}>
+                  {flow.label}
+                </Select.Item>
+              ))}
+            </Select.Content>
+          </Select.Root>
+          <Button size="2" onClick={() => setPending(selected)} disabled={!selected || starting}>
+            {t('consignments.detail.flows.start')}
+          </Button>
         </div>
       </section>
 

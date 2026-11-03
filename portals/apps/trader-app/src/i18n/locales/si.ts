@@ -100,8 +100,8 @@ const si: Locale = {
           dateCreated: 'සකස් කළ දිනය',
         },
         flows: {
-          title: 'වෙනත් සේවා',
-          description: 'මෙම භාණ්ඩ තොගය සඳහා අදාළ සේවාවක් ආරම්භ කරන්න.',
+          title: 'සහායක සේවා',
+          placeholder: 'සේවාවක් තෝරන්න',
           confirmTitle: 'ආරම්භ කරන්න {{label}}?',
           confirmDescription: 'මෙය {{label}} භාණ්ඩ තොගය මත ආරම්භ වේ. එහි පියවර ඉහත ලැයිස්තුවේ දැක් වේ.',
           cancel: 'අවලංගු කරන්න',
