@@ -162,9 +162,9 @@ func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T)
 		},
 	}
 	mockWM.On("GetStatus", ctx, childWorkflowID).Return(instance, nil)
-	mockTaskStore.On("TasksOfCase", ctx, caseID).Return([]store.TaskRecord{
+	mockTaskStore.On("GetTasks", ctx, store.TaskFilter{CaseID: caseID}).Return([]store.TaskRecord{
 		{TaskID: stepID, TaskWorkflowID: "task-wf-" + stepID},
-	}, nil)
+	})
 
 	result, err := svc.GetEngineStatus(ctx, childWorkflowID)
 	require.NoError(t, err)

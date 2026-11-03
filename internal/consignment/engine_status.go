@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sort"
 	"time"
 
+	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 )
 
@@ -214,13 +214,8 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 		return
 	}
 
-	records, err := s.taskStore.TasksOfCase(ctx, caseID)
-	if err != nil {
-		slog.WarnContext(ctx, "consignment: task workflow ids unavailable for engine status", "caseId", caseID, "error", err)
-		return
-	}
 	byTaskID := make(map[string]string, len(nodes))
-	for _, rec := range records {
+	for _, rec := range s.taskStore.GetTasks(ctx, store.TaskFilter{CaseID: caseID}) {
 		if rec.TaskWorkflowID != "" {
 			byTaskID[rec.TaskID] = rec.TaskWorkflowID
 		}

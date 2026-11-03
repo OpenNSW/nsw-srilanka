@@ -29,9 +29,10 @@ import (
 
 // TaskStore is the narrow interface needed from taskv2 package to load task records.
 type TaskStore interface {
-	// TasksOfCase lists every task of a case, whatever its read roles: the consignment
+	// GetTasks lists the tasks filter matches. The consignment detail and the engine status
+	// pass only a CaseID, so every task of the case is listed whatever its read roles: the
 	// detail authorizes its caller on the consignment, and the engine status is an admin view.
-	TasksOfCase(ctx context.Context, caseID string) ([]store.TaskRecord, error)
+	GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord
 	GetTaskByWorkflowID(ctx context.Context, workflowID string) (store.TaskRecord, bool)
 }
 
@@ -598,10 +599,7 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 	if s.taskStore == nil {
 		return nil, fmt.Errorf("task store not initialized")
 	}
-	tasks, err := s.taskStore.TasksOfCase(ctx, consignmentID)
-	if err != nil {
-		return nil, err
-	}
+	tasks := s.taskStore.GetTasks(ctx, store.TaskFilter{CaseID: consignmentID})
 
 	dtos := make([]WorkflowNodeResponseDTO, 0, len(tasks))
 	for _, t := range tasks {

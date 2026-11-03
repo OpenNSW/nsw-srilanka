@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -227,7 +228,7 @@ func TestDetailListsStartableFlows(t *testing.T) {
 			svc.taskStore = taskStore
 			id := uuid.NewString()
 			expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
-			taskStore.On("TasksOfCase", mock.Anything, id).Return(nil, nil)
+			taskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: id}).Return(nil)
 
 			got, err := svc.GetConsignmentByID(context.Background(), id, "co-trader", []string{"Trader"})
 			require.NoError(t, err)

@@ -29,7 +29,8 @@ const (
 
 // TaskLister is the narrow surface CaseHandler needs from the task store: the tasks of a
 // case whose task templates list, in read.roles, one of the catalog roles the officer
-// holds. core's task store satisfies it.
+// holds. core's task store satisfies it. The roles must never be empty, or GetTasks would
+// list every task of the case: requireCatalogRole admits no officer without one.
 type TaskLister interface {
 	GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord
 }

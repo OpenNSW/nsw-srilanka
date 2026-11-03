@@ -15,9 +15,10 @@ import (
 // SLPA, for a form that orders something against one of them.
 const TaskTypeSLPACaseContainers = "SLPA_CASE_CONTAINERS"
 
-// CaseTasks lists every task of a case. *casetasks.Store satisfies it.
+// CaseTasks lists tasks; the plugin passes only a CaseID, so it gets every task of the
+// case whatever its read roles. core's task store satisfies it.
 type CaseTasks interface {
-	TasksOfCase(ctx context.Context, caseID string) ([]store.TaskRecord, error)
+	GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord
 }
 
 // SLPACaseContainersPlugin reads the consignment's containers from the case's
@@ -71,10 +72,7 @@ func (p *SLPACaseContainersPlugin) Execute(ctx pluginContext, configRaw json.Raw
 
 	var tasks []store.TaskRecord
 	if ctx.Record.CaseID != "" {
-		var err error
-		if tasks, err = p.tasks.TasksOfCase(ctx.Context, ctx.Record.CaseID); err != nil {
-			return fmt.Errorf("slpa_case_containers: %w", err)
-		}
+		tasks = p.tasks.GetTasks(ctx.Context, store.TaskFilter{CaseID: ctx.Record.CaseID})
 	}
 
 	if ctx.Record.Data == nil {
