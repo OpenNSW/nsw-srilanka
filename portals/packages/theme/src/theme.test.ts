@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_THEME, applyTheme, themeVariables } from './theme'
+import { applyTheme, isThemeVariable, themeVariables } from './theme'
 
 function rules() {
   const style = document.getElementById('portals-theme') as HTMLStyleElement
@@ -32,9 +32,9 @@ describe('themeVariables', () => {
     expect(themeVariables({ colors: { 'accent-9': '#123456' } }, 'light')).toMatchObject({ 'accent-9': '#123456' })
   })
 
-  it('darkens the status text steps in light, unless the theme sets them', () => {
-    expect(themeVariables({}, 'light')['red-11']).toBe('#c1262b')
-    expect(themeVariables({ colors: { 'red-11': '#aa0000' } }, 'light')['red-11']).toBe('#aa0000')
+  it('sets nothing for an empty theme, leaving Radix its own scales', () => {
+    expect(themeVariables({}, 'light')).toEqual({})
+    expect(themeVariables({}, 'dark')).toEqual({})
   })
 
   it('keeps the light scales but not the light colors in dark', () => {
@@ -42,7 +42,6 @@ describe('themeVariables', () => {
 
     expect(vars['accent-9']).toBe('var(--jade-9)')
     expect(vars['gray-1']).toBe('var(--sage-1)')
-    expect(vars).not.toHaveProperty('red-11')
   })
 
   it('uses the dark palette in dark', () => {
@@ -58,12 +57,12 @@ describe('themeVariables', () => {
 })
 
 describe('applyTheme', () => {
-  it('paints the default theme when given none', () => {
-    applyTheme()
+  it('paints each appearance under its own selectors', () => {
+    applyTheme({ accent: 'blue', gray: 'slate', colors: { 'accent-9': '#1e3a8a' } })
 
     const [light, dark] = rules()
     expect(light.selectorText).toContain('.radix-themes:not(.dark)')
-    expect(light.style.getPropertyValue('--accent-9')).toBe(DEFAULT_THEME.colors!['accent-9'])
+    expect(light.style.getPropertyValue('--accent-9')).toBe('#1e3a8a')
     expect(light.style.getPropertyValue('--gray-6')).toBe('var(--slate-6)')
     expect(dark.selectorText).toContain('.radix-themes.dark')
     expect(dark.style.getPropertyValue('--accent-9')).toBe('var(--blue-9)')
@@ -84,4 +83,17 @@ describe('applyTheme', () => {
     expect(rules()).toHaveLength(2)
     expect(rules()[0].style.getPropertyValue('display')).toBe('')
   })
+})
+
+describe('isThemeVariable', () => {
+  it.each(['accent-9', 'accent-a12', 'gray-contrast', 'red-11', 'slate-a3', 'blue-surface'])('accepts %s', (name) => {
+    expect(isThemeVariable(name)).toBe(true)
+  })
+
+  it.each(['acent-9', 'accent-13', 'accent-a0', 'accent', '--accent-9', 'Accent-9', 'navy-9', 'accent-9 '])(
+    'rejects %s',
+    (name) => {
+      expect(isThemeVariable(name)).toBe(false)
+    },
+  )
 })

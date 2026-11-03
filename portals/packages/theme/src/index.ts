@@ -1,8 +1,8 @@
 export {
   ACCENT_SCALES,
-  DEFAULT_THEME,
   GRAY_SCALES,
   applyTheme,
+  isThemeVariable,
   themeVariables,
   type AccentScale,
   type Appearance,

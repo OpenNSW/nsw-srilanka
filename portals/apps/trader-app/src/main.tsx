@@ -13,12 +13,13 @@ import { AuthProvider } from 'react-oidc-context'
 import { userManager } from './oidcUserManager'
 import { appConfig, initAppConfig } from './config'
 import { applyTheme } from '@portals/theme'
+import { appTheme } from './theme'
 import { ThemedShell } from './components/ThemedShell'
 
 initAppConfig()
   .then(() => {
     // Before the first render, so nothing paints in another theme first.
-    applyTheme(appConfig.branding.theme)
+    applyTheme(appTheme(appConfig.branding.theme))
     // A data router, not <BrowserRouter>: useBlocker (the unsaved-form guard)
     // only works under one. App keeps its own <Routes>, under a single splat.
     const router = createBrowserRouter([{ path: '*', element: <App /> }])

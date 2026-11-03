@@ -44,59 +44,14 @@ const STEPS = [
   'track',
 ]
 
-// What a deployment gets with no theme: the Maritime navy the portal has
-// shipped with, on Radix's blue and slate scales.
-export const DEFAULT_THEME: ThemeConfig = {
-  accent: 'blue',
-  gray: 'slate',
-  colors: {
-    'accent-1': '#fdfdfe',
-    'accent-2': '#f8f9fb',
-    'accent-3': '#eff1f7',
-    'accent-4': '#e6e9f2',
-    'accent-5': '#dbdfec',
-    'accent-6': '#ced4e5',
-    'accent-7': '#bcc4dc',
-    'accent-8': '#9aa6ca',
-    'accent-9': '#1e3a8a',
-    'accent-10': '#1a3175',
-    // Text on the accent's own soft tints: the hover step, for 4.5:1.
-    'accent-11': '#1a3175',
-    'accent-12': '#0e1a3e',
-    'accent-a1': '#1e3a8a03',
-    'accent-a2': '#1e3a8a08',
-    'accent-a3': '#1e3a8a12',
-    'accent-a4': '#1e3a8a1c',
-    'accent-a5': '#1e3a8a29',
-    'accent-a6': '#1e3a8a38',
-    'accent-a7': '#1e3a8a4c',
-    'accent-a8': '#1e3a8a73',
-    'accent-a9': '#1e3a8a',
-    'accent-a10': '#1a3175',
-    'accent-a11': '#1a3175',
-    'accent-a12': '#0e1a3e',
-    'accent-contrast': '#ffffff',
-    'accent-surface': '#f6f7fa',
-    'accent-indicator': '#1e3a8a',
-    'accent-track': '#1e3a8a',
-  },
-}
+const VARIABLE_SCALES = new Set<string>(['accent', ...ACCENT_SCALES, ...GRAY_SCALES])
 
-// Applied under every light theme, before its own colors, which can replace
-// them. Radix's step 11 for these hues reads at 3.6-4.3:1 on a soft badge
-// over the page background; each is darkened just enough for 4.5:1, keeping
-// its hue.
-const LIGHT_BASE_COLORS: Record<string, string> = {
-  'blue-11': '#0b66b6',
-  'blue-a11': '#0b66b6',
-  'orange-11': '#b04300',
-  'orange-a11': '#b04300',
-  'green-11': '#1b734c',
-  'green-a11': '#1b734c',
-  'red-11': '#c1262b',
-  'red-a11': '#c1262b',
-  'amber-11': '#995a00',
-  'amber-a11': '#995a00',
+// Whether a theme's `colors` can set this variable: a step of the accent or
+// gray role, or of any Radix scale ('accent-9', 'gray-a3', 'red-11',
+// 'blue-contrast'). Only the name is checked, never the value.
+export function isThemeVariable(name: string): boolean {
+  const dash = name.lastIndexOf('-')
+  return VARIABLE_SCALES.has(name.slice(0, dash)) && STEPS.includes(name.slice(dash + 1))
 }
 
 // Each appearance's variables are set on <html>, where the Tailwind tokens
@@ -105,8 +60,7 @@ const LIGHT_BASE_COLORS: Record<string, string> = {
 // rules would otherwise repaint. Both selectors outrank Radix's without
 // !important. A Theme root takes the dark variables when it is dark itself
 // or sits under a dark <html> without being light; the light ones never
-// reach it then, so a light-only value such as LIGHT_BASE_COLORS can't leak
-// into dark.
+// reach it then, so a value set for light can't leak into dark.
 const SELECTORS: Record<Appearance, string> = {
   light: 'html:root:not(.dark), :root .radix-themes:not(.dark)',
   dark: 'html:root.dark, :root .radix-themes.dark, :root.dark .radix-themes:not(.light)',
@@ -119,7 +73,7 @@ const STYLE_ID = 'portals-theme'
 export function themeVariables(config: ThemeConfig, appearance: Appearance): Record<string, string> {
   const palette: Palette =
     appearance === 'light'
-      ? { ...config, colors: { ...LIGHT_BASE_COLORS, ...config.colors } }
+      ? config
       : {
           accent: config.dark?.accent ?? config.accent,
           gray: config.dark?.gray ?? config.gray,
@@ -138,10 +92,11 @@ export function themeVariables(config: ThemeConfig, appearance: Appearance): Rec
 }
 
 // Paints the theme into the document, replacing whatever theme was there.
+// An empty theme leaves Radix's own scales.
 // Values go in through the CSSOM rather than as stylesheet text, so a value
 // can't break out of its rule, and one the browser can't parse is dropped
 // on its own.
-export function applyTheme(config: ThemeConfig = DEFAULT_THEME, doc: Document = document): void {
+export function applyTheme(config: ThemeConfig, doc: Document = document): void {
   let style = doc.getElementById(STYLE_ID) as HTMLStyleElement | null
   if (!style) {
     style = doc.createElement('style')
