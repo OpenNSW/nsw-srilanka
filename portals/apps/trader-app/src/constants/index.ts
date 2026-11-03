@@ -36,18 +36,3 @@ export const PAGINATION = {
   DEFAULT_LIMIT: 20,
   DEFAULT_OFFSET: 0,
 } as const
-
-// Status Display Configurations
-export const STATUS_COLORS = {
-  IN_PROGRESS: 'orange',
-  FINISHED: 'green',
-  REQUIRES_REWORK: 'red',
-  COMPLETED: 'green',
-  READY: 'blue',
-  LOCKED: 'gray',
-} as const
-
-export const TRADE_FLOW_COLORS = {
-  IMPORT: 'blue',
-  EXPORT: 'green',
-} as const

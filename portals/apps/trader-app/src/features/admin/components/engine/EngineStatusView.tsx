@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, IconButton, Text, Tooltip } from '@radix-ui/themes'
-import { PageState } from '@portals/ui'
-import { DoubleArrowDownIcon, DoubleArrowUpIcon, EyeNoneIcon, EyeOpenIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { IconButton, Text, Tooltip } from '@radix-ui/themes'
+import { PageState, RefreshButton, StatusBadge, type StatusTone } from '@portals/ui'
+import { DoubleArrowDownIcon, DoubleArrowUpIcon, EyeNoneIcon, EyeOpenIcon } from '@radix-ui/react-icons'
 import { getWorkflowEngineStatus } from '@/features/admin/service'
 import type { EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
 import { NodeRow } from '@/features/admin/components/engine/NodeRow'
@@ -18,10 +18,10 @@ import { ResolveAdminInterventionView } from '@/features/admin/components/resolv
 import { GlobalVariablesButton } from '@/features/admin/components/variables/GlobalVariablesButton'
 import { WorkflowVariablesDialog } from '@/features/admin/components/variables/WorkflowVariablesDialog'
 
-const WORKFLOW_STATUS_COLOR: Record<EngineWorkflowStatus, 'orange' | 'green' | 'red'> = {
-  RUNNING: 'orange',
-  COMPLETED: 'green',
-  FAILED: 'red',
+const WORKFLOW_STATUS_TONE: Record<EngineWorkflowStatus, StatusTone> = {
+  RUNNING: 'info',
+  COMPLETED: 'success',
+  FAILED: 'danger',
 }
 
 // One flow's raw engine state: its nodes (child and task workflows expand in place), audit trail
@@ -123,9 +123,9 @@ export function EngineStatusView({
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-          <Badge size="2" color={WORKFLOW_STATUS_COLOR[status.status]} title="Engine execution status">
+          <StatusBadge tone={WORKFLOW_STATUS_TONE[status.status]} size="2" title="Engine execution status">
             {status.status}
-          </Badge>
+          </StatusBadge>
         </div>
         <div className="flex items-center gap-2">
           <GlobalVariablesButton
@@ -134,10 +134,7 @@ export function EngineStatusView({
             variables={status.global_variables}
             onOpen={setVariablesTarget}
           />
-          <Button variant="soft" color="blue" size="2" onClick={() => void refresh()} disabled={refreshing}>
-            <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
+          <RefreshButton label="Refresh" refreshing={refreshing} onClick={() => void refresh()} showLabel />
           <Tooltip content={expandSignal.expand ? 'Collapse all' : 'Expand all'}>
             <IconButton
               variant="ghost"

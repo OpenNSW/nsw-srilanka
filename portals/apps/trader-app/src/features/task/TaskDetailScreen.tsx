@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, IconButton, Text, Tooltip } from '@radix-ui/themes'
-import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { Button } from '@radix-ui/themes'
+import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { ClaimBanner } from './ClaimBanner'
 import { useTask, type ActionErrorKey, type ClaimErrorKey } from './hooks'
@@ -9,7 +9,7 @@ import { zoneWidthClass } from '@/features/zone/width'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
-import { Breadcrumb, type BreadcrumbItem, Surface, PageState } from '@portals/ui'
+import { Banner, Breadcrumb, type BreadcrumbItem, PageState, RefreshButton, Surface } from '@portals/ui'
 import { ACCESS_SCOPES } from '@/constants/scopes'
 import { useScopes } from '@/hooks/useScopes'
 
@@ -125,26 +125,11 @@ export function TaskDetailScreen() {
     <div className="min-h-full">
       <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between gap-4`}>
         <Breadcrumb items={breadcrumb} />
-        <Tooltip content={t('tasks.refresh')}>
-          <IconButton
-            type="button"
-            variant="soft"
-            color="gray"
-            onClick={refetch}
-            disabled={refreshing}
-            aria-label={t('tasks.refresh')}
-          >
-            <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-          </IconButton>
-        </Tooltip>
+        <RefreshButton label={t('tasks.refresh')} refreshing={refreshing} onClick={refetch} />
       </div>
       {submitError && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
-          <div className="rounded-xl bg-error-subtle px-4 py-3 shadow-sm">
-            <Text size="2" weight="medium" className="text-error-strong">
-              {submitError}
-            </Text>
-          </div>
+          <Banner variant="error">{submitError}</Banner>
         </div>
       )}
       {zoneView.claim && (

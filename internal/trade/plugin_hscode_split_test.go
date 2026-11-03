@@ -217,3 +217,74 @@ func TestHscodeSplitBuilderFunc_NoChaLeavesThePayloadAsItWas(t *testing.T) {
 	payload := ctx.Record.Data["split_items"].([]map[string]any)[0]["payload"].(map[string]any)
 	assert.NotContains(t, payload, "cha")
 }
+
+// replacesConfig is the tea case: the SLTB flow submits the CusDec itself, so it
+// takes the place of customs-workflow for the whole consignment.
+const replacesConfig = `{
+	"mappings": {
+		"0902.30.11": ["sltb-blendsheet-approval", "fcau-health-certificate-reg"],
+		"0801.11.00": ["cda-certificate-reg", "customs-workflow"]
+	},
+	"replaces": {"sltb-blendsheet-approval": ["customs-workflow"]}
+}`
+
+func templateIDs(t *testing.T, ctx plugins.PluginContext) []string {
+	t.Helper()
+	splitItems, ok := ctx.Record.Data["split_items"].([]map[string]any)
+	require.True(t, ok)
+	ids := make([]string, 0, len(splitItems))
+	for _, item := range splitItems {
+		ids = append(ids, item["template_id"].(string))
+	}
+	return ids
+}
+
+func TestHscodeSplitBuilderFunc_ReplacesDropsTheReplacedWorkflow(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		hsCodes  []any
+		expected []string
+	}{
+		{
+			name:     "goods that start the replacing workflow alongside others",
+			hsCodes:  []any{"0801.11.00", "0902.30.11"},
+			expected: []string{"cda-certificate-reg", "sltb-blendsheet-approval", "fcau-health-certificate-reg"},
+		},
+		{
+			name:     "only goods that start the replacing workflow",
+			hsCodes:  []any{"0902.30.11"},
+			expected: []string{"sltb-blendsheet-approval", "fcau-health-certificate-reg"},
+		},
+		{
+			name:     "no goods that start the replacing workflow",
+			hsCodes:  []any{"0801.11.00"},
+			expected: []string{"cda-certificate-reg", "customs-workflow"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := newTestContext(map[string]any{"hs_codes": tc.hsCodes})
+			require.NoError(t, HscodeSplitBuilderFunc(ctx, []byte(replacesConfig)))
+			assert.Equal(t, tc.expected, templateIDs(t, ctx))
+		})
+	}
+}
+
+func TestHscodeSplitBuilderFunc_RejectsAnAmbiguousReplacesRule(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		replaces string
+		message  string
+	}{
+		{name: "replaces itself", replaces: `{"a": ["a"]}`, message: `"a" replaces itself`},
+		{name: "replaces and is replaced", replaces: `{"a": ["b"], "b": ["c"]}`, message: `"b" both replaces workflows and is replaced`},
+		{name: "replaces an empty ID", replaces: `{"a": [""]}`, message: `"a" replaces an empty workflow template ID`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := []byte(`{"mappings": {"0902.30.11": ["a"]}, "replaces": ` + tc.replaces + `}`)
+			ctx := newTestContext(map[string]any{"hs_codes": []any{"0902.30.11"}})
+			err := HscodeSplitBuilderFunc(ctx, config)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.message)
+		})
+	}
+}

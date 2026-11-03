@@ -631,14 +631,30 @@ flows:
     #   - id: slpa-sundry-payment
     #     label: SLPA sundry payment
     #     roles: [trader, cha]
+    # the Customs dispatch note for a container whose note Customs cancelled
+    # (the boat note waits until every container has one):
+    #   - id: customs-additional-cdn
+    #     label: Add a Cargo Dispatch Note
+    #     roles: [trader, cha]
 
-# Optional OTLP/HTTP export of metrics, logs and traces. Empty endpoint (or omit
-# the section) leaves export off. Point endpoint at an OpenObserve (or other
-# OTLP/HTTP) base URL when one is reachable from this stack; leave commented
-# for local compose. serviceName is required when endpoint is set so TNSW, CDA
-# and EFC can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# Optional OTLP/HTTP export of metrics, logs and traces. Empty endpoint (or
+# omit the section) leaves export off. Endpoint is the OTLP/HTTP base without
+# /v1/{metrics,traces,logs} — those paths are appended. serviceName is required
+# when endpoint is set so TNSW, CDA and EFC can be told apart.
+#
+# Local OpenObserve (`make otel`), API in Compose. OpenObserve requires Basic
+# auth for ingest; the header matches compose.yml's fixed local root user (not
+# a secret). Uncomment this block, restart `api`, UI at http://localhost:5080
+# (root@example.com / Complexpass#123). Hostname is the Compose service name.
 # otel:
 #   endpoint: http://openobserve:5080/api/default
+#   serviceName: tnsw-api
+#   headers:
+#     Authorization: "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM="
+#
+# Staging / shared OpenObserve (env-sourced auth):
+# otel:
+#   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
 #   serviceName: tnsw-api
 #   headers:
 #     Authorization: "{{env:OTEL_AUTH_HEADER}}"

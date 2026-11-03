@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { AlertDialog, Badge, Button, Text, TextArea, Tooltip } from '@radix-ui/themes'
+import { Button, Text, TextArea, Tooltip } from '@radix-ui/themes'
+import { ConfirmDialog, StatusBadge, type StatusTone } from '@portals/ui'
 import { ArrowLeftIcon, InfoCircledIcon } from '@radix-ui/react-icons'
 import { resolveAdminIntervention } from '@/features/admin/service'
 import type { AdminResolutionAction, ParkCategory } from '@/features/admin/types'
@@ -12,50 +13,50 @@ import { Section } from '@/features/admin/components/resolve/Section'
 // How each park_category reads on the resolve screen: a short label plus what an admin can usually
 // do about it. The hints follow core's ParkCategory docs (workflow/park_category.go); they steer
 // rather than prescribe, since the last error is still the ground truth.
-const PARK_CATEGORY_INFO: Record<ParkCategory, { label: string; color: 'amber' | 'red' | 'gray'; hint: string }> = {
+const PARK_CATEGORY_INFO: Record<ParkCategory, { label: string; tone: StatusTone; hint: string }> = {
   INPUT_MAPPING: {
     label: 'Missing input',
-    color: 'amber',
+    tone: 'warning',
     hint: "A variable this node reads isn't set. Set it in the variables and Retry.",
   },
   OUTPUT_MAPPING: {
     label: 'Missing output',
-    color: 'amber',
+    tone: 'warning',
     hint: 'The task ran, but its result lacks a field the node maps. Complete sets the variables without running it again; Retry runs the task again.',
   },
   TASK_FAILURE: {
     label: 'Task failed',
-    color: 'amber',
+    tone: 'warning',
     hint: "The node's own work failed. Retry runs it again; Complete moves past it.",
   },
   GATEWAY_CONDITION: {
     label: 'Gateway condition',
-    color: 'amber',
+    tone: 'warning',
     hint: 'A routing condition failed to evaluate, or no outgoing edge matched. Fix a variable it reads and Retry.',
   },
   SPLIT_DATA: {
     label: 'Split data',
-    color: 'amber',
+    tone: 'warning',
     hint: 'The items or branch data a split or join needs is missing or malformed. Fix the variable and Retry.',
   },
   CHILD_FAILURE: {
     label: 'Child workflow failed',
-    color: 'amber',
+    tone: 'warning',
     hint: "A spawned child workflow failed. Open that child's own status to see why.",
   },
   DEFINITION_ERROR: {
     label: 'Definition error',
-    color: 'red',
+    tone: 'danger',
     hint: "The workflow definition itself is invalid, so setting variables won't fix it.",
   },
   ADMIN_FORCED: {
     label: 'Force-parked by admin',
-    color: 'amber',
+    tone: 'warning',
     hint: 'An admin force-parked this waiting step. Complete with the outcome to move on, Retry to run it again, or Abort.',
   },
   UNKNOWN: {
     label: 'Unclassified',
-    color: 'gray',
+    tone: 'neutral',
     hint: "This error wasn't categorized; the last error is the only guide.",
   },
 }
@@ -130,6 +131,7 @@ export function ResolveAdminInterventionView({
   // (possibly irreversibly for ABORT) and there's no undo, so "Submit" opens this dialog instead
   // of calling submit() directly.
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const currentAction = ADMIN_ACTIONS.find((a) => a.action === action)
 
   // Warns under the edit box while the draft isn't valid JSON — an invalid final value would
   // fail on submit.
@@ -196,7 +198,7 @@ export function ResolveAdminInterventionView({
         {parkInfo && (
           <Section title="Why it parked">
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge color={parkInfo.color}>{parkInfo.label}</Badge>
+              <StatusBadge tone={parkInfo.tone}>{parkInfo.label}</StatusBadge>
               <Text size="2" color="gray">
                 {parkInfo.hint}
               </Text>
@@ -369,50 +371,34 @@ export function ResolveAdminInterventionView({
 
         {/* A live workflow signal, not a draft — there's no undo once it's sent (ABORT fails the
             whole workflow outright), so Submit opens this instead of calling submit() directly. */}
-        <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
-          <AlertDialog.Content maxWidth="480px">
-            {action &&
-              (() => {
-                const currentAction = ADMIN_ACTIONS.find((a) => a.action === action)
-                return (
-                  <>
-                    <AlertDialog.Title className="mb-3">Confirm {currentAction?.label}</AlertDialog.Title>
-                    {/* One AlertDialog.Description only — it's what the dialog's aria-describedby
-                        points at, so the fuller explanation below is plain text instead of a
-                        second one. Kept free of the raw workflow/node IDs that made this a wall
-                        of text before; those get their own compact block, same layout as the
-                        Workflow/Node identity block in the header above. */}
-                    <AlertDialog.Description size="2" className="mb-4">
-                      You're about to <strong>{action}</strong> this node. This takes effect immediately and can't be
-                      undone.
-                    </AlertDialog.Description>
-
-                    <div className="flex flex-wrap gap-4 mb-4 p-3 bg-app-surface-muted rounded">
-                      <IdentityField label="Workflow" id={target.workflowId} />
-                      <IdentityField label="Node" id={target.nodeId} />
-                    </div>
-
-                    <Text as="p" size="2" color="gray" className="mb-4">
-                      {currentAction?.description}
-                    </Text>
-
-                    <div className="flex justify-end gap-2 mt-2">
-                      <AlertDialog.Cancel>
-                        <Button variant="soft" color="gray">
-                          Cancel
-                        </Button>
-                      </AlertDialog.Cancel>
-                      <AlertDialog.Action>
-                        <Button color={currentAction?.color} onClick={() => void submit()}>
-                          Yes, {currentAction?.label.toLowerCase()}
-                        </Button>
-                      </AlertDialog.Action>
-                    </div>
-                  </>
-                )
-              })()}
-          </AlertDialog.Content>
-        </AlertDialog.Root>
+        <ConfirmDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          title={`Confirm ${currentAction?.label ?? ''}`}
+          description={
+            <>
+              You're about to <strong>{action}</strong> this node. This takes effect immediately and can't be undone.
+            </>
+          }
+          confirmLabel={`Yes, ${currentAction?.label.toLowerCase() ?? ''}`}
+          cancelLabel="Cancel"
+          onConfirm={() => {
+            setConfirmOpen(false)
+            void submit()
+          }}
+          color={currentAction?.color}
+        >
+          {/* Kept free of the raw workflow/node IDs in the description, which made it a wall of
+              text; they get their own compact block, the same layout as the identity block in the
+              header above. */}
+          <div className="flex flex-wrap gap-4 mb-4 p-3 bg-app-surface-muted rounded">
+            <IdentityField label="Workflow" id={target.workflowId} />
+            <IdentityField label="Node" id={target.nodeId} />
+          </div>
+          <Text as="p" size="2" color="gray">
+            {currentAction?.description}
+          </Text>
+        </ConfirmDialog>
       </div>
     </div>
   )

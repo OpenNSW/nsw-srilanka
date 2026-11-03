@@ -992,13 +992,14 @@ func (p registryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]b
 // separately (see Stage 5 below).
 // registerFlowPlugins installs the plugins this deployment adds on top of the
 // task-plugin set: the synchronous transforms that shape a fan-out, the CHA
-// writer, the reference ID generator, and the HTML document generator.
+// writer, the reference ID generator, the HTML document generator, and the
+// lookup that lists a consignment's SLPA containers from its tasks.
 //
 // A table rather than a run of near-identical registrations, as
 // taskplugins.Register does for the same reason — seven of them inline was most
 // of initTask's branching, and adding an eighth meant editing a function that
 // has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver) error {
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, caseTasks taskplugins.CaseTasks) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -1011,6 +1012,7 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
 		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
 		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files)},
+		{taskplugins.TaskTypeSLPACaseContainers, taskplugins.NewSLPACaseContainersPlugin(caseTasks)},
 	}
 
 	for _, e := range entries {
@@ -1052,17 +1054,21 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
+	declarations := cusdec.NewDeclarationRepository(db)
+	dispatchNotes := cdn.NewDispatchNoteRepository(db)
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
-		Declarations:  cusdec.NewDeclarationRepository(db),
-		DispatchNotes: cdn.NewDispatchNoteRepository(db),
+		Declarations:  declarations,
+		DispatchNotes: dispatchNotes,
+		Cases:         declarations,
+		Notes:         dispatchNotes,
 	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
-	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService); err != nil {
+	taskStore := gormstore.New(db)
+
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, taskStore); err != nil {
 		return nil, nil, err
 	}
-
-	taskStore := gormstore.New(db)
 
 	// Construct UI projectors and the renderer/zoneview assembler
 	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector(), taskrenderer.NewSLPASundryProjector())
