@@ -23,7 +23,7 @@ export function CaseListScreen() {
   )
   // Show the failure rather than an empty list or the previous page's rows.
   const cases: CaseSummary[] = error ? [] : (data?.items ?? [])
-  const totalCount = data?.total ?? 0
+  const totalCount = error ? 0 : (data?.total ?? 0)
 
   return (
     <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
