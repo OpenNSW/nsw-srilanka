@@ -306,7 +306,7 @@ func TestConsignmentService_ListConsignments_EmptyQuery(t *testing.T) {
 	emptyQuery := ""
 
 	// Empty query string is ignored — no LIKE clause should appear
-	sqlMock.ExpectQuery(consignmentSelect + `trader_party\.party_id`).
+	sqlMock.ExpectQuery(consignmentSelect + `trader_company\.id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{TraderCompanyID: &companyID, Query: &emptyQuery})
@@ -322,7 +322,7 @@ func TestConsignmentService_ListConsignments_TraderCompany_Empty(t *testing.T) {
 	ctx := context.Background()
 	companyID := "company-1"
 
-	sqlMock.ExpectQuery(consignmentSelect + `trader_party\.party_id = \$5`).
+	sqlMock.ExpectQuery(consignmentSelect + `trader_company\.id = \$5`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{TraderCompanyID: &companyID})
@@ -348,7 +348,7 @@ func TestConsignmentService_ListConsignments_CHACompany(t *testing.T) {
 	chaCompanyID := "cha-company-1"
 	consignmentID := uuid.NewString()
 
-	sqlMock.ExpectQuery(consignmentSelect + `cha_party\.party_id`).
+	sqlMock.ExpectQuery(consignmentSelect + `cha_company\.id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "state", "trader_id", "trader_company_id", "cha_company_id", "created_at", "updated_at"}).
 			AddRow(consignmentID, "EXPORT", "IN_PROGRESS", "trader1", "trader-co", chaCompanyID, time.Now(), time.Now()))
 
@@ -408,7 +408,7 @@ func TestConsignmentService_ListConsignments_WithFilters(t *testing.T) {
 	state := InProgress
 	flow := FlowExport
 
-	sqlMock.ExpectQuery(consignmentSelect + `trader_party\.party_id`).
+	sqlMock.ExpectQuery(consignmentSelect + `trader_company\.id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{
@@ -487,7 +487,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	returnedID := uuid.NewString()
 
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
-	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, OUHandle: "trader-ou", Data: []byte(`{}`)}, nil)
 
 	expectCreateConsignment(sqlMock)
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases`).
@@ -551,7 +551,7 @@ func TestConsignmentService_CreateAndStartConsignment_StartFlowFails(t *testing.
 	require.NoError(t, svc.RegisterCaseFlows(flows))
 
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(&user.Record{ID: "trader1", OUHandle: "trader-ou"}, nil)
-	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co1", Data: []byte(`{}`)}, nil)
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co1", OUHandle: "trader-ou", Data: []byte(`{}`)}, nil)
 
 	expectCreateConsignment(sqlMock)
 
@@ -568,7 +568,7 @@ func TestConsignmentService_CreateAndStartConsignment_NoCaseFlows(t *testing.T) 
 	svc := mustNewService(t, db, newExportRegistry(), nil, mockCompany, mockUser, nil)
 
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(&user.Record{ID: "trader1", OUHandle: "trader-ou"}, nil)
-	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co1", Data: []byte(`{}`)}, nil)
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co1", OUHandle: "trader-ou", Data: []byte(`{}`)}, nil)
 
 	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1", defaultExportWorkflowTemplateID)
 	assert.ErrorContains(t, err, "no case flows registered")

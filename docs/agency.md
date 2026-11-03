@@ -8,7 +8,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 |                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                    |
 | -------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
-| Task ownership       | trader/CHA company owns the consignment                 | the agency's own company owns the case     |
+| Task ownership       | trader/CHA company's OU owns the consignment            | the agency's own OU owns the case          |
 | Task claims          | off (its task templates leave out `claimable`)          | on: its task templates set `claimable`     |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
@@ -115,10 +115,9 @@ checks the token's catalog roles on each call.
    (below), not as a repeat inject.
 5. The workflow is started as its own case, so tasks spawned under it have
    `CaseID == taskId`. The task authz gate (`authzgate`, the same as TNSW's) reports
-   ownership in every role the officer's company holds on the case (`case_parties`):
-   the agency's own company, the `company_records` row whose `ou_handle` is the
-   agency's OU. `readauthz` and the write extension then treat officers like any other
-   owner. Officers use the normal `/api/v1/tasks/{id}` routes.
+   ownership in every role the officer's OU (their token's `ouHandle`) holds on the
+   case (`case_parties`): for an officer, the agency's own OU. `readauthz` and the
+   write extension then treat officers like any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
 
 ## Asking for more information
 
@@ -198,7 +197,7 @@ TNSW has no task configs: it picks its workflow server-side at consignment creat
 
 ## Roles per task
 
-An injected workflow is owned in **the roles the agency's own company holds on its case**
+An injected workflow is owned in **the roles the agency's own OU holds on its case**
 (`case_parties`), like a TNSW consignment by its trader and CHA. What each role may do
 is decided by the task's own rules, which the agency's artifacts therefore declare for
 every task:
@@ -236,7 +235,7 @@ A catalog that maps no role (for example one with only `clients`) still starts, 
 officer can open cases or act on tasks: the server logs a warning at start. Ownership
 only admits an officer to a case; the task decides the rest. A step without `authz`
 refuses every write, and a task template without `read.roles` can be opened by every
-role the officer's company holds on the case.
+role the officer's OU holds on the case.
 
 ## Cases
 
@@ -245,13 +244,13 @@ One case has many workflows (`agency_workflow.case_id`). It carries the columns 
 `consignments` that are not trade-specific (`id`, `name`, `state`, `created_by`,
 `created_at`, `updated_at`); `flow` belongs in its own table joined on case id.
 
-`case_parties` records who holds which logical role on a case, one party (a company or
-a user) per role. The role is a catalog role name, so a new role needs no new column.
-In TNSW a consignment's trader company holds `trader` and the CHA company it selected
-holds `cha`, and a company owns a task in every role it holds on the task's case. An
-agency's own company owns its injected cases, so the agency needs a `company_records`
-row for its OU. The inject does not record that party yet, so until it does no officer
-owns an injected case (see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
+`case_parties` records who holds which logical role on a case, one party (an OU, by its
+handle, or a user) per role. The role is a catalog role name, so a new role needs no new
+column. In TNSW the OU of a consignment's trader company holds `trader` and the OU of the
+CHA company it selected holds `cha`. A user owns a task in every role their OU (their
+token's `ouHandle`) holds on the task's case. An agency's own OU owns its injected cases.
+The inject does not record that party yet, so until it does no officer owns an injected
+case (see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
 
 `state` is `IN_PROGRESS` on creation and becomes `FINISHED` once **every** workflow of
 the case has completed. A new workflow injected into a finished case reopens it
