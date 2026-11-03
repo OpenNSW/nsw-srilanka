@@ -301,6 +301,9 @@ JWT decoder you trust) and check `ouHandle`, `roles` and `aud`
 | Remove a user's access                  | Disable or delete the user in ThunderID, or remove them from the groups. Nothing to change in TNSW                       |
 | Rename an OU handle                     | Avoid. If it can't be helped, change it in ThunderID and update `ouHandle` in TNSW together, since `ou_handle` is unique |
 
+A consignment names its trader and CHA companies by OU handle (`case_parties.party_id`),
+so a renamed handle also has to be updated there, or the company loses its consignments.
+
 There is no `otc company delete`. Offboard a company by removing its users' access in
 ThunderID.
 

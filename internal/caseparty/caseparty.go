@@ -1,10 +1,12 @@
 // Package caseparty records who holds which logical role on a case (case_parties): in
-// TNSW, the consignment's trader company and the CHA company it selected. A role is a
-// catalog logical role name ("trader", "cha", ...), so a new role needs no schema change.
-// A case has at most one party per role.
+// TNSW, the OUs of the consignment's trader company and of the CHA company it selected.
+// A role is a catalog logical role name ("trader", "cha", ...), so a new role needs no
+// schema change. A case has at most one party per role.
 //
-// Task authorization asks it which roles the caller's company holds on a task's case
-// (internal/tasks/authzgate); the consignment reads its trader and CHA companies from it.
+// A party is named by its OU handle, the ouHandle claim of its users' tokens, so a
+// caller's OU is matched against it directly. Task authorization asks it which roles the
+// caller's OU holds on a task's case (internal/tasks/authzgate); the consignment reads
+// its trader and CHA companies from it, through company_records.ou_handle.
 package caseparty
 
 import (
@@ -18,8 +20,8 @@ import (
 
 // Party types: what party_id names.
 const (
-	TypeCompany = "company" // company_records.id
-	TypeUser    = "user"    // user_records.id
+	TypeOU   = "ou"   // an OU handle: the ouHandle token claim, company_records.ou_handle
+	TypeUser = "user" // user_records.id
 )
 
 // Party is the holder of one role on a case: a row of case_parties.
@@ -44,9 +46,9 @@ type Ref struct {
 	ID   string
 }
 
-// Company names a company party.
-func Company(id string) Ref {
-	return Ref{Type: TypeCompany, ID: id}
+// OU names the party that is the OU with this handle.
+func OU(handle string) Ref {
+	return Ref{Type: TypeOU, ID: handle}
 }
 
 // Assign makes p the holder of p.Role on p.CaseID, replacing any earlier holder. db may

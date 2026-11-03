@@ -152,7 +152,7 @@ const fetchConsignmentQuery = consignmentSelect + `consignments\.id = \$5 ORDER 
 // fetchConsignmentArgs are the arguments of fetchConsignmentQuery for consignment id:
 // the party joins' roles and types, then the id and the limit.
 func fetchConsignmentArgs(id string) []driver.Value {
-	return []driver.Value{partyRoleTrader, caseparty.TypeCompany, partyRoleCHA, caseparty.TypeCompany, id, 1}
+	return []driver.Value{partyRoleTrader, caseparty.TypeOU, partyRoleCHA, caseparty.TypeOU, id, 1}
 }
 
 // expectCreateConsignment expects createConsignment's transaction: the consignment

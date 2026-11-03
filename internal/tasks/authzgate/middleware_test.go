@@ -11,7 +11,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
-// fakeOwnership stands in for *caseparty.Repository: holders maps a company id to the
+// fakeOwnership stands in for *caseparty.Repository: holders maps an OU handle to the
 // roles it holds on every case.
 type fakeOwnership struct {
 	holders map[string][]string
@@ -47,22 +47,11 @@ func owns(trader, cha string) *fakeOwnership {
 	return &fakeOwnership{holders: holders}
 }
 
-type fakeCompany struct {
-	id    string
-	err   error
-	calls int
-}
-
-func (f *fakeCompany) CompanyIDByOUHandle(context.Context, string) (string, error) {
-	f.calls++
-	return f.id, f.err
-}
-
 // mustNewMiddleware builds a Middleware, failing the test immediately if
 // construction errors.
-func mustNewMiddleware(t *testing.T, ownership CaseRoles, company CompanyResolver) *Middleware {
+func mustNewMiddleware(t *testing.T, ownership CaseRoles) *Middleware {
 	t.Helper()
-	mw, err := NewMiddleware(ownership, company)
+	mw, err := NewMiddleware(ownership)
 	if err != nil {
 		t.Fatalf("NewMiddleware: %v", err)
 	}
@@ -87,8 +76,7 @@ func attachedInput(mw *Middleware, p *authn.Principal) (taskauthz.Input, bool) {
 
 func TestMiddleware_Client(t *testing.T) {
 	own := &fakeOwnership{}
-	comp := &fakeCompany{}
-	in, ok := attachedInput(mustNewMiddleware(t, own, comp), &authn.Principal{Kind: authn.KindClient, ClientID: "FCAU_TO_NSW"})
+	in, ok := attachedInput(mustNewMiddleware(t, own), &authn.Principal{Kind: authn.KindClient, ClientID: "FCAU_TO_NSW"})
 
 	if !ok || in.Kind != taskauthz.KindClient || in.ClientID != "FCAU_TO_NSW" {
 		t.Fatalf("got %+v ok=%v", in, ok)
@@ -96,36 +84,35 @@ func TestMiddleware_Client(t *testing.T) {
 	if in.OwnedRoles != nil {
 		t.Error("client Input must not carry an ownership resolver")
 	}
-	if own.calls != 0 || comp.calls != 0 {
-		t.Errorf("client must not trigger lookups: ownership=%d company=%d", own.calls, comp.calls)
+	if own.calls != 0 {
+		t.Errorf("client must not trigger lookups: ownership=%d", own.calls)
 	}
 }
 
 func TestMiddleware_Unauthenticated(t *testing.T) {
-	if _, ok := attachedInput(mustNewMiddleware(t, &fakeOwnership{}, &fakeCompany{}), nil); ok {
+	if _, ok := attachedInput(mustNewMiddleware(t, &fakeOwnership{}), nil); ok {
 		t.Fatal("want no Input for unauthenticated request")
 	}
 }
 
 func TestMiddleware_UserResolverIsLazy(t *testing.T) {
 	own := owns("adam-pvt-ltd", "edward-pvt-ltd")
-	comp := &fakeCompany{id: "adam-pvt-ltd"}
-	in, ok := attachedInput(mustNewMiddleware(t, own, comp), userCtx("adam-pvt-ltd", "Trader"))
+	in, ok := attachedInput(mustNewMiddleware(t, own), userCtx("adam-pvt-ltd", "Trader"))
 
 	if !ok || in.Kind != taskauthz.KindUser || in.OwnedRoles == nil {
 		t.Fatalf("got %+v ok=%v", in, ok)
 	}
 	// Attaching the Input must not have touched the DB.
-	if own.calls != 0 || comp.calls != 0 {
-		t.Fatalf("resolver ran eagerly: ownership=%d company=%d", own.calls, comp.calls)
+	if own.calls != 0 {
+		t.Fatalf("resolver ran eagerly: ownership=%d", own.calls)
 	}
 
 	owned, err := in.OwnedRoles(context.Background(), "c1")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if own.calls != 1 || comp.calls != 1 {
-		t.Errorf("expected one lookup each, got ownership=%d company=%d", own.calls, comp.calls)
+	if own.calls != 1 {
+		t.Errorf("expected one lookup, got %d", own.calls)
 	}
 	if !owned["trader"] || owned["cha"] {
 		t.Errorf("owned = %v, want trader only", owned)
@@ -133,25 +120,25 @@ func TestMiddleware_UserResolverIsLazy(t *testing.T) {
 }
 
 func TestMiddleware_UserResolverCases(t *testing.T) {
-	const traderCo, chaCo = "adam-pvt-ltd", "edward-pvt-ltd"
+	const traderOU, chaOU = "adam-pvt-ltd", "edward-pvt-ltd"
 
 	tests := []struct {
 		name      string
 		ownership *fakeOwnership
-		company   *fakeCompany
+		ouHandle  string
 		wantOwned map[string]bool
 		wantErr   bool
 	}{
-		{"owns as cha", owns(traderCo, chaCo), &fakeCompany{id: chaCo}, map[string]bool{"cha": true}, false},
-		{"owns as both", owns(traderCo, traderCo), &fakeCompany{id: traderCo}, map[string]bool{"trader": true, "cha": true}, false},
-		{"owns nothing", owns(traderCo, chaCo), &fakeCompany{id: "other-co"}, map[string]bool{}, false},
-		{"no company profile", owns(traderCo, chaCo), &fakeCompany{id: ""}, map[string]bool{}, false},
-		{"ownership error", &fakeOwnership{err: context.DeadlineExceeded}, &fakeCompany{id: traderCo}, nil, true},
-		{"company error", owns(traderCo, ""), &fakeCompany{err: context.DeadlineExceeded}, nil, true},
+		{"owns as cha", owns(traderOU, chaOU), chaOU, map[string]bool{"cha": true}, false},
+		{"owns as both", owns(traderOU, traderOU), traderOU, map[string]bool{"trader": true, "cha": true}, false},
+		{"owns nothing", owns(traderOU, chaOU), "other-ou", map[string]bool{}, false},
+		// An agency's officers own a case in the role the agency's OU holds on it.
+		{"agency OU", &fakeOwnership{holders: map[string][]string{"cda": {"officer"}}}, "cda", map[string]bool{"officer": true}, false},
+		{"ownership error", &fakeOwnership{err: context.DeadlineExceeded}, traderOU, nil, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			in, _ := attachedInput(mustNewMiddleware(t, tc.ownership, tc.company), userCtx("adam-pvt-ltd", "CHA"))
+			in, _ := attachedInput(mustNewMiddleware(t, tc.ownership), userCtx(tc.ouHandle, "CHA"))
 			owned, err := in.OwnedRoles(context.Background(), "c1")
 			if tc.wantErr {
 				if err == nil {
@@ -175,65 +162,47 @@ func TestMiddleware_UserResolverCases(t *testing.T) {
 }
 
 func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
-	t.Run("empty ou handle skips all lookups", func(t *testing.T) {
+	t.Run("empty ou handle skips the lookup", func(t *testing.T) {
 		own := owns("adam-pvt-ltd", "")
-		comp := &fakeCompany{id: "adam-pvt-ltd"}
-		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("", "Trader"))
-		owned, err := in.OwnedRoles(context.Background(), "c1")
-		if err != nil || len(owned) != 0 {
-			t.Fatalf("owned=%v err=%v, want empty/nil", owned, err)
-		}
-		if own.calls != 0 || comp.calls != 0 {
-			t.Errorf("expected no lookups, got ownership=%d company=%d", own.calls, comp.calls)
-		}
-	})
-
-	t.Run("empty case id skips all lookups", func(t *testing.T) {
-		own := owns("adam-pvt-ltd", "")
-		comp := &fakeCompany{id: "adam-pvt-ltd"}
-		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("adam-pvt-ltd", "Trader"))
-		owned, err := in.OwnedRoles(context.Background(), "")
-		if err != nil || len(owned) != 0 {
-			t.Fatalf("owned=%v err=%v, want empty/nil", owned, err)
-		}
-		if own.calls != 0 || comp.calls != 0 {
-			t.Errorf("expected no lookups, got ownership=%d company=%d", own.calls, comp.calls)
-		}
-	})
-
-	t.Run("no company profile skips ownership lookup", func(t *testing.T) {
-		own := owns("adam-pvt-ltd", "")
-		comp := &fakeCompany{id: ""} // no profile
-		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("ghost", "Trader"))
+		in, _ := attachedInput(mustNewMiddleware(t, own), userCtx("", "Trader"))
 		owned, err := in.OwnedRoles(context.Background(), "c1")
 		if err != nil || len(owned) != 0 {
 			t.Fatalf("owned=%v err=%v, want empty/nil", owned, err)
 		}
 		if own.calls != 0 {
-			t.Errorf("ownership lookup should be skipped when the caller has no company, got %d", own.calls)
+			t.Errorf("expected no lookup, got %d", own.calls)
+		}
+	})
+
+	t.Run("empty case id skips the lookup", func(t *testing.T) {
+		own := owns("adam-pvt-ltd", "")
+		in, _ := attachedInput(mustNewMiddleware(t, own), userCtx("adam-pvt-ltd", "Trader"))
+		owned, err := in.OwnedRoles(context.Background(), "")
+		if err != nil || len(owned) != 0 {
+			t.Fatalf("owned=%v err=%v, want empty/nil", owned, err)
+		}
+		if own.calls != 0 {
+			t.Errorf("expected no lookup, got %d", own.calls)
 		}
 	})
 }
 
-// Both dependencies are required: a nil one would panic on the first request.
+// The dependency is required: a nil one would panic on the first request.
 func TestNewMiddleware_RequiresDependencies(t *testing.T) {
-	if _, err := NewMiddleware(nil, &fakeCompany{}); err == nil {
+	if _, err := NewMiddleware(nil); err == nil {
 		t.Error("NewMiddleware(nil roles) = nil error, want one")
-	}
-	if _, err := NewMiddleware(&fakeOwnership{}, nil); err == nil {
-		t.Error("NewMiddleware(nil company) = nil error, want one")
 	}
 }
 
-// The resolver asks for the roles of the caller's company, the party a trader or CHA
-// owns a consignment as.
-func TestMiddleware_AsksForCallerCompany(t *testing.T) {
+// The resolver asks for the roles of the caller's OU, the party a trader, a CHA or an
+// agency owns a case as.
+func TestMiddleware_AsksForCallerOU(t *testing.T) {
 	own := owns("adam-pvt-ltd", "")
-	in, _ := attachedInput(mustNewMiddleware(t, own, &fakeCompany{id: "adam-pvt-ltd"}), userCtx("adam-pvt-ltd", "Trader"))
+	in, _ := attachedInput(mustNewMiddleware(t, own), userCtx("adam-pvt-ltd", "Trader"))
 	if _, err := in.OwnedRoles(context.Background(), "c1"); err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	want := []caseparty.Ref{caseparty.Company("adam-pvt-ltd")}
+	want := []caseparty.Ref{caseparty.OU("adam-pvt-ltd")}
 	if len(own.parties) != 1 || own.parties[0] != want[0] {
 		t.Errorf("parties = %v, want %v", own.parties, want)
 	}
@@ -246,7 +215,7 @@ func userCtx(ouHandle string, roles ...string) *authn.Principal {
 // A user carries their internal user id, the holder a claim is recorded under. A
 // client has none.
 func TestMiddleware_UserCarriesUserID(t *testing.T) {
-	mw := mustNewMiddleware(t, &fakeOwnership{}, &fakeCompany{})
+	mw := mustNewMiddleware(t, &fakeOwnership{})
 	p := userCtx("adam-pvt-ltd", "Trader")
 	p.UserID = "user-1"
 	in, ok := attachedInput(mw, p)
