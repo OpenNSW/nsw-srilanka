@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { appConfig, displayName } from '@/config'
 import { LanguageSwitcher } from '@/components/Layout/LanguageSwitcher'
 import { supportedLanguages } from '@/i18n'
+import { Banner } from '@portals/ui'
 
 export function LoginScreen() {
   const auth = useAuth()
@@ -52,10 +53,9 @@ export function LoginScreen() {
         {/* Centered Authentication Card */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-6 lg:pl-[12%]">
           {auth.error && hasUrlError && (
-            <div className="bg-error-subtle p-4 mb-6 rounded-xl shadow-sm">
-              <p className="text-sm text-error-strong font-semibold">{t('auth.login.errorTitle')}</p>
-              <p className="text-xs text-error-strong/80 mt-1">{auth.error.message}</p>
-            </div>
+            <Banner variant="error" title={t('auth.login.errorTitle')} className="mb-6">
+              {auth.error.message}
+            </Banner>
           )}
           <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-tight mb-10 -mt-20 drop-shadow-lg">
             {systemName}

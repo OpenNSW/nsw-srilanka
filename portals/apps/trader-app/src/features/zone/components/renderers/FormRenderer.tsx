@@ -2,8 +2,9 @@ import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema, Translator } from '@jsonforms/core'
 import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
-import { Button, Callout, Text } from '@radix-ui/themes'
-import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
+import { Button, Text } from '@radix-ui/themes'
+import { Banner } from '@portals/ui'
+import { CheckIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { handleLabel, type Handle, type ZoneAction, type ZoneRendererProps } from '@/features/zone/types'
 import { useReportUnsaved } from '@/features/zone/unsavedChanges'
@@ -302,12 +303,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           note would stay on screen on steps that are already complete. */}
       {interactive && showErrors && requiredErrors.length > 0 && onLastStep && (
         <div className="px-6 pt-6">
-          <Callout.Root color="red">
-            <Callout.Icon>
-              <ExclamationTriangleIcon />
-            </Callout.Icon>
-            <Callout.Text>{t('tasks.validation.requiredFields')}</Callout.Text>
-          </Callout.Root>
+          <Banner variant="error">{t('tasks.validation.requiredFields')}</Banner>
         </div>
       )}
       {/* A stepper draws its own cards, and shows these actions in its footer

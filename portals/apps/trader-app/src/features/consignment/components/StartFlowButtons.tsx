@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { AlertDialog, Button, Flex, Text } from '@radix-ui/themes'
+import { Button, Text } from '@radix-ui/themes'
+import { ConfirmDialog } from '@portals/ui'
 import { useTranslation } from 'react-i18next'
 import type { FlowOption } from '@/features/consignment/types.ts'
 
@@ -47,26 +48,16 @@ export function StartFlowButtons({ flows, onStart }: StartFlowButtonsProps) {
         </Button>
       ))}
 
-      <AlertDialog.Root open={pending !== null} onOpenChange={(open) => !open && !starting && setPending(null)}>
-        <AlertDialog.Content maxWidth="450px">
-          <AlertDialog.Title>
-            {t('consignments.detail.flows.confirmTitle', { label: pending?.label ?? '' })}
-          </AlertDialog.Title>
-          <AlertDialog.Description size="2">
-            {t('consignments.detail.flows.confirmDescription', { label: pending?.label ?? '' })}
-          </AlertDialog.Description>
-          <Flex gap="3" mt="4" justify="end">
-            <AlertDialog.Cancel>
-              <Button variant="soft" color="gray" disabled={starting}>
-                {t('consignments.detail.flows.cancel')}
-              </Button>
-            </AlertDialog.Cancel>
-            <Button loading={starting} onClick={() => pending && void start(pending)}>
-              {t('consignments.detail.flows.start')}
-            </Button>
-          </Flex>
-        </AlertDialog.Content>
-      </AlertDialog.Root>
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(open) => !open && setPending(null)}
+        title={t('consignments.detail.flows.confirmTitle', { label: pending?.label ?? '' })}
+        description={t('consignments.detail.flows.confirmDescription', { label: pending?.label ?? '' })}
+        confirmLabel={t('consignments.detail.flows.start')}
+        cancelLabel={t('consignments.detail.flows.cancel')}
+        onConfirm={() => pending && void start(pending)}
+        busy={starting}
+      />
     </div>
   )
 }

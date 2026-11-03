@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { Badge, Text } from '@radix-ui/themes'
+import { Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
-import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { formatDateTime } from '@/features/consignment/utils.ts'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
 import { ConsignmentName } from '@/features/consignment/components/ConsignmentName'
 import { ROUTES } from '@/constants'
 import { useQuery } from '@/hooks/useQuery'
 import { LinkRow, LoadingOverlay, PageHeader, PageState, PaginationControl, RowLink, Surface, Table } from '@portals/ui'
+import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
 
 // The officer's list of cases. A trimmed ConsignmentScreen: no create button, no
 // trade-flow filter, no role switch — an officer sees every case.
@@ -51,9 +52,7 @@ export function CaseListScreen() {
                       </RowLink>
                     </Table.Cell>
                     <Table.Cell>
-                      <Badge size="1" color={getStateColor(c.state)}>
-                        {formatState(c.state)}
-                      </Badge>
+                      <ConsignmentStateBadge state={c.state} />
                     </Table.Cell>
                     <Table.Cell>
                       <Text size="2" color="gray">

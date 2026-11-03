@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, Badge } from '@radix-ui/themes'
+import { Button } from '@radix-ui/themes'
 import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { isAgencyMode } from '@/features/case/mode'
@@ -7,8 +7,10 @@ import { ConsignmentTasks } from '@/features/consignment/components/WorkflowView
 import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { useConsignment } from '@/features/consignment/hooks.ts'
-import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { formatDateTime } from '@/features/consignment/utils.ts'
 import { ROUTES } from '@/constants'
+import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
+import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
 import {
   Breadcrumb,
   type BreadcrumbItem,
@@ -115,17 +117,9 @@ export function ConsignmentDetailScreen({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-tight text-foreground">{consignment.name || untitled}</h1>
-            <Badge size="2" color={getStateColor(consignment.state)}>
-              {formatState(consignment.state)}
-            </Badge>
+            <ConsignmentStateBadge state={consignment.state} size="2" />
             {/* A case carries no flow. */}
-            {consignment.flow && (
-              <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-                {consignment.flow === 'IMPORT'
-                  ? t('consignments.tradeFlow.import')
-                  : t('consignments.tradeFlow.export')}
-              </Badge>
-            )}
+            {consignment.flow && <TradeFlowBadge flow={consignment.flow} />}
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground-muted">
             <CopyableId

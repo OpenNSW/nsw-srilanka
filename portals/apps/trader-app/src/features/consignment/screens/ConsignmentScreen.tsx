@@ -3,15 +3,17 @@ import { useDebounce } from '@/hooks/useDebounce.ts'
 import { useMutation } from '@/hooks/useMutation'
 import { useQuery } from '@/hooks/useQuery'
 import { useNavigate } from 'react-router-dom'
-import { Badge, Button, Select, Spinner, Text, TextField } from '@radix-ui/themes'
+import { Button, Select, Spinner, Text, TextField } from '@radix-ui/themes'
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { TradeFlow, ConsignmentState } from '@/features/consignment/types.ts'
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
-import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { formatDateTime } from '@/features/consignment/utils.ts'
 import { ConsignmentName } from '@/features/consignment/components/ConsignmentName'
 import { ROUTES } from '@/constants'
 import { LinkRow, LoadingOverlay, PageHeader, PageState, PaginationControl, RowLink, Surface, Table } from '@portals/ui'
+import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
+import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -165,16 +167,10 @@ export function ConsignmentScreen() {
                       </RowLink>
                     </Table.Cell>
                     <Table.Cell>
-                      <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-                        {consignment.flow === 'IMPORT'
-                          ? t('consignments.tradeFlow.import')
-                          : t('consignments.tradeFlow.export')}
-                      </Badge>
+                      <TradeFlowBadge flow={consignment.flow} />
                     </Table.Cell>
                     <Table.Cell>
-                      <Badge size="1" color={getStateColor(consignment.state)}>
-                        {formatState(consignment.state)}
-                      </Badge>
+                      <ConsignmentStateBadge state={consignment.state} />
                     </Table.Cell>
                     <Table.Cell>
                       <Text size="2" color="gray">

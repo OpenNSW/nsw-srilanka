@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, Text } from '@radix-ui/themes'
+import { Button } from '@radix-ui/themes'
 import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { ClaimBanner } from './ClaimBanner'
@@ -9,7 +9,7 @@ import { zoneWidthClass } from '@/features/zone/width'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
-import { Breadcrumb, type BreadcrumbItem, PageState, RefreshButton, Surface } from '@portals/ui'
+import { Banner, Breadcrumb, type BreadcrumbItem, PageState, RefreshButton, Surface } from '@portals/ui'
 
 export function TaskDetailScreen() {
   const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()
@@ -124,11 +124,7 @@ export function TaskDetailScreen() {
       </div>
       {submitError && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
-          <div className="rounded-xl bg-error-subtle px-4 py-3 shadow-sm">
-            <Text size="2" weight="medium" className="text-error-strong">
-              {submitError}
-            </Text>
-          </div>
+          <Banner variant="error">{submitError}</Banner>
         </div>
       )}
       {zoneView.claim && (
