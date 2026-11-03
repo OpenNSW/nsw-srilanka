@@ -48,7 +48,11 @@ type UserFlow struct {
 // ClientFlows are the workflows another system may start on a case.
 type ClientFlows struct {
 	// Enabled turns the list on. Off, which is the default, nothing in it can be started.
-	Enabled   bool         `yaml:"enabled"`
+	Enabled bool `yaml:"enabled"`
+	// OUHandle is this deployment's own OU, by the handle its users' tokens carry. Starting
+	// a client flow records it as an owner of the case, in the flow's Owner role: the
+	// caller is a system with no OU, and the case belongs to this deployment.
+	OUHandle  string       `yaml:"ouHandle"`
 	Workflows []ClientFlow `yaml:"workflows"`
 }
 
@@ -58,12 +62,16 @@ type ClientFlow struct {
 	ID string `yaml:"id"`
 	// Clients are the catalog clients that may start it.
 	Clients []string `yaml:"clients"`
+	// Owner is the catalog role this deployment's OU (ClientFlows.OUHandle) owns the case
+	// in once the flow starts: a broad one every officer holds, or a narrower one.
+	Owner string `yaml:"owner"`
 }
 
 // Validate checks every listed flow, enabled or not, against the catalog: it names a
 // workflow once, and who may start it by names the catalog defines. A user flow also
-// needs the label its button shows. Messages are unprefixed so the config can qualify
-// them with the section.
+// needs the label its button shows; a client flow, the catalog role its case is owned in,
+// and the list the deployment's OU that owns it. Messages are unprefixed so the config
+// can qualify them with the section.
 func (c Config) Validate(cat *catalog.Catalog) error {
 	seen := map[string]bool{}
 	for i, f := range c.Users.Workflows {
@@ -78,6 +86,9 @@ func (c Config) Validate(cat *catalog.Catalog) error {
 			return err
 		}
 	}
+	if len(c.Clients.Workflows) > 0 && strings.TrimSpace(c.Clients.OUHandle) == "" {
+		return fmt.Errorf("clients.ouHandle is required: the OU that owns the cases client flows start")
+	}
 	seen = map[string]bool{}
 	for i, f := range c.Clients.Workflows {
 		where := fmt.Sprintf("clients.workflows[%d]", i)
@@ -86,6 +97,12 @@ func (c Config) Validate(cat *catalog.Catalog) error {
 		}
 		if err := checkNames(where, f.ID, "clients", f.Clients, cat.Clients); err != nil {
 			return err
+		}
+		if strings.TrimSpace(f.Owner) == "" {
+			return fmt.Errorf("%s (%s): owner is required", where, f.ID)
+		}
+		if _, ok := cat.Roles[f.Owner]; !ok {
+			return fmt.Errorf("%s (%s): owner names %q, which is not in the catalog's roles", where, f.ID, f.Owner)
 		}
 	}
 	return nil

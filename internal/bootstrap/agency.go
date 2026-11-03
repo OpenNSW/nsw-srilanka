@@ -7,37 +7,34 @@ import (
 	"net/http"
 
 	"github.com/OpenNSW/core/artifact"
-	workflow "github.com/OpenNSW/core/workflow"
 	"gorm.io/gorm"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
-// mountAgency registers the agency's own routes: inject, gated by a scope only the
-// injecting client holds, and the officer case views.
+// mountAgency registers the agency's own routes: the route the systems flows.clients
+// lists start flows on, gated by a scope only they hold, and the officer case views.
 func mountAgency(
 	mux *http.ServeMux,
 	db *gorm.DB,
 	artifacts *artifact.Set,
-	wm workflow.Manager,
+	flows *caseflow.Service,
+	clientFlows caseflow.ClientFlows,
 	tasks agency.TaskLister,
-	roles map[string]string,
+	cat *catalog.Catalog,
 	withAuth func(http.Handler) http.Handler,
 	withScope func(string) func(http.Handler) http.Handler,
 ) {
-	svc := agency.NewService(agency.NewRepository(db), artifacts, wm)
-	mux.Handle("POST /api/v1/inject", withAuth(withScope(agency.ScopeWorkflowInject)(http.HandlerFunc(svc.HandleInject))))
+	start := caseflow.NewClientHandler(flows, clientFlows, caseparty.NewRepository(db), cat.Clients)
+	mux.Handle("POST /api/v1/internal/cases/{caseId}/flows", withAuth(withScope(caseflow.ScopeFlowStart)(http.HandlerFunc(start.HandleStart))))
 
 	// ConsignmentRead is the read scope the portal's token already carries; the
 	// handler additionally requires the token role of any catalog role.
-	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifacts, roles)
+	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifacts, cat.Roles)
 	mux.Handle("GET /api/v1/cases", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleListCases))))
 	mux.Handle("GET /api/v1/cases/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleGetCase))))
-}
-
-// agencyCompletion is the parent runner's completion handler in agency mode: every
-// parent workflow is an injected one, completed in the agency.
-func agencyCompletion(db *gorm.DB) parentUpstreamService {
-	return agency.NewCompletionHandler(agency.NewRepository(db))
 }

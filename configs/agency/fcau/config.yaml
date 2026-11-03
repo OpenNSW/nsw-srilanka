@@ -96,6 +96,28 @@ catalog:
   clients:
     tnsw: NSW_TO_FCAU
 
+# The workflows TNSW may start on a case here, one per officer task
+# (POST /api/v1/internal/cases/{caseId}/flows). Starting one creates the case
+# if it is new and records this agency's OU (ouHandle) as its owner in the
+# flow's owner role, which decides which officers see the case and its tasks.
+flows:
+  clients:
+    enabled: true
+    ouHandle: fcau
+    workflows:
+      - { id: fcau_application_review, clients: [tnsw], owner: officer }
+      - { id: fcau_issue_certificate, clients: [tnsw], owner: officer }
+      - { id: fcau-warehouse-scheduling--review, clients: [tnsw], owner: officer }
+      - { id: fcau_warehouse_inspection, clients: [tnsw], owner: officer }
+      - { id: fcau_post_wh_lab_fee_review, clients: [tnsw], owner: officer }
+      - { id: fcau_post_wh_lab_test, clients: [tnsw], owner: officer }
+      - { id: fcau_sample_collection, clients: [tnsw], owner: officer }
+      - { id: fcau_visual_assessment, clients: [tnsw], owner: officer }
+      - { id: fcau_lab_fee_payment_review, clients: [tnsw], owner: officer }
+      - { id: fcau_lab_test, clients: [tnsw], owner: officer }
+      - { id: fcau_payment_review_receipt, clients: [tnsw], owner: officer }
+      - { id: fcau_payment_confirm, clients: [tnsw], owner: officer }
+
 # The fcau folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
 # fcau dir to use that one.
