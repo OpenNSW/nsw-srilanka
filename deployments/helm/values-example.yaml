@@ -596,6 +596,8 @@ backend:
     # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
     # Endpoint is the base without /v1/{metrics,traces,logs}. Auth via
     # OTEL_AUTH_HEADER in backend.env when required.
+    # Queries, fragments, and incomplete/nested /v1 signal paths fail startup.
+    # Put authentication in headers, not in the endpoint URL.
     # otel:
     #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
     #   serviceName: tnsw-api

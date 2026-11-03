@@ -114,7 +114,7 @@ services:
   # -------------------------------------------------------------------
   # Stage A: Seed static database schemas from container image layer
   thunderid-db-init:
-    image: ghcr.io/thunder-id/thunderid:1.0.1
+    image: ghcr.io/thunder-id/thunderid:1.1.0
     container_name: thunderid-db-init
     # Seed only when the volume is empty. An unconditional copy would overwrite
     # configdb.db on every `up`, silently reverting the bootstrap and seed.
@@ -127,7 +127,7 @@ services:
   # the image's own, then every document in idp/bootstrap/ (admin-cli, the NSW
   # platform, the agencies and the sample data). See idp/README.md.
   thunderid-setup:
-    image: ghcr.io/thunder-id/thunderid:1.0.1
+    image: ghcr.io/thunder-id/thunderid:1.1.0
     container_name: thunderid-setup
     command: ./setup.sh
     networks:
@@ -151,7 +151,7 @@ services:
 
   # Stage C: Boot active server instances listening for authentication queries
   thunderid:
-    image: ghcr.io/thunder-id/thunderid:1.0.1
+    image: ghcr.io/thunder-id/thunderid:1.1.0
     container_name: thunderid
     networks:
       - nsw-network
@@ -215,6 +215,29 @@ services:
       - TEMPORAL_ADDRESS=temporal:7233
     depends_on:
       - temporal
+
+  # -------------------------------------------------------------------
+  # 3b. Local OpenObserve (opt-in: `make otel` / Compose profile `otel`)
+  # -------------------------------------------------------------------
+  # Not started by `make deps` or `make dev`. Ephemeral: no volume; data
+  # is gone when the container is removed. Loopback-only publish. Root
+  # credentials below are fixed local defaults (not secrets) so the UI and
+  # OTLP Basic auth match the commented `otel` blocks in the example configs.
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.14.7
+    container_name: nsw-openobserve
+    profiles:
+      - otel
+    networks:
+      - nsw-network
+    ports:
+      - "127.0.0.1:${OPENOBSERVE_PORT:-5080}:5080"
+    environment:
+      ZO_ROOT_USER_EMAIL: root@example.com
+      ZO_ROOT_USER_PASSWORD: Complexpass#123
+      ZO_TELEMETRY: "false"
+    # No healthcheck: the image has no shell/curl/wget. Probe from the host
+    # with `curl -sf http://127.0.0.1:5080/healthz` after `make otel`.
 
   # -------------------------------------------------------------------
   # 4. Database Migrations
