@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import type { MouseEvent } from 'react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { useUpload } from '@opennsw/jsonforms-renderers'
 import type { ZoneRendererProps } from '@/features/zone/types'
@@ -18,53 +18,11 @@ function fileRef(href: string | undefined): string | undefined {
   return STORAGE_KEY.test(href) ? href : undefined
 }
 
-// An inline raster image, as a service may send a barcode. SVG is left out: it
-// can carry script.
-const INLINE_IMAGE = /^data:image\/(png|jpeg|gif|webp);base64,/i
-
 // react-markdown drops the URL of a link whose scheme it does not know, so
-// files: links are kept as they are, an inline raster image is kept as an
-// image's source (never as a link), and every other URL gets its default
+// files: links are kept as they are and every other URL gets its default
 // treatment.
-function urlTransform(url: string, key: string): string {
-  if (url.startsWith(FILE_LINK_SCHEME)) return url
-  if (key === 'src' && INLINE_IMAGE.test(url)) return url
-  return defaultUrlTransform(url)
-}
-
-type DownloadUrlResolver = (ref: string) => Promise<{ url: string }>
-
-// FileImage shows a task's stored image, written as ![alt](files:<ref>). The
-// image is served from a download URL the backend signs for this reader, so it
-// is resolved first; until then, or if that fails, the alt text is shown.
-function FileImage({
-  fileRef: ref,
-  alt,
-  getDownloadUrl,
-}: {
-  fileRef: string
-  alt?: string
-  getDownloadUrl?: DownloadUrlResolver
-}) {
-  const [src, setSrc] = useState<string>()
-
-  useEffect(() => {
-    if (!getDownloadUrl) return
-    let cancelled = false
-    getDownloadUrl(ref)
-      .then(({ url }) => {
-        if (!cancelled) setSrc(url)
-      })
-      .catch((err) => {
-        console.error('Failed to resolve secure image url from context', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [ref, getDownloadUrl])
-
-  if (!src) return <span>{alt}</span>
-  return <img src={src} alt={alt} className="max-w-full" />
+function urlTransform(url: string): string {
+  return url.startsWith(FILE_LINK_SCHEME) ? url : defaultUrlTransform(url)
 }
 
 export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
@@ -128,13 +86,6 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
                 {children}
               </a>
             )
-          },
-          img: ({ src, alt }) => {
-            const ref = typeof src === 'string' ? fileRef(src) : undefined
-            if (typeof src === 'string' && src.startsWith(FILE_LINK_SCHEME)) {
-              return ref ? <FileImage fileRef={ref} alt={alt} getDownloadUrl={uploadCtx?.getDownloadUrl} /> : null
-            }
-            return <img src={src} alt={alt} className="max-w-full" />
           },
           strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
           em: ({ children }) => <em className="italic text-foreground">{children}</em>,

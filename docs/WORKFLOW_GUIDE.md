@@ -473,33 +473,37 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
 
 ### Copies of another service's documents (`REMOTE_FILE_ARCHIVER`)
 
-Stores a copy of a document another service hands out by link, such as SLPA's payment slip, receipt and gate pass. Those links are signed and expire, so a step that only shows them leaves the trader with a dead link later and the document outside this deployment. The step is synchronous.
+Stores a copy of a document another service hands out by link, such as SLPA's payment slip. Those links are signed and expire, so a step that only shows them leaves the trader with a dead link later and the document outside this deployment. The step is synchronous.
 
 ```json
 {
-  "id": "slpa-gp--archive-gate-pass",
+  "id": "slpa-invoice--archive-payment-slip",
   "task_type": "REMOTE_FILE_ARCHIVER",
-  "output_namespace": "gate_pass_file",
-  "plugin_properties": { "service_id": "slpa", "filename": "gate-pass" }
+  "output_namespace": "payment_slip_file",
+  "plugin_properties": {
+    "service_id": "slpa",
+    "source_input": "payment_slip_url",
+    "mime_type": "application/pdf",
+    "filename": "slpa-payment-slip.pdf"
+  }
 }
 ```
 
-The node maps the document into the `source` input, and takes the key out as `HTML_DOCUMENT_GENERATOR`'s:
+The node maps the link into the input `source_input` names, and takes the key out as `HTML_DOCUMENT_GENERATOR`'s:
 
 ```json
 {
-  "id": "archive_gate_pass",
+  "id": "archive_payment_slip",
   "type": "TASK",
-  "task_template_id": "slpa-gp--archive-gate-pass",
-  "input_mapping": { "gp.gate_pass_url?": "source" },
-  "output_mapping": { "gate_pass_file?": "gp.gate_pass_file" }
+  "task_template_id": "slpa-invoice--archive-payment-slip",
+  "input_mapping": { "payment.payment_slip_url?": "payment_slip_url" },
+  "output_mapping": { "payment_slip_file?": "payment.payment_slip_file" }
 }
 ```
 
-- **Source:** a URL on the service named by `service_id`, downloaded through that service's client (its credentials, and only its host: a URL on any other host is refused), or a `data:` URI, decoded. Anything else, or no source, stores nothing, so the page keeps showing what the service sent: a barcode sent as a plain code, say.
-- **Output:** `{key, name, mime_type, size}` at `<output_namespace>`, as `HTML_DOCUMENT_GENERATOR` writes it, with the type the service sent (`application/pdf`, `image/png`). Declare the key under the render config's `files` and link it as `[Download](files:{{.gate_pass_file.key}})`, or show an image as `![Barcode](files:{{.barcode_file.key}})`.
-- **Failures:** a source the service refuses (a 4xx, such as an expired link), an empty answer, or a `data:` URI that does not decode is recorded as `{error}` at `<output_namespace>`, with no `key`, and the step goes on: show the service's own link when there is no key. A transport failure or a 5xx fails the step, so the engine retries it.
-- **Filename:** names the stored document; the stored type's extension (`.pdf`, `.png`) is added when it has none.
+- **Properties:** all four are required. `service_id` is the registered service the link is downloaded through (its credentials, and only its host: a URL on any other host is refused). `source_input` is the input holding the link. `mime_type` is the type the document is stored as. `filename` names it, extension included.
+- **Output:** `{key, name, mime_type, size}` at `<output_namespace>`, as `HTML_DOCUMENT_GENERATOR` writes it. Declare the key under the render config's `files` and link it as `[Download](files:{{.payment_slip_file.key}})`. An empty source stores nothing.
+- **Failures:** a download the service refuses (a 4xx, such as an expired link) or an empty answer is recorded as `{error}` at `<output_namespace>`, with no `key`, and the step goes on: show the service's own link when there is no key. A transport failure or a 5xx fails the step, so the engine retries it.
 
 ### Payments (`PAYMENT`)
 
