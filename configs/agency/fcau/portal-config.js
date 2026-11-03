@@ -9,6 +9,14 @@ window.__APP_CONFIG__ = {
   APP_URL: 'http://localhost:5175',
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read',
+  // The ID-token claim holding the officer's roles, which the user menu lists.
+  IDP_ROLE_CLAIM_NAME: 'roles',
+  IDP_ROLE_LABELS: JSON.stringify({
+    'FCAU Officer': {
+      title: 'FCAU Officer',
+      description: 'Reviews and completes the tasks the FCAU receives from the National Single Window.',
+    },
+  }),
   SHOW_AUTOFILL_BUTTON: 'false',
   APP_MODE: 'agency',
 }

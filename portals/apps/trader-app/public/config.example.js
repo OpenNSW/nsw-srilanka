@@ -14,8 +14,17 @@ window.__APP_CONFIG__ = {
   APP_URL: 'http://localhost:5173',
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
-  // ID-token claim holding the roles (an array), and the role names in it. For an
-  // IdP that models roles as groups, set the claim to 'groups' and use the group names.
+  // The ID-token claim holding the user's roles (an array of role names), which the user
+  // menu lists. Needs the 'role' scope above. For an IdP that models roles as groups, set
+  // the claim to 'groups'. Defaults to 'roles'.
+  IDP_ROLE_CLAIM_NAME: 'roles',
+  // Optional. How the user menu shows each role, keyed by the role name in the token: a
+  // title and an optional description. A role left out shows its own name.
+  IDP_ROLE_LABELS: JSON.stringify({
+    Trader: { title: 'Trader', description: 'Creates and manages consignments for your company.' },
+    CHA: { title: 'Customs House Agent', description: 'Acts for traders on their consignments.' },
+    'NSW Admin': { title: 'NSW Administrator', description: 'Administers consignments across all traders.' },
+  }),
   SHOW_AUTOFILL_BUTTON: 'true',
   // Shows the demo color-scheme picker in the footer. Off unless 'true'.
   SHOW_COLOR_SCHEME_SWITCHER: 'true',

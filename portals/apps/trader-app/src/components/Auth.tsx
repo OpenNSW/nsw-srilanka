@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from 'react-oidc-context'
-import { DropdownMenu, Avatar, Flex, Text, Button } from '@radix-ui/themes'
+import { DropdownMenu, Avatar, Badge, Flex, Text, Button } from '@radix-ui/themes'
+import { ExitIcon } from '@radix-ui/react-icons'
+import { useRoles } from '@/hooks/useRoles'
 
 export function SignedIn({ children }: { children: ReactNode }) {
   const auth = useAuth()
@@ -28,6 +30,7 @@ export function SignInButton() {
 export function UserDropdown({ onSignOut }: { onSignOut: () => void }) {
   const { t } = useTranslation()
   const auth = useAuth()
+  const roles = useRoles()
   const profile = auth.user?.profile
   // The person's name when the token has one; the email is then shown under
   // it, and otherwise once, as the heading.
@@ -51,7 +54,7 @@ export function UserDropdown({ onSignOut }: { onSignOut: () => void }) {
           <Avatar size="2" fallback={initials} radius="full" highContrast />
         </button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" size="2" style={{ minWidth: 200 }}>
+      <DropdownMenu.Content align="end" size="2" style={{ minWidth: 260, maxWidth: 320 }}>
         <Flex direction="column" gap="1" px="3" py="2">
           <Text size="2" weight="bold">
             {name}
@@ -62,8 +65,29 @@ export function UserDropdown({ onSignOut }: { onSignOut: () => void }) {
             </Text>
           )}
         </Flex>
+        {roles.length > 0 && (
+          <>
+            <DropdownMenu.Separator />
+            <DropdownMenu.Label>{t('auth.userMenu.roles')}</DropdownMenu.Label>
+            <Flex direction="column" gap="3" px="3" pt="1" pb="2">
+              {roles.map(({ role, title, description }) => (
+                <Flex key={role} direction="column" gap="1" align="start">
+                  <Badge variant="soft" size="2">
+                    {title}
+                  </Badge>
+                  {description && (
+                    <Text size="1" color="gray">
+                      {description}
+                    </Text>
+                  )}
+                </Flex>
+              ))}
+            </Flex>
+          </>
+        )}
         <DropdownMenu.Separator />
         <DropdownMenu.Item color="red" onClick={onSignOut} style={{ cursor: 'pointer' }}>
+          <ExitIcon />
           {t('auth.unauthorized.signOut')}
         </DropdownMenu.Item>
       </DropdownMenu.Content>

@@ -5,6 +5,9 @@ const si: Locale = {
   translation: {
     auth: {
       userFallback: 'පරිශීලකයා',
+      userMenu: {
+        roles: 'භූමිකා',
+      },
       login: {
         tagline: 'ඔබගේ භාණ්ඩ තොග (consignments) වෙත ප්‍රවේශවීමට පුරනය වන්න',
         button: 'පුරන්න',
