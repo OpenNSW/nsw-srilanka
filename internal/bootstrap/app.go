@@ -18,8 +18,7 @@ import (
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
-	notification "github.com/OpenNSW/core/notifications"
-	"github.com/OpenNSW/core/notifications/providers"
+	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
@@ -887,6 +886,30 @@ func taskManagerOptions() []orchestrator.Option {
 	return []orchestrator.Option{orchestrator.WithRequiredPreResumeExtensions(taskauthzext.ExtAuthz)}
 }
 
+// registerNotify installs the notification extension, sending through the
+// providers the notification section sets. With none set the extension still
+// runs, so steps that declare it complete, but it sends nothing.
+func registerNotify(reg *extensions.Registry, cfg config.NotificationConfig, loader registryTemplateProvider) error {
+	notifProviders, err := cfg.Build()
+	if err != nil {
+		return fmt.Errorf("notification providers: %w", err)
+	}
+	if len(notifProviders) == 0 {
+		slog.Warn("notifications disabled: notification.providers sets no provider")
+		err = notify.Register(reg, nil, loader)
+	} else {
+		var notifManager *notification.Manager
+		if notifManager, err = notification.NewManager(notifProviders...); err != nil {
+			return fmt.Errorf("notification manager: %w", err)
+		}
+		err = notify.Register(reg, notifManager, loader)
+	}
+	if err != nil {
+		return fmt.Errorf("register notification extension: %w", err)
+	}
+	return nil
+}
+
 // stepCanAct decides whether a caller may act on a task's active step, by the
 // authz rules on its step template, in the manifest version the task runs on.
 // A task with no active step template has nothing to act on.
@@ -960,14 +983,15 @@ func (p registryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]b
 // separately (see Stage 5 below).
 // registerFlowPlugins installs the plugins this deployment adds on top of the
 // task-plugin set: the synchronous transforms that shape a fan-out, the CHA
-// writer, the reference ID generator, the HTML document generator, and the
-// archiver that stores a copy of a document another service links to.
+// writer, the reference ID generator, the HTML document generator, the lookup
+// that lists a consignment's SLPA containers from its tasks, and the archiver
+// that stores a copy of a document another service links to.
 //
 // A table rather than a run of near-identical registrations, as
 // taskplugins.Register does for the same reason — seven of them inline was most
 // of initTask's branching, and adding an eighth meant editing a function that
 // has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, fetcher taskplugins.RemoteFetcher, files taskplugins.DocumentSaver) error {
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -980,6 +1004,7 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
 		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
 		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files)},
+		{taskplugins.TaskTypeSLPACaseContainers, taskplugins.NewSLPACaseContainersPlugin(caseTasks)},
 		{taskplugins.TaskTypeRemoteFileArchiver, taskplugins.NewRemoteFileArchiverPlugin(fetcher, files)},
 	}
 
@@ -1022,17 +1047,21 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
+	declarations := cusdec.NewDeclarationRepository(db)
+	dispatchNotes := cdn.NewDispatchNoteRepository(db)
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
-		Declarations:  cusdec.NewDeclarationRepository(db),
-		DispatchNotes: cdn.NewDispatchNoteRepository(db),
+		Declarations:  declarations,
+		DispatchNotes: dispatchNotes,
+		Cases:         declarations,
+		Notes:         dispatchNotes,
 	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
-	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, remoteManager, storageService); err != nil {
+	taskStore := gormstore.New(db)
+
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, taskStore, remoteManager); err != nil {
 		return nil, nil, err
 	}
-
-	taskStore := gormstore.New(db)
 
 	// Construct UI projectors and the renderer/zoneview assembler
 	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector(), taskrenderer.NewSLPASundryProjector())
@@ -1075,22 +1104,9 @@ func initTask(
 		return tm.HoldTask(context.Background(), payload)
 	})
 
-	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
-	if err != nil {
-		return nil, nil, fmt.Errorf("email provider: %w", err)
-	}
-	smsProvider, err := providers.NewSMSProvider(cfg.Notification.Providers.SMS)
-	if err != nil {
-		return nil, nil, fmt.Errorf("sms provider: %w", err)
-	}
-	notifManager, err := notification.NewManager(emailProvider, smsProvider)
-	if err != nil {
-		return nil, nil, fmt.Errorf("notification manager: %w", err)
-	}
-
 	extensionsRegistry := extensions.NewRegistry()
-	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{artifacts: artifacts}); err != nil {
-		return nil, nil, fmt.Errorf("register notification extension: %w", err)
+	if err := registerNotify(extensionsRegistry, cfg.Notification, registryTemplateProvider{artifacts: artifacts}); err != nil {
+		return nil, nil, err
 	}
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)

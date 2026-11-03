@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useBlocker } from 'react-router-dom'
-import { AlertDialog, Button } from '@radix-ui/themes'
+import { ConfirmDialog } from '@portals/ui'
 import { useTranslation } from 'react-i18next'
 import { UnsavedChangesContext, type ReportUnsaved } from '@/features/zone/unsavedChanges'
 
@@ -41,26 +41,16 @@ export function UnsavedChangesGuard({ children }: { children: ReactNode }) {
   return (
     <UnsavedChangesContext.Provider value={report}>
       {children}
-      <AlertDialog.Root open={blocker.state === 'blocked'} onOpenChange={(open) => !open && blocker.reset?.()}>
-        <AlertDialog.Content maxWidth="480px">
-          <AlertDialog.Title className="mb-3">{t('tasks.unsaved.title')}</AlertDialog.Title>
-          <AlertDialog.Description size="2" className="mb-4">
-            {t('tasks.unsaved.description')}
-          </AlertDialog.Description>
-          <div className="flex justify-end gap-3">
-            <AlertDialog.Cancel>
-              <Button variant="soft" color="gray">
-                {t('tasks.unsaved.stay')}
-              </Button>
-            </AlertDialog.Cancel>
-            <AlertDialog.Action>
-              <Button color="red" onClick={() => blocker.proceed?.()}>
-                {t('tasks.unsaved.leave')}
-              </Button>
-            </AlertDialog.Action>
-          </div>
-        </AlertDialog.Content>
-      </AlertDialog.Root>
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(open) => !open && blocker.reset?.()}
+        title={t('tasks.unsaved.title')}
+        description={t('tasks.unsaved.description')}
+        confirmLabel={t('tasks.unsaved.leave')}
+        cancelLabel={t('tasks.unsaved.stay')}
+        onConfirm={() => blocker.proceed?.()}
+        color="red"
+      />
     </UnsavedChangesContext.Provider>
   )
 }

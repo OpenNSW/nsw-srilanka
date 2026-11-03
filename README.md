@@ -93,6 +93,7 @@ The repository provides a `compose.yml` stack that brings up all backing service
 ```bash
 make dev      # development: hot reload (air for Go, Vite HMR for the portal)
 make preview  # build and run the real images from the Dockerfiles, locally
+make otel     # optional: local OpenObserve for OTLP (not part of deps/dev)
 make help     # list all targets
 ```
 
@@ -103,6 +104,8 @@ This spins up:
 - **`temporal`** (Port `7233`) & **`temporal-ui`** (Port `8233`): Temporal workflow orchestration engine.
 - **`tnsw-api`** (Port `8080`): The Go backend server.
 - **`tnsw-web`** (Port `5173`): The React Trader Portal frontend.
+
+`make otel` starts **OpenObserve** on `http://localhost:5080` (Compose profile `otel`, ephemeral, loopback-only). It is not included in `make deps` or `make dev`. To export from TNSW only, uncomment the local `otel` block in `configs/config.docker.yaml` (Compose API) or `configs/config.yaml` (native API), then restart the API. Sign in with `root@example.com` / `Complexpass#123` (fixed local defaults in `compose.yml`).
 
 > [!IMPORTANT]
 > **`docker compose up` gives you the _development_ stack.**
@@ -181,7 +184,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 ### 4. Verify
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
-- Observability: set `otel.endpoint` and `otel.serviceName` in `config.yaml` to push OTLP/HTTP metrics, logs and traces (e.g. to OpenObserve). Leave `otel.endpoint` empty (or omit the section) for a no-op.
+- Observability: `make otel` for a local OpenObserve, then uncomment the local `otel` block in the config the API loads (see the example files). Leave `otel` commented (or omit it) for a no-op. Audit (`category=audit`) is OTLP-only.
 - Logs will report DB connection, Temporal worker startup, and the artifact manifests loaded via the artifact loader from `tnsw/manifest_v<N>.json`, or `tnsw/manifest.json` as version 1 where there are none, in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)

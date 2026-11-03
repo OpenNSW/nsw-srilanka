@@ -15,6 +15,7 @@
 # Test coverage files
 coverage.out
 coverage.html
+**/coverage/
 
 ## Environment Variables
 .env*

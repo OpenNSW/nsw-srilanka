@@ -56,3 +56,26 @@ func TestText(t *testing.T) {
 	assert.Equal(t, "", Text(m, "b"))
 	assert.Equal(t, "", Str(m, "n"), "Str reads strings only")
 }
+
+// Only a cancelled note is left out. A status other than the known two is
+// counted as live: counting a live note as missing would ask the trader for a
+// dispatch note Customs already holds.
+func TestActiveCDNRefs_LeavesOutOnlyCancelledNotes(t *testing.T) {
+	note := func(number int, status string) map[string]any {
+		return map[string]any{"office": "CBEX1", "year": "2026", "serial": "C", "number": number, "status": status}
+	}
+
+	refs := ActiveCDNRefs([]map[string]any{
+		note(1, "Registered"),
+		note(2, "Cancelled"),
+		note(3, "CANCELLED"),
+		note(4, "Exited"),
+		note(5, ""),
+	})
+
+	numbers := make([]int, 0, len(refs))
+	for _, r := range refs {
+		numbers = append(numbers, r.Number)
+	}
+	assert.Equal(t, []int{1, 4, 5}, numbers)
+}

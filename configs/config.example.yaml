@@ -111,7 +111,7 @@ storage:
   # proxy. Unlike allowedUploadTypes it may list a type a browser opens as a
   # document: inlineTypes lists text/html, so an agency that generates HTML
   # needs it granted: NPQS does. Only the clients named here, holding the
-  # nsw:storage:internalwrite scope, can store such a type.
+  # storage:internalwrite scope, can store such a type.
   allowedInternalUploadTypes:
     npqs:
       - text/html
@@ -177,9 +177,9 @@ storage:
   # (services), which supplies its URL and authentication. All of the settings
   # below are required in proxy mode; the paths are that service's usual storage
   # routes, and {key} may appear anywhere in the download/delete paths. Users'
-  # uploads go to uploadPath (scope nsw:storage:write). The files this
+  # uploads go to uploadPath (scope storage:write). The files this
   # deployment generates go to internalUploadPath (scope
-  # nsw:storage:internalwrite), which accepts what the owning service grants
+  # storage:internalwrite), which accepts what the owning service grants
   # this deployment's client.
   # proxy:
   #   service: ""
@@ -307,8 +307,8 @@ services:
         clientID: NSW_TO_NPQS
         clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.npqs.nsw-agency.local
   - id: fcau
@@ -321,8 +321,8 @@ services:
         clientID: NSW_TO_FCAU
         clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.fcau.nsw-agency.local
   - id: cda
@@ -335,8 +335,8 @@ services:
         clientID: NSW_TO_CDA
         clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.cda.nsw-agency.local
   - id: slpa
@@ -358,8 +358,8 @@ services:
         clientID: NSW_TO_EFC
         clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.efc.nsw-agency.local
   - id: customs-asycuda
@@ -389,8 +389,8 @@ services:
         clientID: NSW_TO_SLTB
         clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.sltb.nsw-agency.local
 
@@ -559,17 +559,38 @@ refid:
                 padding: 5
 
 # One settings block per channel, in the schema of
-# github.com/OpenNSW/core/notification. At least one is required.
-notification:
-  providers:
-    email:
-      baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
-    sms:
-      baseURL: https://smsservice.lk
-      userName: replace-with-actual-username
-      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-      sidCode: sidCode
+# github.com/OpenNSW/core/notification. Optional, and off for local
+# development: left out, the server sends no email or SMS.
+# notification:
+#   providers:
+#     # Email: set email (through PingMailer's API) or smtp (straight to an
+#     # SMTP server), not both. The schemas are in
+#     # github.com/OpenNSW/core/notification.
+#     email:
+#       baseURL: https://api-server.mail.svc.cluster.local:8000 # PingMailer API server
+#       # path: /notify # optional, this is the default
+#       # allowInsecureHTTP: true # only if baseURL is plain http (in-cluster)
+#       auth:
+#         type: oauth2
+#         oauth2:
+#           tokenURL: https://idp.example.com/oauth2/token
+#           clientID: replace-with-pingmailer-client-id
+#           clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+#       smtpHost: smtp.example.com # SMTP server PingMailer relays to
+#       smtpPort: 587
+#       sender: no-reply@example.com
+#     smtp:
+#       host: smtp.example.com
+#       # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+#       # tlsMode: starttls # starttls (default), tls or none
+#       username: no-reply@example.com
+#       password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
+#       sender: no-reply@example.com
+#     sms:
+#       baseURL: https://smsservice.lk
+#       userName: replace-with-actual-username
+#       password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+#       sidCode: sidCode
 
 integrations:
   # Shared with SLPA out of band. Their Cargo Management System signs each
@@ -599,12 +620,28 @@ flows:
     #   - id: slpa-sundry-payment
     #     label: SLPA sundry payment
     #     roles: [trader, cha]
+    # the Customs dispatch note for a container whose note Customs cancelled
+    # (the boat note waits until every container has one):
+    #   - id: customs-additional-cdn
+    #     label: Add a Cargo Dispatch Note
+    #     roles: [trader, cha]
 
-# Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
-# nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
-# Endpoint is the OTLP/HTTP base without /v1/{metrics,traces,logs} — those paths
-# are appended. serviceName is required when endpoint is set so TNSW, CDA and
-# EFC can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# Optional OTLP/HTTP export of metrics, logs and traces. Empty endpoint (or
+# omit the section) leaves export off. Endpoint is the OTLP/HTTP base without
+# /v1/{metrics,traces,logs} — those paths are appended. serviceName is required
+# when endpoint is set so TNSW, CDA and EFC can be told apart.
+#
+# Local OpenObserve (`make otel`), native API on the host. OpenObserve requires
+# Basic auth for ingest; the header matches compose.yml's fixed local root user
+# (not a secret). Uncomment this block, restart the API, UI at http://localhost:5080
+# (root@example.com / Complexpass#123).
+# otel:
+#   endpoint: http://localhost:5080/api/default
+#   serviceName: tnsw-api
+#   headers:
+#     Authorization: "Basic cm9vdEBleGFtcGxlLmNvbTpDb21wbGV4cGFzcyMxMjM="
+#
+# Staging / shared OpenObserve (env-sourced auth):
 # otel:
 #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
 #   serviceName: tnsw-api

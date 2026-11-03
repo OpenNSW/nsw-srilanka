@@ -89,16 +89,17 @@ inboundAuthConfig:
         - group
         - role
         - ou
-        - nsw:consignment:read
-        - nsw:consignment:write
-        - nsw:task:read
-        - nsw:task:write
-        - nsw:hscode:read
-        - nsw:company:read
-        - nsw:cha:read
-        - nsw:profile:read
-        - nsw:storage:read
-        - nsw:storage:write
+        - consignment:read
+        - consignment:write
+        - consignment:flow:write
+        - task:read
+        - task:write
+        - hscode:read
+        - company:read
+        - cha:read
+        - profile:read
+        - storage:read
+        - storage:write
       userInfo:
         responseType: JSON
         userAttributes:
@@ -162,7 +163,7 @@ inboundAuthConfig:
         refreshToken:
           validityPeriod: 86400
       scopes:
-        - nsw:slce-webhooks:write
+        - slce-webhooks:write
       userInfo:
         responseType: JSON
       scopeClaims:
@@ -214,8 +215,8 @@ inboundAuthConfig:
         refreshToken:
           validityPeriod: 86400
       scopes:
-        - nsw:payment-webhooks:validate
-        - nsw:payment-webhooks:process
+        - payment-webhooks:validate
+        - payment-webhooks:process
       userInfo:
         responseType: JSON
       scopeClaims:
@@ -281,13 +282,9 @@ type: API
 ouId: 01900000-0000-7000-8000-000000000001
 delimiter: ":"
 resources:
-  - name: NSW API
-    handle: nsw
-    description: NSW API resource
   - name: CHA
     handle: cha
     description: CHA resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -295,7 +292,6 @@ resources:
   - name: Profile
     handle: profile
     description: Profile resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -303,7 +299,6 @@ resources:
   - name: Storage
     handle: storage
     description: Storage resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -317,7 +312,6 @@ resources:
   - name: SLCE Webhooks
     handle: slce-webhooks
     description: SLCE Webhooks resource
-    parent: nsw
     actions:
       - name: Write
         handle: write
@@ -325,7 +319,6 @@ resources:
   - name: Payment Webhooks
     handle: payment-webhooks
     description: Payment Webhooks resource
-    parent: nsw
     actions:
       - name: Validate
         handle: validate
@@ -336,24 +329,30 @@ resources:
   - name: Consignment
     handle: consignment
     description: Consignment resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
         description: Read action
       - name: Write
         handle: write
-        description: Write action
+        description: Create a consignment
       - name: Admin Read
         handle: adminread
         description: Admin Read action
       - name: Admin Write
         handle: adminwrite
         description: Admin Write action
+  - name: Flow
+    handle: flow
+    description: Auxiliary flows within consignment
+    parent: consignment
+    actions:
+      - name: Write
+        handle: write
+        description: Start a flow on a consignment
   - name: Task
     handle: task
     description: Task resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -364,7 +363,6 @@ resources:
   - name: HS Code
     handle: hscode
     description: HS Code resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -372,7 +370,6 @@ resources:
   - name: Company
     handle: company
     description: Company resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -387,7 +384,7 @@ ouId: 01900000-0000-7000-8000-000000000001
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
-      - nsw:slce-webhooks:write
+      - slce-webhooks:write
 assignments:
   - id: 01a13912-e7d9-7dd6-a187-1e9c60456335
     type: app
@@ -401,8 +398,8 @@ ouId: 01900000-0000-7000-8000-000000000001
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
-      - nsw:payment-webhooks:process
-      - nsw:payment-webhooks:validate
+      - payment-webhooks:process
+      - payment-webhooks:validate
 assignments:
   - id: 01a13912-e91b-75dc-a2f1-06ddd1668388
     type: app
@@ -416,16 +413,17 @@ ouId: 01a13912-d1d8-7926-b674-4acac460492f
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
-      - nsw:cha:read
-      - nsw:company:read
-      - nsw:consignment:read
-      - nsw:consignment:write
-      - nsw:hscode:read
-      - nsw:profile:read
-      - nsw:storage:read
-      - nsw:storage:write
-      - nsw:task:read
-      - nsw:task:write
+      - cha:read
+      - company:read
+      - consignment:flow:write
+      - consignment:read
+      - consignment:write
+      - hscode:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
 assignments:
   - id: 01a13912-d46e-79f5-b937-7532771bd7b7
     type: group
@@ -439,16 +437,16 @@ ouId: 01a13912-d1d8-7926-b674-4acac460492f
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
-      - nsw:cha:read
-      - nsw:company:read
-      - nsw:consignment:read
-      - nsw:consignment:write
-      - nsw:hscode:read
-      - nsw:profile:read
-      - nsw:storage:read
-      - nsw:storage:write
-      - nsw:task:read
-      - nsw:task:write
+      - cha:read
+      - company:read
+      - consignment:flow:write
+      - consignment:read
+      - hscode:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
 assignments:
   - id: 01a13912-d495-7400-b5bc-541433e05751
     type: group
@@ -462,8 +460,9 @@ ouId: 01900000-0000-7000-8000-000000000001
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
-      - nsw:consignment:adminread
-      - nsw:consignment:adminwrite
+      - consignment:adminread
+      - consignment:adminwrite
+      - profile:read
 assignments:
   - id: 01a13912-d377-73d1-a3e4-a5877421ca85
     type: group

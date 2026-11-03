@@ -46,9 +46,9 @@ temporal:
 # CDA keeps no files of its own: it serves TNSW's storage, calling TNSW as
 # CDA_TO_NSW (services entry tnsw), so officers open the documents
 # traders uploaded there. Officers' uploads go to TNSW's upload route
-# (scope nsw:storage:write), so TNSW checks them like a trader's. CDA
+# (scope storage:write), so TNSW checks them like a trader's. CDA
 # generates no files itself, so CDA_TO_NSW doesn't hold
-# nsw:storage:internalwrite, the scope of TNSW's internal upload route
+# storage:internalwrite, the scope of TNSW's internal upload route
 # (internalUploadPath). A step that stores a generated file needs it granted
 # in the IdP and added to the tnsw service's scopes.
 storage:
@@ -132,9 +132,9 @@ services:
         clientID: CDA_TO_NSW
         clientSecret: "{{env:M2M_CDA_TO_NSW_SECRET}}"
         scopes:
-          - nsw:task:write
-          - nsw:storage:read
-          - nsw:storage:write
+          - task:write
+          - storage:read
+          - storage:write
         endpointParams:
           resource: https://api.nsw-srilanka.local
 
@@ -205,14 +205,34 @@ refid:
   lists:
     pqc_cert_type: [P, S, PS]
 
-# Placeholder providers.
-notification:
-  providers:
-    email:
-      baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
-    sms:
-      baseURL: https://smsservice.lk
-      userName: replace-with-actual-username
-      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-      sidCode: sidCode
+# Optional, and off for local development: uncomment to send email and SMS.
+# notification:
+#   providers:
+#     # Email: set email (through PingMailer's API) or smtp (straight to an
+#     # SMTP server), not both. The schemas are in
+#     # github.com/OpenNSW/core/notification.
+#     email:
+#       baseURL: https://api-server.mail.svc.cluster.local:8000 # PingMailer API server
+#       # path: /notify # optional, this is the default
+#       # allowInsecureHTTP: true # only if baseURL is plain http (in-cluster)
+#       auth:
+#         type: oauth2
+#         oauth2:
+#           tokenURL: https://idp.example.com/oauth2/token
+#           clientID: replace-with-pingmailer-client-id
+#           clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+#       smtpHost: smtp.example.com # SMTP server PingMailer relays to
+#       smtpPort: 587
+#       sender: no-reply@example.com
+#     smtp:
+#       host: smtp.example.com
+#       # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+#       # tlsMode: starttls # starttls (default), tls or none
+#       username: no-reply@example.com
+#       password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
+#       sender: no-reply@example.com
+#     sms:
+#       baseURL: https://smsservice.lk
+#       userName: replace-with-actual-username
+#       password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+#       sidCode: sidCode
