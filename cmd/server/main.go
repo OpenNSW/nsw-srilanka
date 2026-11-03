@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -21,30 +22,12 @@ func main() {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
-	bootstrap.ConfigureLogging(cfg)
-
-	slog.Info("configuration loaded successfully",
-		"db_host", cfg.Database.Postgres.Host,
-		"db_port", cfg.Database.Postgres.Port,
-		"db_name", cfg.Database.Postgres.Name,
-		"db_sslmode", cfg.Database.Postgres.SSLMode,
-	)
-
-	slog.Info("CORS configuration",
-		"allowed_origins", cfg.CORS.AllowedOrigins,
-		"allowed_methods", cfg.CORS.AllowedMethods,
-		"allowed_headers", cfg.CORS.AllowedHeaders,
-		"allow_credentials", cfg.CORS.AllowCredentials,
-		"max_age", cfg.CORS.MaxAge,
-	)
-
-	slog.Info("server configuration",
-		"port", cfg.Server.Port,
-	)
-
 	app, err := bootstrap.Build(context.Background(), cfg)
 	if err != nil {
-		log.Fatalf("failed to bootstrap application: %v", err)
+		// Build has flushed telemetry. Keep the exit cause visible even when
+		// server.logLevel filters out its structured error record.
+		_, _ = fmt.Fprintf(os.Stderr, "failed to bootstrap application: %v\n", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := app.Close(); err != nil {
