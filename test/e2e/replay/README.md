@@ -83,8 +83,8 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
     "scopes": ["task:write", "consignment:read", "..."]
   },
   "inbound": {
-    "endpoint": "POST /api/v1/inject",
-    "taskIDField": "taskId",
+    "endpoint": "POST /api/v1/internal/cases/{caseId}/flows",
+    "taskIDField": "flowId",
     "callbackTokenField": "callbackToken"
   },
   "outbound": {

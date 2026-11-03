@@ -96,6 +96,27 @@ catalog:
   clients:
     tnsw: NSW_TO_SLTB
 
+# The workflows TNSW may start on a case here, one per officer task
+# (POST /api/v1/internal/cases/{caseId}/flows). Starting one creates the case
+# if it is new and records this agency's OU (ouHandle) as its owner in the
+# flow's owner role, which decides which officers see the case and its tasks.
+flows:
+  clients:
+    enabled: true
+    ouHandle: sltb
+    workflows:
+      - { id: sltb_officer_review, clients: [tnsw], owner: officer }
+      - { id: sltb_final_decision, clients: [tnsw], owner: officer }
+      - { id: sltb_levy_payment_review_receipt, clients: [tnsw], owner: officer }
+      - { id: sltb_levy_payment_confirm_office, clients: [tnsw], owner: officer }
+      - { id: sltb_sample_ack_dropoff, clients: [tnsw], owner: officer }
+      - { id: sltb_sample_draw, clients: [tnsw], owner: officer }
+      - { id: sltb_lab_decision, clients: [tnsw], owner: officer }
+      - { id: sltb_tasting_result, clients: [tnsw], owner: officer }
+      - { id: sltb_lab_testing, clients: [tnsw], owner: officer }
+      - { id: sltb_payment_review_receipt, clients: [tnsw], owner: officer }
+      - { id: sltb_payment_confirm, clients: [tnsw], owner: officer }
+
 # The sltb folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
 # sltb dir to use that one.

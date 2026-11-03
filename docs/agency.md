@@ -7,10 +7,10 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 
 |                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                    |
 | -------------------- | ------------------------------------------------------- | ------------------------------------------ |
-| Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
+| Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/internal/cases/{id}/flows`   |
 | Task ownership       | trader/CHA company's OU owns the consignment            | the agency's own OU owns the case          |
 | Task claims          | off (its task templates leave out `claimable`)          | on: its task templates set `claimable`     |
-| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
+| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `internal/cases/{id}/flows`, `cases`       |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
 | Catalog              | `catalog` in `configs/config.yaml`                      | `catalog` in the agency's `config.yaml`    |
 | Artifacts            | TNSW artifact root                                      | the agency's artifacts                     |
@@ -27,8 +27,8 @@ without conflicts. Main-branch files touched:
 - `internal/bootstrap/app.go`: `Build` branches on the mode. TNSW builds the
   consignment service and router, the trader/CHA task gate and its integration
   handlers, and mounts their routes with `mountTNSW` (`internal/bootstrap/tnsw.go`).
-  An agency builds none of those, and instead gets `agencyCompletion`,
-  `newAgencyTaskGate` and `mountAgency` from `internal/bootstrap/agency.go`. Most of
+  An agency builds none of those, and instead gets `mountAgency` from
+  `internal/bootstrap/agency.go`. Both build `internal/caseflow` and the task gate. Most of
   the diff is indentation (`git diff -w`). Routes both modes serve stay in `Build`.
 - `portals/apps/trader-app/src/App.tsx`, one import plus the `/consignments` and
   `/consignments/:consignmentId` routes choosing the agency screen when `isAgencyMode`.
@@ -39,9 +39,6 @@ To check the branch still only touches those files (fetch first, so `main` is cu
 ```sh
 git diff main --stat -- $(git ls-tree -r --name-only main)
 ```
-
-Watch the migration number. `migrations/000018_create_agency_workflow.sql` takes the
-next free slot; if main adds its own `000018`, renumber this one after the merge.
 
 ## Running as an agency
 
@@ -55,6 +52,12 @@ catalog:
     officer: Officer
   clients:
     tnsw: NSW_TO_AGENCY
+flows:
+  clients:
+    enabled: true
+    ouHandle: cda
+    workflows:
+      - { id: cda_officer_verification, clients: [tnsw], owner: officer }
 artifactLoader:
   type: local
   local:
@@ -65,8 +68,9 @@ authn:
 
 `configs/agency/cda/` is a complete example.
 
-The injecting client's token needs the `workflow:inject` scope, and `task:write`
-to reply on the agency's parked steps (see [Asking for more information](#asking-for-more-information)).
+`flows.clients` lists the workflows TNSW may start, one per officer task (see
+[Client flows](#client-flows)). TNSW's client token needs the `workflow:inject` scope to
+start them, and `task:write` to reply on the agency's parked steps (see [Asking for more information](#asking-for-more-information)).
 
 Officers need the token role of at least one role in the agency catalog (see
 [Roles per task](#roles-per-task)) and the `consignment:read` and task scopes the
@@ -99,40 +103,39 @@ API. The backend still checks the token's catalog roles on each call.
 
 ## Flow
 
-1. `POST /api/v1/inject` with `{taskId, taskCode, consignmentId, callbackToken, data}`.
-2. The `taskCode` is resolved to its `task_config` (see below). An unknown code is a 400
-   `unknown task code "<code>"` and records nothing.
-3. `agency.Service.Inject` upserts the `cases` row keyed by `consignmentId` and records
-   one `agency_workflow` row per `taskId` (status `STARTING`) in the same transaction.
-   It then starts the config's `workflow` with `taskId` as the instance ID and marks
-   it `STARTED`.
-   The payload is seeded as the `notification` variable, and the `callbackToken`, when
-   the caller sent one, as the `callbackToken` variable. Both are recorded on the row,
-   so a retried start runs with the values from the first inject. A workflow sends its
-   decision back with it on the caller's `POST /api/v1/callbacks/{callbackToken}`: the
-   token names the caller's step, so a late or repeated decision cannot complete a
-   later one.
-4. Retries are safe. A row still `STARTING` (a failed start) is started again, and a
-   `STARTED` row is returned without touching the engine. That matters: once a
-   workflow completes, Temporal would accept the same ID as a new run. A repeat
-   `taskId` with a different `consignmentId` or `taskCode` is not a retry: it is a 409
-   and starts nothing. Nor is it a new review round: where the artifacts are wired
-   for replies, a resubmission comes back as a reply on the agency's own token
-   (below), not as a repeat inject.
-5. The workflow is started as its own case, so tasks spawned under it have
-   `CaseID == taskId`. The task authz gate (`authzgate`, the same as TNSW's) reports
-   ownership in every role the officer's OU (their token's `ouHandle`) holds on the
-   case (`case_parties`): for an officer, the agency's own OU. `readauthz` and the
-   write extension then treat officers like any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
+1. TNSW calls `POST /api/v1/internal/cases/{caseId}/flows` with
+   `{workflowId, flowId, input, callbackToken}`. `caseId` is the consignment's id.
+2. The caller must be a client the catalog maps, and `flows.clients` must list
+   `workflowId` for it. Anything else is a `404 flow not found`, as for a flow that
+   does not exist, and the reason is logged.
+3. `caseflow.StartFlow` records the flow in `case_flows` (creating the case if it is
+   new, and reopening it if it had finished) and, in the same transaction, the agency's
+   own OU (`flows.clients.ouHandle`) as an owner of the case in the flow's `owner` role
+   (`case_parties`), so a recorded flow always has its owner. It then starts `workflowId`
+   with `flowId` as the workflow instance ID, on the manifest version current when the
+   flow was first recorded. The workflow is seeded with `taskId` (the flow ID), `taskCode` (the
+   workflow), `consignmentId` (the case), `notification` (the input) and, when the
+   caller sent one, `callbackToken`. A workflow sends its decision back with it on the
+   caller's `POST /api/v1/callbacks/{callbackToken}`: the token names the caller's
+   step, so a late or repeated decision cannot complete a later one.
+4. Retries are safe. A flow still `STARTING` (a failed start) is started again, with the
+   owner already recorded, and a started one is returned without touching the engine. A
+   repeat `flowId` with a different case or workflow is a 409 and starts nothing. Nor is it a new review round: where the artifacts are wired for
+   replies, a resubmission comes back as a reply on the agency's own token (below).
+5. Every task the workflow spawns is filed under the case ID. The task authz gate
+   (`authzgate`, the same as TNSW's) reports ownership in every role the officer's OU
+   (their token's `ouHandle`) holds on the case: for an officer, the agency's own OU in
+   the flow's `owner` role. `readauthz` and the write extension then treat officers like
+   any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
 
 ## Asking for more information
 
 Where the artifacts are wired for it (a `replyToken` input and a `reply_command` on
-the `EXTERNAL_REVIEW` steps), only the first round goes through inject. After that,
+the `EXTERNAL_REVIEW` steps), only the first round starts a flow. After that,
 each side calls back on the other side's waiting step, by the token that step handed
 over:
 
-1. TNSW's `EXTERNAL_REVIEW` step injects with its token `tok_b` and parks.
+1. TNSW's `EXTERNAL_REVIEW` step starts the agency's flow with its token `tok_b` and parks.
 2. The officer asks for more information. The review workflow's own `EXTERNAL_REVIEW`
    step replies on `tok_b` with `needs_more_info` and its own token `tok_x` as
    `payload.callbackToken`, then parks. The step maps what it sends under its
@@ -150,8 +153,8 @@ over:
 A token names one waiting step, so a reply cannot complete a stale or different one:
 core answers `409`. The step that sent the reply then fails without retrying and parks
 for an admin, since no retry can succeed. Artifacts that are not wired for replies
-keep injecting: their resubmission is still a repeat inject, which the agency takes
-for a retry and does not deliver. How a step replies is in
+start the flow again: their resubmission is a repeat start, which the agency takes for a
+retry and does not deliver. How a step replies is in
 [`docs/WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md#task-types-configuration-traderinputjson--officerinputjson).
 
 ## Claiming tasks
@@ -173,37 +176,34 @@ has no `claim`. The claim is stored on the task row (`taskflow_tasks.claimed_by`
 `claimed_at`, migration `000028`) and lasts across every step of the task. The full
 contract is in `api/tasks.openapi.yaml`.
 
-## Task configs
+## Client flows
 
-Each `taskCode` a caller may inject has a `task_config` artifact, registered in the
-agency manifests under the task code as its id. An inject records the manifest version
-current when it arrives, and the workflow runs on it:
+`flows.clients` in the agency's `config.yaml` lists the workflows another system may
+start, who may start each (catalog `clients`), and the catalog role the agency's OU owns
+the case in once it starts (`owner`). `ouHandle` is the agency's own OU, the `ouHandle`
+its officers' tokens carry. The server refuses to start if a listed workflow is missing
+from the current manifest, an `owner` or client is not in the catalog, or the list has
+no `ouHandle`. An agency also refuses to start with the list off or empty: TNSW could
+start no flow on it, so no officer task would ever be created.
 
-```json
-{
-  "schemaVersion": 2,
-  "taskCode": "cda_officer_verification_v1",
-  "workflow": "cda_officer_verification_v1",
-  "meta": { "title": "CDA Application Verification", "description": "...", "category": "CDA" }
-}
+```yaml
+flows:
+  clients:
+    enabled: true
+    ouHandle: cda
+    workflows:
+      - { id: cda_officer_verification, clients: [tnsw], owner: officer }
+      - { id: cda_payment_review_receipt, clients: [tnsw], owner: accountant }
 ```
 
-This is `schemaVersion` 2, as defined by `schemas/taskconfig.v2.schema.json` in
-`one-trade-artifacts`; version 1 configs are rejected. It follows the sibling
-nsw-agency service's `task_config` (same kind name, lookup by manifest id, parsed and
-validated on every load, no startup validation), but that service reads version 1,
-which defines the task inline. Version 2 has `workflow` in place of its `forms`,
-`behavior` and `permissions`: here the workflow's
-own artifacts (render config, review workflow) decide screens and outcomes. `meta`
-names and describes the task in the case detail view (falling back to the render
-title). `taskCode` in the file is informational; the manifest id is the key.
-Code: `internal/agency/taskconfig` and its `taskconfigart` artifact adapter.
-
-TNSW has no task configs: it picks its workflow server-side at consignment creation.
+`owner` decides who sees the case and its tasks: a role every officer holds for an
+open case, or a narrower one (an accounts division's `accountant`) for a closed one.
+The case detail titles each task by its render config. TNSW has no client flows: it
+starts its own flows in code, at consignment creation.
 
 ## Roles per task
 
-An injected workflow is owned in **the roles the agency's own OU holds on its case**
+A client flow's case is owned in **the roles the agency's own OU holds on it**
 (`case_parties`), like a TNSW consignment by its trader and CHA. What each role may do
 is decided by the task's own rules, which the agency's artifacts therefore declare for
 every task:
@@ -237,7 +237,7 @@ closed to everyone.
 A step that waits for TNSW's reply, such as a review's `*--request-info` step parked
 until the trader resubmits, is completed by TNSW's machine client rather than an
 officer. The catalog maps that client under `clients` as `tnsw` (for example
-`"tnsw": "NSW_TO_CDA"`, the client TNSW injects and replies as), and such a step's
+`"tnsw": "NSW_TO_CDA"`, the client TNSW starts flows and replies as), and such a step's
 `authz` names it: `"QUEUED_EXTERNALLY": { "resubmit": ["tnsw"] }`. Without the
 mapping, TNSW's reply is refused with `403`.
 
@@ -250,7 +250,7 @@ role the officer's OU holds on the case.
 ## Cases
 
 `cases` is the generic grouping of the workflows that work on one real-world matter.
-One case has many workflows (`agency_workflow.case_id`). It carries the columns of
+One case has many flows (`case_flows.case_id`). It carries the columns of
 `consignments` that are not trade-specific (`id`, `name`, `state`, `created_by`,
 `created_at`, `updated_at`); `flow` belongs in its own table joined on case id.
 
@@ -258,27 +258,23 @@ One case has many workflows (`agency_workflow.case_id`). It carries the columns 
 handle, or a user) per role. The role is a catalog role name, so a new role needs no new
 column. In TNSW the OU of a consignment's trader company holds `trader` and the OU of the
 CHA company it selected holds `cha`. A user owns a task in every role their OU (their
-token's `ouHandle`) holds on the task's case. An agency's own OU owns its injected cases.
-The inject does not record that party yet, so until it does no officer owns an injected
-case (see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
+token's `ouHandle`) holds on the task's case. An agency's own OU owns the cases its client
+flows start, in each flow's `owner` role, and the case list and detail show an officer
+only those (see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
 
 `state` is `IN_PROGRESS` on creation and becomes `FINISHED` once **every** workflow of
-the case has completed. A new workflow injected into a finished case reopens it
+the case has completed. A new flow started on a finished case reopens it
 (`IN_PROGRESS`). `name` is empty until a caller or UI supplies one.
 
-Completions reach the agency through `agency.CompletionHandler`, the parent runner's
-completion callback in agency mode: the workflow is marked `COMPLETED`, and its case
-finished if it was the last. A completion for anything that is not an injected
-workflow is an error, since nothing else runs parent workflows in an agency. The case
-row is locked while deciding, so two workflows completing at once cannot both leave it
-`IN_PROGRESS`.
-TNSW uses the same table: a consignment is a case with the same id, and `consignments`
-holds only its trade data (`flow`); its trader and CHA are the case's parties. TNSW starts and completes its flows
-through `internal/caseflow` (`case_flows`), which applies the same state rule. The
-agency still records its workflows in `agency_workflow`.
+Both modes start and complete flows through `internal/caseflow` (`case_flows`): its
+completion callback marks the flow `COMPLETED`, and its case finished if it was the
+last. The case row is locked while deciding, so two flows completing at once cannot
+both leave it `IN_PROGRESS`. In TNSW a consignment is a case with the same id, and
+`consignments` holds only its trade data (`flow`); its trader and CHA are the case's
+parties.
 
-The inject API keeps `consignmentId`, and so does the workflow variable of that name,
-because callers and artifacts speak trade. Internally it is the case id.
+The workflow variable `consignmentId` keeps its name because the artifacts speak trade.
+It holds the case id.
 
 ## Known simplifications
 

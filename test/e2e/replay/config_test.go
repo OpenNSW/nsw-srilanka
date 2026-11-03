@@ -38,8 +38,8 @@ type AgencyConfig struct {
 // AgencyInbound describes the endpoint the mock SERVER exposes to receive injects
 // from the NSW app.
 type AgencyInbound struct {
-	Endpoint           string `json:"endpoint"`           // Go mux pattern, e.g. "POST /api/v1/inject"
-	TaskIDField        string `json:"taskIDField"`        // JSON field carrying the task id, e.g. "taskId"
+	Endpoint           string `json:"endpoint"`           // Go mux pattern, e.g. "POST /api/v1/internal/cases/{caseId}/flows"
+	TaskIDField        string `json:"taskIDField"`        // JSON field carrying the TNSW task id, e.g. "flowId"
 	CallbackTokenField string `json:"callbackTokenField"` // JSON field carrying the callback token, e.g. "callbackToken"; fills {callbackToken} in outbound.callbackPath
 }
 

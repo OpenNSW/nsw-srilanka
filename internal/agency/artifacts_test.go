@@ -30,7 +30,3 @@ func newSet(t *testing.T, files map[string]string, manifests ...[]artifact.Manif
 	}
 	return set
 }
-
-func row(id string, kind artifact.Kind, path string) artifact.ManifestRow {
-	return artifact.ManifestRow{ID: id, Kind: kind, Path: path}
-}

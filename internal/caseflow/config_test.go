@@ -15,24 +15,27 @@ var testCatalog = &catalog.Catalog{
 
 func TestConfigValidate(t *testing.T) {
 	user := UserFlow{ID: "export", Label: "Export", Roles: []string{"trader"}}
-	client := ClientFlow{ID: "notice", Clients: []string{"tnsw"}}
+	client := ClientFlow{ID: "notice", Clients: []string{"tnsw"}, Owner: "trader"}
 	for name, tc := range map[string]struct {
 		cfg     Config
 		wantErr string
 	}{
 		"none":  {Config{}, ""},
-		"valid": {Config{Users: UserFlows{Enabled: true, Workflows: []UserFlow{user}}, Clients: ClientFlows{Enabled: true, Workflows: []ClientFlow{client}}}, ""},
+		"valid": {Config{Users: UserFlows{Enabled: true, Workflows: []UserFlow{user}}, Clients: ClientFlows{Enabled: true, OUHandle: "cda", Workflows: []ClientFlow{client}}}, ""},
 		// A list that is off is still checked, so a mistake shows before it is turned on.
 		"off but wrong":            {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "export", Label: "Export"}}}}, "roles is required"},
 		"user without id":          {Config{Users: UserFlows{Workflows: []UserFlow{{Label: "Export", Roles: []string{"trader"}}}}}, "id is required"},
 		"user without label":       {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "export", Roles: []string{"trader"}}}}}, "label is required"},
 		"user role not in catalog": {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "export", Label: "Export", Roles: []string{"officer"}}}}}, `roles names "officer"`},
 		"user listed twice":        {Config{Users: UserFlows{Workflows: []UserFlow{user, user}}}, "listed twice"},
-		"client without clients":   {Config{Clients: ClientFlows{Workflows: []ClientFlow{{ID: "notice"}}}}, "clients is required"},
-		"client not in catalog":    {Config{Clients: ClientFlows{Workflows: []ClientFlow{{ID: "notice", Clients: []string{"cda"}}}}}, `clients names "cda"`},
-		"client listed twice":      {Config{Clients: ClientFlows{Workflows: []ClientFlow{client, client}}}, "listed twice"},
+		"client without clients":   {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Owner: "trader"}}}}, "clients is required"},
+		"client not in catalog":    {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"cda"}, Owner: "trader"}}}}, `clients names "cda"`},
+		"client listed twice":      {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{client, client}}}, "listed twice"},
+		"client without owner":     {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}}}}}, "owner is required"},
+		"owner not in catalog":     {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}, Owner: "officer"}}}}, `owner names "officer"`},
+		"client flows without OU":  {Config{Clients: ClientFlows{Workflows: []ClientFlow{client}}}, "clients.ouHandle is required"},
 		// The two lists are apart: a workflow may be in both.
-		"in both lists": {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "notice", Label: "Notice", Roles: []string{"cha"}}}}, Clients: ClientFlows{Workflows: []ClientFlow{client}}}, ""},
+		"in both lists": {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "notice", Label: "Notice", Roles: []string{"cha"}}}}, Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{client}}}, ""},
 	} {
 		err := tc.cfg.Validate(testCatalog)
 		switch {

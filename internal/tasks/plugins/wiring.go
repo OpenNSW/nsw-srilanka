@@ -149,12 +149,12 @@ type CustomsSubmissions struct {
 // Register installs the taskv2 plugins on reg.
 //
 // EXTERNAL_REVIEW uses our local plugin (ExternalReviewPlugin) that resolves
-// targets via remote.Manager and posts the OGA submission envelope. Payment
+// targets via remote.Manager and starts the OGA's review flow. Payment
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager. ogaFiles issues the file
 // tokens EXTERNAL_REVIEW sends OGAs.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.Service, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions, backendBaseURL string) error {
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.Service, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -176,7 +176,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		plugin   flowplugins.TaskPlugin
 	}{
 		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
-		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL, ogaFiles)},
+		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, ogaFiles)},
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},

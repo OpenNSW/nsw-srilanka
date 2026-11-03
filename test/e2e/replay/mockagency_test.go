@@ -66,9 +66,9 @@ func newMockAgency(t *testing.T, configs []AgencyConfig) *mockAgency {
 	for _, cfg := range configs {
 		cfg := cfg // capture
 		// Prefix the path with the agency ID so all agencies can share the same
-		// real-world inject path (e.g. /api/v1/inject) on one mock server.
+		// real-world path (e.g. /api/v1/internal/cases/{caseId}/flows) on one mock server.
 		// agencyServices points each agency at agencyURL/<id>, so the NSW
-		// app sends to /<id>/api/v1/inject — matching the pattern below.
+		// app sends to /<id>/api/v1/internal/cases/... — matching the pattern below.
 		parts := strings.SplitN(cfg.Inbound.Endpoint, " ", 2)
 		mux.HandleFunc(parts[0]+" /"+cfg.ID+parts[1], func(w http.ResponseWriter, r *http.Request) {
 			a.handleInject(w, r, cfg.ID, cfg.Inbound.TaskIDField)
