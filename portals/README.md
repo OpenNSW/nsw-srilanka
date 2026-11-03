@@ -35,6 +35,7 @@ portals/
 ├── apps/                  # Applications
 │   └── trader-app/        # Trader portal application
 └── packages/              # Code the apps share
+    ├── theme/             # @portals/theme: applies a deployment's colors
     └── ui/                # @portals/ui: generic components and design tokens
 ```
 
@@ -70,6 +71,14 @@ compiles its TypeScript source, so it has no build step.
 - `pnpm --filter @portals/ui test:coverage` runs its tests with coverage: a
   per-file table in the terminal, and an HTML report in
   `packages/ui/coverage/index.html`.
+
+`packages/theme` is `@portals/theme`: it paints a deployment's
+`branding.theme` (Radix scale names and step overrides) into Radix's CSS
+variables, which `@portals/ui`'s tokens read. `@portals/ui` holds only the
+token names, so the colors live in the deployment's config, not in code. An
+app depends on it with `"@portals/theme": "workspace:*"` and calls
+`applyTheme()` before its first render. It has no dependencies and no build
+step.
 
 ---
 
