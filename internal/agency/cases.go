@@ -2,7 +2,6 @@ package agency
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -12,10 +11,10 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
-	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/store"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 )
 
 const (
@@ -145,20 +144,9 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 		if t.TaskType == "SYSTEM" {
 			continue
 		}
-		nodes = append(nodes, toNode(t, h.title(r, t)))
+		nodes = append(nodes, toNode(t, tasks.Title(r.Context(), tasks.RenderConfigs(h.artifacts), t)))
 	}
 	httputil.JSON(w, http.StatusOK, CaseDetail{CaseSummary: toSummary(*c), WorkflowNodes: nodes})
-}
-
-// title names t's node: its render config's title, else its task template's id. A render
-// config that does not resolve only costs its title, so it is logged.
-func (h *CaseHandler) title(r *http.Request, t store.TaskRecord) string {
-	rc, err := renderconfig.Load(r.Context(), h.artifacts, t)
-	if err != nil {
-		slog.WarnContext(r.Context(), "agency: render config unavailable for case view", "taskId", t.TaskID, "error", err)
-		return t.TaskTemplateID
-	}
-	return taskDisplayName(t.TaskTemplateID, rc)
 }
 
 // requireCatalogRole returns the caller as an Owner: their OU and the catalog roles their
@@ -221,17 +209,4 @@ func toNode(t store.TaskRecord, name string) WorkflowNode {
 		State:     state,
 		DependsOn: []string{},
 	}
-}
-
-// taskDisplayName returns the title at the root of renderConfig, else the template id.
-func taskDisplayName(templateID string, renderConfig json.RawMessage) string {
-	if len(renderConfig) > 0 {
-		var rc struct {
-			Title string `json:"title"`
-		}
-		if err := json.Unmarshal(renderConfig, &rc); err == nil && rc.Title != "" {
-			return rc.Title
-		}
-	}
-	return templateID
 }

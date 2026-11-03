@@ -711,28 +711,3 @@ func TestConsignmentService_GetAgencySummary_CompanyNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, company.ErrCompanyNotFound)
 }
-
-func TestTaskDisplayName(t *testing.T) {
-	// nil render config → template ID
-	assert.Equal(t, "trade-export", titleOrFallback(nil, "trade-export"))
-
-	// root-level title present → use title
-	rcRootTitle := json.RawMessage(`{"title":"My Root Title"}`)
-	assert.Equal(t, "My Root Title", titleOrFallback(rcRootTitle, "trade-export"))
-
-	// root-level title empty → template ID
-	rcEmptyTitle := json.RawMessage(`{"title":""}`)
-	assert.Equal(t, "trade-export", titleOrFallback(rcEmptyTitle, "trade-export"))
-
-	// root-level title missing → template ID
-	rcNoTitle := json.RawMessage("{}")
-	assert.Equal(t, "trade-export", titleOrFallback(rcNoTitle, "trade-export"))
-
-	// JSON null render config → template ID
-	rcNull := json.RawMessage("null")
-	assert.Equal(t, "trade-export", titleOrFallback(rcNull, "trade-export"))
-
-	// invalid JSON → template ID
-	rc4 := json.RawMessage(`invalid`)
-	assert.Equal(t, "trade-export", titleOrFallback(rc4, "trade-export"))
-}

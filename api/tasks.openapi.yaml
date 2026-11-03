@@ -654,12 +654,17 @@ components:
 
     TaskResponse:
       description: |
-        The task's zone view plus its claim, as the caller sees it. `claim` is
-        present only where the task can be claimed.
+        The task's zone view plus its title and its claim, as the caller sees
+        it. `claim` is present only where the task can be claimed.
       allOf:
         - $ref: '#/components/schemas/ZoneView'
         - type: object
           properties:
+            title:
+              type: string
+              description: |
+                The task's name: the title of its render config, else the id of
+                its task template.
             claim:
               $ref: '#/components/schemas/TaskClaim'
 

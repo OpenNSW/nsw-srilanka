@@ -105,10 +105,8 @@ export function TaskDetailScreen() {
   }
 
   const width = zoneWidthClass(zoneView)
-  // The task's configured name, or its type until the consignment has loaded.
-  const title =
-    consignment?.workflowNodes?.find((node) => node.id === taskId)?.workflowNodeTemplate.name ||
-    humanizeStatus(zoneView.task_type)
+  // The task's name, from its own view; its type only if the view has none.
+  const title = zoneView.title || humanizeStatus(zoneView.task_type)
   const breadcrumb: BreadcrumbItem[] = [
     { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: ROUTES.CONSIGNMENTS },
   ]

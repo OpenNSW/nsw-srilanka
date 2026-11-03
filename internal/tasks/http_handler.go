@@ -74,6 +74,9 @@ type HTTPHandler struct {
 	// TaskTemplateOf resolves a task's task template, whose read.roles decide who
 	// may read the task and whose claimable field whether it has claims.
 	TaskTemplateOf TaskTemplateOf
+	// RenderConfigOf resolves a task's render config, whose title names the task in
+	// its view. Without it, the view names the task by its task template.
+	RenderConfigOf RenderConfigOf
 }
 
 func NewHTTPHandler(
@@ -172,7 +175,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
 	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, false, nil))
-	resp := taskResponse{ZoneView: zv}
+	resp := taskResponse{ZoneView: zv, Title: Title(ctx, h.RenderConfigOf, record)}
 	if taskTemplate.Claimable {
 		// From the stored record, not the view: the view only swaps file values.
 		claim := h.claimOf(ctx, in, record)
