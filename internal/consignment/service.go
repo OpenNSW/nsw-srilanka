@@ -177,7 +177,7 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		return nil, fmt.Errorf("failed to create case: %w", err)
 	}
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return createConsignment(ctx, tx, consignment)
+		return createConsignment(ctx, tx, consignment, traderCompany.OUHandle)
 	}); err != nil {
 		return nil, err
 	}
@@ -359,36 +359,38 @@ const (
 )
 
 // consignmentColumns selects a Consignment from withCase: Name, State and the trader user
-// from its cases row, and the trader and CHA companies from its parties.
+// from its cases row, and the trader and CHA companies from the companies of its parties.
 const consignmentColumns = "consignments.id, consignments.flow, consignments.created_at, consignments.updated_at, " +
 	"cases.name, cases.state, cases.created_by AS trader_id, " +
-	"trader_party.party_id AS trader_company_id, cha_party.party_id AS cha_company_id"
+	"trader_company.id AS trader_company_id, cha_company.id AS cha_company_id"
 
 // withCase joins consignments to their cases row, which holds Name, State and the trader
-// user, and to the case's trader and CHA company parties. Rows are read with
-// Select(consignmentColumns); columns several tables have (id, timestamps) are qualified
-// in conditions.
+// user, to the case's trader and CHA parties, and to the company each party's OU is.
+// Rows are read with Select(consignmentColumns); columns several tables have (id,
+// timestamps) are qualified in conditions.
 func (s *Service) withCase(ctx context.Context) *gorm.DB {
 	return s.db.WithContext(ctx).Model(&Consignment{}).
 		Joins("JOIN cases ON cases.id = consignments.id").
 		Joins("LEFT JOIN case_parties trader_party ON trader_party.case_id = consignments.id AND trader_party.role = ? AND trader_party.party_type = ?",
-			partyRoleTrader, caseparty.TypeCompany).
+			partyRoleTrader, caseparty.TypeOU).
+		Joins("LEFT JOIN company_records trader_company ON trader_company.ou_handle = trader_party.party_id").
 		Joins("LEFT JOIN case_parties cha_party ON cha_party.case_id = consignments.id AND cha_party.role = ? AND cha_party.party_type = ?",
-			partyRoleCHA, caseparty.TypeCompany)
+			partyRoleCHA, caseparty.TypeOU).
+		Joins("LEFT JOIN company_records cha_company ON cha_company.ou_handle = cha_party.party_id")
 }
 
-// createConsignment inserts c, records its trader company as the case's "trader" party
-// and its trader user as the case's creator, on tx so they commit together. The case row
-// must already exist.
-func createConsignment(ctx context.Context, tx *gorm.DB, c *Consignment) error {
+// createConsignment inserts c, records its trader company's OU (traderOUHandle) as the
+// case's "trader" party and its trader user as the case's creator, on tx so they commit
+// together. The case row must already exist.
+func createConsignment(ctx context.Context, tx *gorm.DB, c *Consignment, traderOUHandle string) error {
 	if err := tx.WithContext(ctx).Create(c).Error; err != nil {
 		return fmt.Errorf("failed to create consignment: %w", err)
 	}
 	if err := caseparty.Assign(ctx, tx, caseparty.Party{
 		CaseID:     c.ID,
 		Role:       partyRoleTrader,
-		Type:       caseparty.TypeCompany,
-		ID:         c.TraderCompanyID,
+		Type:       caseparty.TypeOU,
+		ID:         traderOUHandle,
 		AssignedBy: &c.TraderID,
 	}); err != nil {
 		return fmt.Errorf("failed to record the consignment's trader: %w", err)
@@ -449,11 +451,11 @@ func (s *Service) ListConsignments(ctx context.Context, filter Filter) (*ListRes
 	var baseQuery *gorm.DB
 	switch {
 	case filter.TraderCompanyID != nil && filter.CHACompanyID != nil:
-		baseQuery = s.withCase(ctx).Where("(trader_party.party_id = ? OR cha_party.party_id = ?)", *filter.TraderCompanyID, *filter.CHACompanyID)
+		baseQuery = s.withCase(ctx).Where("(trader_company.id = ? OR cha_company.id = ?)", *filter.TraderCompanyID, *filter.CHACompanyID)
 	case filter.TraderCompanyID != nil:
-		baseQuery = s.withCase(ctx).Where("trader_party.party_id = ?", *filter.TraderCompanyID)
+		baseQuery = s.withCase(ctx).Where("trader_company.id = ?", *filter.TraderCompanyID)
 	case filter.CHACompanyID != nil:
-		baseQuery = s.withCase(ctx).Where("cha_party.party_id = ?", *filter.CHACompanyID)
+		baseQuery = s.withCase(ctx).Where("cha_company.id = ?", *filter.CHACompanyID)
 	default:
 		return nil, fmt.Errorf("at least one of TraderCompanyID or CHACompanyID must be set in filter")
 	}

@@ -24,7 +24,7 @@ type chaCompanies struct {
 }
 
 func (chaCompanies) GetCompanyByID(_ context.Context, id string) (*company.Record, error) {
-	return &company.Record{ID: id, HasCHA: true,
+	return &company.Record{ID: id, OUHandle: id + "-ou", HasCHA: true,
 		Data: json.RawMessage(`{"tin_no": "134256789", "slpacmsuser_key": "secret-slpa-key"}`)}, nil
 }
 
@@ -55,11 +55,11 @@ func pluginContext(inputs map[string]any) plugins.PluginContext {
 	}
 }
 
-// expectCHAParty expects the plugin to record cha-1 as case C1's "cha" party, replacing
-// an earlier one.
+// expectCHAParty expects the plugin to record cha-1's OU as case C1's "cha" party,
+// replacing an earlier one.
 func expectCHAParty(mock sqlmock.Sqlmock) {
 	mock.ExpectExec(`INSERT INTO "case_parties" .* ON CONFLICT \("case_id","role"\) DO UPDATE`).
-		WithArgs("C1", "cha", "company", "cha-1", nil, sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs("C1", "cha", "ou", "cha-1-ou", nil, sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 }
 
@@ -208,7 +208,7 @@ type unreadableCHA struct {
 }
 
 func (unreadableCHA) GetCompanyByID(_ context.Context, id string) (*company.Record, error) {
-	return &company.Record{ID: id, HasCHA: true, Data: json.RawMessage(`[]`)}, nil
+	return &company.Record{ID: id, OUHandle: id + "-ou", HasCHA: true, Data: json.RawMessage(`[]`)}, nil
 }
 
 func TestCHAPersistFailsOnUnreadableDataBeforeWriting(t *testing.T) {

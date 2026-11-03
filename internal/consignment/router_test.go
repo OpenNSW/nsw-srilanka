@@ -279,7 +279,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	returnedID := uuid.NewString()
 
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
-	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, OUHandle: "trader-ou", Data: []byte(`{}`)}, nil)
 
 	expectCreateConsignment(sqlMock)
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
@@ -655,8 +655,8 @@ func TestConsignmentRouter_HandleGetConsignments_BothRoles(t *testing.T) {
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "both-ou").
 		Return(&company.Record{ID: "company-1"}, nil)
-	sqlMock.ExpectQuery(consignmentSelect+`\(trader_party\.party_id = \$5 OR cha_party\.party_id = \$6\)`).
-		WithArgs(partyRoleTrader, caseparty.TypeCompany, partyRoleCHA, caseparty.TypeCompany, "company-1", "company-1", sqlmock.AnyArg()).
+	sqlMock.ExpectQuery(consignmentSelect+`\(trader_company\.id = \$5 OR cha_company\.id = \$6\)`).
+		WithArgs(partyRoleTrader, caseparty.TypeOU, partyRoleCHA, caseparty.TypeOU, "company-1", "company-1", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
@@ -719,8 +719,8 @@ func TestConsignmentRouter_HandleGetConsignments_CHARole(t *testing.T) {
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "cha-ou").
 		Return(&company.Record{ID: "company-cha"}, nil)
-	sqlMock.ExpectQuery(consignmentSelect+`cha_party\.party_id = \$5`).
-		WithArgs(partyRoleTrader, caseparty.TypeCompany, partyRoleCHA, caseparty.TypeCompany, "company-cha", sqlmock.AnyArg()).
+	sqlMock.ExpectQuery(consignmentSelect+`cha_company\.id = \$5`).
+		WithArgs(partyRoleTrader, caseparty.TypeOU, partyRoleCHA, caseparty.TypeOU, "company-cha", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
