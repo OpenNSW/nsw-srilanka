@@ -103,6 +103,9 @@ flows:
   clients:
     enabled: true
     ouHandle: npqs
+    # The case name officers see in the case list: the trader company TNSW sends
+    # in the case's attributes.
+    caseColumns: { name: traderCompany.name }
     workflows:
       - { id: npqs_application_review, clients: [tnsw], owner: officer }
       - { id: npqs_sample_draw, clients: [tnsw], owner: officer }

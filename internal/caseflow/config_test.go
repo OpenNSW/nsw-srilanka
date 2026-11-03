@@ -34,6 +34,9 @@ func TestConfigValidate(t *testing.T) {
 		"client without owner":     {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}}}}}, "owner is required"},
 		"owner not in catalog":     {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}, Owner: "officer"}}}}, `owner names "officer"`},
 		"client flows without OU":  {Config{Clients: ClientFlows{Workflows: []ClientFlow{client}}}, "clients.ouHandle is required"},
+		"case name mapped":         {Config{Clients: ClientFlows{CaseColumns: map[string]string{"name": "traderCompany.name"}}}, ""},
+		"unknown case column":      {Config{Clients: ClientFlows{CaseColumns: map[string]string{"state": "flow"}}}, `caseColumns names "state"`},
+		"case column without path": {Config{Clients: ClientFlows{CaseColumns: map[string]string{"name": " "}}}, "attribute path is required"},
 		// The two lists are apart: a workflow may be in both.
 		"in both lists": {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "notice", Label: "Notice", Roles: []string{"cha"}}}}, Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{client}}}, ""},
 	} {

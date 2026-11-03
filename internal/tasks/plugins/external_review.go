@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,13 @@ import (
 type ExternalReviewPlugin struct {
 	client *dispatchHelper
 	files  OGAFiles
+	cases  CaseAttributes
+}
+
+// CaseAttributes reads a case's attributes (cases.attributes), which a dispatch sends
+// with the flow it starts.
+type CaseAttributes interface {
+	CaseAttributes(ctx context.Context, caseID string) (map[string]any, error)
 }
 
 // NewExternalReviewPlugin builds a plugin that POSTs the trader's submitted
@@ -28,6 +36,13 @@ type ExternalReviewPlugin struct {
 // files in it are sent as tokens for the OGA, issued through files.
 func NewExternalReviewPlugin(manager *remote.Manager, files OGAFiles) *ExternalReviewPlugin {
 	return &ExternalReviewPlugin{client: newDispatchHelper(manager), files: files}
+}
+
+// WithCaseAttributes makes p send the attributes of a dispatch's case, read from cases,
+// with each flow it starts. Without it, none are sent. It returns p.
+func (p *ExternalReviewPlugin) WithCaseAttributes(cases CaseAttributes) *ExternalReviewPlugin {
+	p.cases = cases
+	return p
 }
 
 type externalReviewConfig struct {
@@ -110,7 +125,8 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 }
 
 // dispatchRequest is the first round: the review flow the other side starts, POSTed
-// to the configured path with the task's case in it.
+// to the configured path with the task's case in it, and the case's attributes when it
+// has any. A failed read of them fails the step, which is retried like a failed POST.
 func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalReviewConfig, callbackToken string) (string, map[string]any, error) {
 	if cfg.Path == "" {
 		return "", nil, configError(fmt.Errorf("external_review: path is required"))
@@ -140,7 +156,17 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 	if err != nil {
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}
-	return path, startFlowBody(ctx.Record, cfg.ServiceWorkflowID, data, callbackToken), nil
+	body := startFlowBody(ctx.Record, cfg.ServiceWorkflowID, data, callbackToken)
+	if p.cases != nil {
+		attrs, err := p.cases.CaseAttributes(ctx.Context, ctx.Record.CaseID)
+		if err != nil {
+			return "", nil, fmt.Errorf("external_review: failed to read the attributes of case %s: %w", ctx.Record.CaseID, err)
+		}
+		if len(attrs) > 0 {
+			body["attributes"] = attrs
+		}
+	}
+	return path, body, nil
 }
 
 // reply is replyRequest for the step's inputs with their declared files sent as

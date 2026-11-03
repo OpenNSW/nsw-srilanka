@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/OpenNSW/core/httputil"
 
@@ -38,6 +39,10 @@ type ClientStartRequest struct {
 	// CallbackToken is the opaque token the caller expects the decision back on. It names
 	// the caller's step, so the flow hands it back unchanged.
 	CallbackToken string `json:"callbackToken"`
+	// Attributes are values about the case, such as its trader company. A new flow stores
+	// them in cases.attributes, and fills the columns flows.clients.caseColumns maps from
+	// them.
+	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
 // ClientHandler serves the route another system starts a flow on: it creates the case if it
@@ -94,7 +99,10 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	// The owner is recorded with the flow, so a flow that is recorded is owned, and a
 	// retry of a failed start finds both.
 	owner := &Owner{Role: flow.Owner, OUHandle: h.list.OUHandle}
-	f, err := h.flows.StartFlow(ctx, StartRequest{CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars, Owner: owner})
+	f, err := h.flows.StartFlow(ctx, StartRequest{
+		CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars, Owner: owner,
+		Case: caseInfo(req.Attributes, h.list.CaseColumns),
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidRequest):
@@ -132,6 +140,36 @@ func (h *ClientHandler) allowed(ctx context.Context, workflowID, caseID string) 
 		return ClientFlow{}, false
 	}
 	return flow, true
+}
+
+// caseInfo is the CaseInfo for attrs: the attributes, and the name columns maps from them.
+// Nil when attrs is empty. A name that is missing, not a string or blank leaves the case's
+// name as it is.
+func caseInfo(attrs map[string]any, columns map[string]string) *CaseInfo {
+	if len(attrs) == 0 {
+		return nil
+	}
+	info := &CaseInfo{Attributes: attrs}
+	if path, ok := columns[CaseColumnName]; ok {
+		if name, ok := attributeAt(attrs, path).(string); ok {
+			info.Name = strings.TrimSpace(name)
+		}
+	}
+	return info
+}
+
+// attributeAt returns the value at path, dot-separated keys into nested objects, or nil
+// when there is none.
+func attributeAt(attrs map[string]any, path string) any {
+	var v any = attrs
+	for _, key := range strings.Split(path, ".") {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return nil
+		}
+		v = m[key]
+	}
+	return v
 }
 
 // clientVars seeds a client flow's variables under the names the agencies' workflows map

@@ -153,8 +153,8 @@ type CustomsSubmissions struct {
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager. ogaFiles issues the file
-// tokens EXTERNAL_REVIEW sends OGAs.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.Service, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions) error {
+// tokens EXTERNAL_REVIEW sends OGAs, and cases the case attributes it sends them.
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.Service, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions, cases CaseAttributes) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -163,6 +163,9 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 	}
 	if paymentService == nil {
 		return fmt.Errorf("plugins: payment service is nil")
+	}
+	if cases == nil {
+		return fmt.Errorf("plugins: case attributes reader is nil")
 	}
 	if (ogaFiles.ClientFor == nil) != (ogaFiles.IssueForClient == nil) {
 		return fmt.Errorf("plugins: OGA file tokens need both a client lookup and an issuer, or neither")
@@ -176,7 +179,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		plugin   flowplugins.TaskPlugin
 	}{
 		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
-		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, ogaFiles)},
+		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, ogaFiles).WithCaseAttributes(cases)},
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},

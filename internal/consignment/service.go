@@ -187,6 +187,7 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		CaseID:     consignment.ID,
 		TemplateID: templateID,
 		Vars:       initialVars,
+		Case:       &caseflow.CaseInfo{Attributes: caseAttributes(traderCompany)},
 	}); err != nil {
 		return nil, fmt.Errorf("failed to start the export flow: %w", err)
 	}
@@ -664,6 +665,14 @@ func titleOrFallback(renderConfig json.RawMessage, fallback string) string {
 }
 
 // companyRecordToMap converts a company.Record to a map[string]any via its JSON tags.
+// caseAttributes are the attributes of the consignment's case (cases.attributes).
+// EXTERNAL_REVIEW sends them to every agency it starts a flow on, so only values every
+// agency may see go in: the trader company's name, but not its id or data, nor the
+// consignment's own name.
+func caseAttributes(trader *company.Record) map[string]any {
+	return map[string]any{"traderCompany": map[string]any{"name": trader.Name}}
+}
+
 func companyRecordToMap(record *company.Record) (map[string]any, error) {
 	raw, err := json.Marshal(record)
 	if err != nil {

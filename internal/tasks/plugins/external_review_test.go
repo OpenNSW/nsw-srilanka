@@ -149,6 +149,77 @@ func TestExternalReview_EscapesTheCaseID(t *testing.T) {
 	assert.Equal(t, "/api/v1/internal/cases/a%2Fb/flows", calls[0].path)
 }
 
+// caseAttributesStub answers CaseAttributes with attrs or err, and records the case IDs it
+// reads.
+type caseAttributesStub struct {
+	attrs map[string]any
+	err   error
+	reads []string
+}
+
+func (s *caseAttributesStub) CaseAttributes(_ context.Context, caseID string) (map[string]any, error) {
+	s.reads = append(s.reads, caseID)
+	return s.attrs, s.err
+}
+
+const dispatchConfig = `{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review", "reply_command": "submit"}`
+
+func TestExternalReview_DispatchSendsTheCaseAttributes(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	cases := &caseAttributesStub{attrs: map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}}
+	p := NewExternalReviewPlugin(mgr, tokenFor).WithCaseAttributes(cases)
+
+	err := p.Execute(reviewContext(map[string]any{"submission": map[string]any{"field": "v1"}}), json.RawMessage(dispatchConfig))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	assert.Equal(t, []string{"consignment-1"}, cases.reads)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}, calls[0].body["attributes"])
+	// The input is the node's, unchanged.
+	assert.Equal(t, map[string]any{"field": "v1"}, calls[0].body["input"])
+}
+
+func TestExternalReview_DispatchWithoutCaseAttributes(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor).WithCaseAttributes(&caseAttributesStub{attrs: map[string]any{}})
+
+	err := p.Execute(reviewContext(map[string]any{"submission": map[string]any{}}), json.RawMessage(dispatchConfig))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.NotContains(t, calls[0].body, "attributes")
+}
+
+// A failed read fails the step before it calls out, and the step is retried as for a
+// failed POST: it is not a permanent error.
+func TestExternalReview_FailedCaseAttributesReadIsRetried(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor).WithCaseAttributes(&caseAttributesStub{err: fmt.Errorf("db down")})
+
+	err := p.Execute(reviewContext(map[string]any{"submission": map[string]any{}}), json.RawMessage(dispatchConfig))
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrSuspended)
+	assert.False(t, plugins.IsPermanent(err))
+	assert.Empty(t, svc.calls())
+}
+
+func TestExternalReview_ReplySendsNoCaseAttributes(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	cases := &caseAttributesStub{attrs: map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}}
+	p := NewExternalReviewPlugin(mgr, tokenFor).WithCaseAttributes(cases)
+
+	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x", "submission": map[string]any{}}), json.RawMessage(dispatchConfig))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	assert.Empty(t, cases.reads)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.NotContains(t, calls[0].body, "attributes")
+}
+
 func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
 	p := NewExternalReviewPlugin(mgr, tokenFor)

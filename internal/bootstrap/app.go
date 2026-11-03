@@ -1023,12 +1023,16 @@ func initTask(
 	pluginsRegistry := plugins.NewRegistry()
 	declarations := cusdec.NewDeclarationRepository(db)
 	dispatchNotes := cdn.NewDispatchNoteRepository(db)
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get sql.DB for case attributes: %w", err)
+	}
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
 		Declarations:  declarations,
 		DispatchNotes: dispatchNotes,
 		Cases:         declarations,
 		Notes:         dispatchNotes,
-	}); err != nil {
+	}, caseflow.NewRepository(sqlDB)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	taskStore := gormstore.New(db)

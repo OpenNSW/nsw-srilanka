@@ -52,9 +52,17 @@ type ClientFlows struct {
 	// OUHandle is this deployment's own OU, by the handle its users' tokens carry. Starting
 	// a client flow records it as an owner of the case, in the flow's Owner role: the
 	// caller is a system with no OU, and the case belongs to this deployment.
-	OUHandle  string       `yaml:"ouHandle"`
-	Workflows []ClientFlow `yaml:"workflows"`
+	OUHandle string `yaml:"ouHandle"`
+	// CaseColumns fills cases columns from the attributes a client sends with a flow: each
+	// key is a column (CaseColumnName is the only one), each value the dot-separated path of
+	// a string in the attributes, such as "traderCompany.name". The attributes themselves
+	// are stored whether or not anything maps them.
+	CaseColumns map[string]string `yaml:"caseColumns"`
+	Workflows   []ClientFlow      `yaml:"workflows"`
 }
+
+// CaseColumnName is cases.name, the name an officer sees for a case.
+const CaseColumnName = "name"
 
 // ClientFlow is one workflow another system may start on a case.
 type ClientFlow struct {
@@ -88,6 +96,14 @@ func (c Config) Validate(cat *catalog.Catalog) error {
 	}
 	if len(c.Clients.Workflows) > 0 && strings.TrimSpace(c.Clients.OUHandle) == "" {
 		return fmt.Errorf("clients.ouHandle is required: the OU that owns the cases client flows start")
+	}
+	for column, path := range c.Clients.CaseColumns {
+		if column != CaseColumnName {
+			return fmt.Errorf("clients.caseColumns names %q, which is not a case column it can fill (only %q)", column, CaseColumnName)
+		}
+		if strings.TrimSpace(path) == "" {
+			return fmt.Errorf("clients.caseColumns.%s: the attribute path is required", column)
+		}
 	}
 	seen = map[string]bool{}
 	for i, f := range c.Clients.Workflows {
