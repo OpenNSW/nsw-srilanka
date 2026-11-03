@@ -38,13 +38,13 @@ func NewCaseDeclarationPlugin(declarations CaseDeclarations) *CaseDeclarationPlu
 
 // Execute looks the declaration up by the task's case. A case with none is
 // recorded as not found, for the flow to tell the trader; only a lookup that
-// fails is an error.
+// fails is an error, and it stays retryable.
 func (p *CaseDeclarationPlugin) Execute(ctx pluginContext, _ json.RawMessage) error {
 	if ctx.Record == nil {
-		return fmt.Errorf("customs_case_declaration: task record is nil")
+		return inputError(fmt.Errorf("customs_case_declaration: task record is nil"))
 	}
 	if ctx.OutputNamespace == "" {
-		return fmt.Errorf("customs_case_declaration: an output namespace is required")
+		return configError(fmt.Errorf("customs_case_declaration: an output namespace is required"))
 	}
 	decl, err := p.declarations.GetRegisteredByCase(ctx.Context, ctx.Record.CaseID)
 	if err != nil {
