@@ -11,10 +11,15 @@ data:
   # Every value is coerced to a string: getEnv() in runtimeConfig.ts calls
   # .trim() on whatever it reads, so an unquoted YAML bool/number here (e.g.
   # SHOW_AUTOFILL_BUTTON: true instead of "true") would otherwise reach the
-  # browser as a real JS boolean/number and throw a TypeError.
+  # browser as a real JS boolean/number and throw a TypeError. A map or list
+  # (e.g. IDP_ROLE_LABELS) becomes a JSON string for the portal to parse.
   config.js: |
     {{- $config := dict }}
     {{- range $key, $value := .Values.frontend.config }}
+    {{- if or (kindIs "map" $value) (kindIs "slice" $value) }}
+    {{- $_ := set $config $key ($value | toJson) }}
+    {{- else }}
     {{- $_ := set $config $key ($value | toString) }}
+    {{- end }}
     {{- end }}
     window.__APP_CONFIG__ = {{ $config | toJson }};

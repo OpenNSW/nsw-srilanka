@@ -222,6 +222,11 @@ into a ConfigMap and mounted at `/usr/share/nginx/html/config.js` (see
 read directly by the browser — so every URL must be the one the browser will
 actually hit (e.g. the public backend host), not an in-cluster Service name.
 
+Every value reaches the browser as a string. A value that is a map or a list,
+such as `IDP_ROLE_LABELS` (the title and description the user menu shows for
+each role), is rendered as a JSON string, which the portal parses. Write it as
+plain YAML (see `../values-example.yaml`), not as escaped JSON.
+
 ### Frontend branding
 
 `frontend.branding` is empty by default, in which case the portal serves the

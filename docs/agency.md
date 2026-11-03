@@ -101,6 +101,10 @@ their flows and the admin views, so it never shows them. To give one role a diff
 than another (a supervisor, say), grant the two IdP roles different scopes on the agency's
 API. The backend still checks the token's catalog roles on each call.
 
+The user menu lists the roles in the token's `roles` claim (`IDP_ROLE_CLAIM_NAME` names
+another claim), each by its own name, or by the title and description `IDP_ROLE_LABELS`
+gives it. The list is for display only; the screens and buttons follow the scopes.
+
 ## Flow
 
 1. TNSW calls `POST /api/v1/internal/cases/{caseId}/flows` with

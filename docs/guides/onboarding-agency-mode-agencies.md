@@ -462,6 +462,11 @@ frontend:
     IDP_CLIENT_ID: "<portal client ID>"
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.dea.nsw-agency.local"
     IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read"
+    IDP_ROLE_CLAIM_NAME: "roles"
+    IDP_ROLE_LABELS:
+      "DEA Officer":
+        title: "DEA Officer"
+        description: "Reviews and completes the tasks DEA receives from the National Single Window."
     SHOW_AUTOFILL_BUTTON: "false"
   branding:
     systemName: "DEA"
@@ -477,6 +482,11 @@ These values must agree, or officers and TNSW get `401`:
 | ------------------------------------------------------- | ---------------------------- |
 | `backend.config.authn.audience`                         | the API identifier (Step 2b) |
 | `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier          |
+
+`IDP_ROLE_LABELS` is optional. The portal's user menu lists the roles in the officer's token
+(the `roles` claim, or the claim `IDP_ROLE_CLAIM_NAME` names), and this sets the title and
+description it shows for each. Key it by the role name exactly as the token carries it. A role
+with no entry shows its own name.
 
 And this, or officers are signed in but their calls get `403`:
 
