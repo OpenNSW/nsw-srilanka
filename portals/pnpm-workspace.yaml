@@ -30,6 +30,3 @@ allowBuilds:
 
 # Fail the install when Node.js or pnpm don't satisfy package.json `engines`.
 engineStrict: true
-
-minimumReleaseAgeExclude:
-  - '@opennsw/jsonforms-renderers@0.18.0'
