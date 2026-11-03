@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Badge, Button, Text } from '@radix-ui/themes'
+import { Button, Text } from '@radix-ui/themes'
 import { PageState } from '@portals/ui'
 import { getConsignmentForAdmin } from '@/features/admin/service'
 import type { AdminConsignmentDetail } from '@/features/admin/types'
-import { formatDateTime, formatState, getStateColor } from '@/features/consignment/utils'
+import { formatDateTime } from '@/features/consignment/utils'
 import { EngineStatusView } from '@/features/admin/components/engine/EngineStatusView'
 import type { FetchError } from '@/features/admin/components/engine/shared'
 import { FlowList } from '@/features/admin/components/flows/FlowList'
+import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
+import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
 
 // The consignment's business-side detail and its flows. The flow on screen is ?flow=<workflowId>
 // (so a link can point at one), else the first flow, which is the export flow.
@@ -90,12 +92,8 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
         <Text size="3" weight="medium" className="text-foreground">
           {consignment.name || 'Untitled consignment'}
         </Text>
-        <Badge size="1" color={getStateColor(consignment.state)}>
-          {formatState(consignment.state)}
-        </Badge>
-        <Badge size="1" variant="soft" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'}>
-          {consignment.flow}
-        </Badge>
+        <ConsignmentStateBadge state={consignment.state} />
+        <TradeFlowBadge flow={consignment.flow} />
       </div>
 
       <div className="mb-6 flex items-center gap-4 flex-wrap">

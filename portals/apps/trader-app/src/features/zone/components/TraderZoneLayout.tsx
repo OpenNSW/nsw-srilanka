@@ -1,11 +1,11 @@
 import type { Alert, AlertVariant, AuditEntry, ZoneAction, ZoneView } from '@/features/zone/types'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
+import { workflowStatusI18nKey, workflowStatusTone } from '@/features/consignment/workflowStatus'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
 import { zoneWidthClass } from '@/features/zone/width'
-import { CopyableId, Surface } from '@portals/ui'
+import { Banner, CopyableId, StatusBadge, Surface } from '@portals/ui'
 
 type Props = {
   task: ZoneView
@@ -41,78 +41,16 @@ export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0, title }: P
 
 function AlertBanner({ alert }: { alert: Alert }) {
   const { title, message, variant } = normaliseAlert(alert)
-  const styles = alertStyles(variant)
   return (
-    <div className={`rounded-2xl p-4 flex items-start gap-3 ${styles.container}`}>
-      <span className={`mt-0.5 ${styles.icon}`}>{alertIcon(variant)}</span>
-      <div className="flex-1 min-w-0">
-        {title && <p className={`text-sm font-semibold ${styles.title}`}>{title}</p>}
-        <p className={`text-sm whitespace-pre-wrap ${styles.body}`}>{message}</p>
-      </div>
-    </div>
+    <Banner variant={variant} title={title}>
+      {message}
+    </Banner>
   )
 }
 
 function normaliseAlert(alert: Alert): { message: string; title?: string; variant: AlertVariant } {
   if (typeof alert === 'string') return { message: alert, variant: 'info' }
   return { message: alert.message, title: alert.title, variant: alert.variant ?? 'info' }
-}
-
-function alertStyles(variant: AlertVariant) {
-  switch (variant) {
-    case 'success':
-      return {
-        container: 'bg-success-subtle',
-        icon: 'text-success-strong',
-        title: 'text-success-strong',
-        body: 'text-success-strong',
-      }
-    case 'warning':
-      return {
-        container: 'bg-warning-subtle',
-        icon: 'text-warning-strong',
-        title: 'text-warning-strong',
-        body: 'text-warning-strong',
-      }
-    case 'error':
-      return {
-        container: 'bg-error-subtle',
-        icon: 'text-error-strong',
-        title: 'text-error-strong',
-        body: 'text-error-strong',
-      }
-    case 'info':
-    default:
-      return {
-        container: 'bg-info-subtle',
-        icon: 'text-info-strong',
-        title: 'text-info-strong',
-        body: 'text-info-strong',
-      }
-  }
-}
-
-function alertIcon(variant: AlertVariant) {
-  if (variant === 'success') {
-    return (
-      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-        <path
-          fillRule="evenodd"
-          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-          clipRule="evenodd"
-        />
-      </svg>
-    )
-  }
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-      <path
-        fillRule="evenodd"
-        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-        clipRule="evenodd"
-      />
-    </svg>
-  )
 }
 
 function AuditLog({ entries }: { entries: AuditEntry[] }) {
@@ -216,8 +154,10 @@ function Header({ task, title }: { task: ZoneView; title?: string }) {
           <CopyableId label={t('tasks.taskId')} id={task.task_id} />
         </p>
       </div>
-      <span className="inline-flex shrink-0 items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary">
-        {statusLabel}
+      <span className="shrink-0">
+        <StatusBadge tone={workflowStatusTone(task.state)} size="2">
+          {statusLabel}
+        </StatusBadge>
       </span>
     </div>
   )
