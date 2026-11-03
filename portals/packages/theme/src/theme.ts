@@ -1,7 +1,8 @@
 // Paints a deployment's colours into the CSS variables Radix Themes and
 // @portals/ui read (--accent-N, --gray-N, and any other Radix step). It
 // generates and checks nothing: whoever configures the theme supplies the
-// values, and the browser ignores one it can't parse.
+// values. A value that isn't a color is stored as given and leaves its step
+// unset.
 
 // The Radix scales a theme can name. Radix ships light and dark steps for
 // each, so naming one themes both appearances.
@@ -51,7 +52,7 @@ const VARIABLE_SCALES = new Set<string>(['accent', ...ACCENT_SCALES, ...GRAY_SCA
 // 'blue-contrast'). Only the name is checked, never the value.
 export function isThemeVariable(name: string): boolean {
   const dash = name.lastIndexOf('-')
-  return VARIABLE_SCALES.has(name.slice(0, dash)) && STEPS.includes(name.slice(dash + 1))
+  return dash > 0 && VARIABLE_SCALES.has(name.slice(0, dash)) && STEPS.includes(name.slice(dash + 1))
 }
 
 // Each appearance's variables are set on <html>, where the Tailwind tokens
@@ -67,6 +68,12 @@ const SELECTORS: Record<Appearance, string> = {
 }
 
 const STYLE_ID = 'portals-theme'
+
+// Props every Radix <Theme> root must get for applyTheme to work.
+// grayColor="gray" is the one gray Radix doesn't remap (the default, auto,
+// would swap in slate), so a theme whose gray scale is gray keeps Radix's
+// own --gray-N, which themeVariables leaves alone.
+export const THEME_ROOT_PROPS = { grayColor: 'gray' } as const
 
 // The CSS variables (names without dashes) one appearance of a theme sets,
 // in the order they apply: the named scales, then any colors given.
@@ -86,9 +93,8 @@ export function themeVariables(config: ThemeConfig, appearance: Appearance): Rec
     ['gray', palette.gray],
   ] as const) {
     // Radix's own --gray-N already are the gray scale; pointing them at
-    // themselves would be a cycle, which the browser treats as invalid. For
-    // a Theme root to keep them, it must be given grayColor="gray", which
-    // Radix doesn't remap.
+    // themselves would be a cycle, which the browser treats as invalid. A
+    // Theme root keeps them only with THEME_ROOT_PROPS.
     if (!scale || (role === 'gray' && scale === 'gray')) continue
     for (const step of STEPS) vars[`${role}-${step}`] = `var(--${scale}-${step})`
   }
@@ -98,8 +104,8 @@ export function themeVariables(config: ThemeConfig, appearance: Appearance): Rec
 // Paints the theme into the document, replacing whatever theme was there.
 // An empty theme leaves Radix's own scales.
 // Values go in through the CSSOM rather than as stylesheet text, so a value
-// can't break out of its rule, and one the browser can't parse is dropped
-// on its own.
+// can't break out of its rule. They aren't checked: a custom property takes
+// any value, so one that isn't a color leaves its step unset.
 export function applyTheme(config: ThemeConfig, doc: Document = document): void {
   let style = doc.getElementById(STYLE_ID) as HTMLStyleElement | null
   if (!style) {

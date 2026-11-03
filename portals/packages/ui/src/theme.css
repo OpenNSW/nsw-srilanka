@@ -2,6 +2,8 @@
  * Each color token names a role (primary, error-strong, border) and the
  * Radix step that plays it; the steps' values come from the app's theme
  * (@portals/theme), so this file holds no brand colors and works with any.
+ * Without a theme, or with one that names no accent, the accent is Radix's
+ * default, indigo (see the fallback after @theme).
  *
  * An app imports this after Tailwind:
  *
@@ -136,6 +138,41 @@
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-fade-in-delayed: fade-in 0.8s ease-out 0.3s both;
   --animate-loading-bar: loading-bar 2s ease-in-out infinite;
+}
+
+/* Radix defines --accent-N only on a Theme root, not on :root where the
+ * tokens above resolve. This points them at Radix's default accent, indigo,
+ * so the tokens hold with no theme, or one that names no accent; a theme's
+ * own rule outranks it. */
+:root {
+  --accent-1: var(--indigo-1);
+  --accent-2: var(--indigo-2);
+  --accent-3: var(--indigo-3);
+  --accent-4: var(--indigo-4);
+  --accent-5: var(--indigo-5);
+  --accent-6: var(--indigo-6);
+  --accent-7: var(--indigo-7);
+  --accent-8: var(--indigo-8);
+  --accent-9: var(--indigo-9);
+  --accent-10: var(--indigo-10);
+  --accent-11: var(--indigo-11);
+  --accent-12: var(--indigo-12);
+  --accent-a1: var(--indigo-a1);
+  --accent-a2: var(--indigo-a2);
+  --accent-a3: var(--indigo-a3);
+  --accent-a4: var(--indigo-a4);
+  --accent-a5: var(--indigo-a5);
+  --accent-a6: var(--indigo-a6);
+  --accent-a7: var(--indigo-a7);
+  --accent-a8: var(--indigo-a8);
+  --accent-a9: var(--indigo-a9);
+  --accent-a10: var(--indigo-a10);
+  --accent-a11: var(--indigo-a11);
+  --accent-a12: var(--indigo-a12);
+  --accent-contrast: var(--indigo-contrast);
+  --accent-surface: var(--indigo-surface);
+  --accent-indicator: var(--indigo-indicator);
+  --accent-track: var(--indigo-track);
 }
 
 /* Animation Keyframes */

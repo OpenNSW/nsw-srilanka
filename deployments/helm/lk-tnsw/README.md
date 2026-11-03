@@ -247,9 +247,10 @@ uses its default navy. Colors are
 accent (buttons, links, focus rings) and the grays, and override any single
 step by its CSS variable name, without the leading dashes. A name that
 isn't a Radix step (a typo such as `acent-9`) fails `branding.json`
-validation, like any other invalid field. Values are used as given and
-nothing is generated, so for a custom brand supply each step you want
-changed: the
+validation, like any other invalid field. A theme that names no accent
+gets Radix's default, indigo. Values are used as given and not checked (one
+that isn't a color leaves its step unset), and nothing is generated, so for
+a custom brand supply each step you want changed: the
 [Radix custom palette tool](https://www.radix-ui.com/colors/custom) gives
 all of them from one color. `dark` holds the same fields for the dark
 appearance; light `colors` don't carry over to it. The portal renders in

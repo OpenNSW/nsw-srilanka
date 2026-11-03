@@ -97,10 +97,18 @@ describe('isThemeVariable', () => {
     expect(isThemeVariable(name)).toBe(true)
   })
 
-  it.each(['acent-9', 'accent-13', 'accent-a0', 'accent', '--accent-9', 'Accent-9', 'navy-9', 'accent-9 '])(
-    'rejects %s',
-    (name) => {
-      expect(isThemeVariable(name)).toBe(false)
-    },
-  )
+  it.each([
+    'acent-9',
+    'accent-13',
+    'accent-a0',
+    'accent',
+    '--accent-9',
+    'Accent-9',
+    'navy-9',
+    'accent-9 ',
+    'gray9',
+    '-9',
+  ])('rejects %s', (name) => {
+    expect(isThemeVariable(name)).toBe(false)
+  })
 })

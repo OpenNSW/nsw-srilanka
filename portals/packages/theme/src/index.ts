@@ -1,6 +1,7 @@
 export {
   ACCENT_SCALES,
   GRAY_SCALES,
+  THEME_ROOT_PROPS,
   applyTheme,
   isThemeVariable,
   themeVariables,

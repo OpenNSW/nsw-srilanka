@@ -41,7 +41,10 @@ export const DEFAULT_THEME: ThemeConfig = {
 // Status text (soft badges, colored Text) in light. Radix's step 11 for
 // these hues reads at 3.6-4.3:1 on a soft badge over the page background;
 // each is darkened just enough for 4.5:1, keeping its hue. Under every
-// theme, which can set them itself.
+// theme, which can set them itself. They change the raw scale, so a theme
+// whose accent is one of these hues gets them as its accent-11 and
+// accent-a11 too, for the same contrast on the accent's soft tints. They
+// apply to light only; dark uses Radix's own.
 const STATUS_TEXT_COLORS: Record<string, string> = {
   'blue-11': '#0b66b6',
   'blue-a11': '#0b66b6',
