@@ -5,8 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
 	"gorm.io/gorm"
 )
+
+// taskTable is core's task table, read directly to find the task parked on an order.
+var taskTable = gormstore.TaskRecordModel{}.TableName()
 
 // ErrUnknownEvent is returned for an event this package does not model, so the
 // caller can answer the CMS rather than acting on a guess.
@@ -68,7 +72,7 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 		StepID string `gorm:"column:active_step_id"`
 	}
 	err = l.db.WithContext(ctx).
-		Table("task_records_v2").
+		Table(taskTable).
 		Where("("+match+") AND active_task_template_id = ? AND state = ?",
 			append(append([]any{}, args...), templateID, stateQueuedExternally)...).
 		Select("task_id", "active_step_id").
@@ -87,7 +91,7 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 	// would let a sibling still running answer for a wait that has finished.
 	var states []string
 	if err := l.db.WithContext(ctx).
-		Table("task_records_v2").
+		Table(taskTable).
 		Where("("+match+") AND active_task_template_id = ?", append(append([]any{}, args...), templateID)...).
 		Pluck("state", &states).Error; err != nil {
 		return "", "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
@@ -113,7 +117,7 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 	// there being an order here at all.
 	var held int64
 	if err := l.db.WithContext(ctx).
-		Table("task_records_v2").
+		Table(taskTable).
 		Where(match, args...).
 		Count(&held).Error; err != nil {
 		return "", "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
