@@ -35,10 +35,10 @@ func TestResolvePaymentAmount(t *testing.T) {
 		},
 		{
 			// float roundoff check
-			name:       "workflow-supplied float64 keeps full precision, not just 2 decimal places",
-			input:      4500.567,
+			name:       "workflow-supplied float64 keeps its cents exactly",
+			input:      4500.57,
 			configured: configured,
-			want:       "4500.567",
+			want:       "4500.57",
 		},
 		{
 			name:       "workflow-supplied string amount is accepted",
@@ -74,6 +74,30 @@ func TestResolvePaymentAmount(t *testing.T) {
 			name:       "unparseable string amount is rejected",
 			input:      "not-a-number",
 			configured: configured,
+			wantErr:    true,
+		},
+		{
+			name:       "the largest amount the transaction can store is accepted",
+			input:      9999999999999.99,
+			configured: configured,
+			want:       "9999999999999.99",
+		},
+		{
+			name:       "an amount past what the transaction can store is rejected",
+			input:      1e36,
+			configured: configured,
+			wantErr:    true,
+		},
+		{
+			name:       "an amount with more than two decimal places is rejected",
+			input:      "12500.555",
+			configured: configured,
+			wantErr:    true,
+		},
+		{
+			name:       "a configured amount past what the transaction can store is rejected",
+			input:      nil,
+			configured: decimal.RequireFromString("10000000000000"),
 			wantErr:    true,
 		},
 		{
@@ -448,4 +472,16 @@ func TestPaymentPlugin_Execute_DuplicateReference(t *testing.T) {
 	err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil), []byte(paymentConfigJSON))
 
 	require.ErrorIs(t, err, payment.ErrDuplicateReference)
+}
+
+// Converting a float keeps every digit it was written with, so an amount
+// with too many decimal places is refused rather than silently rounded.
+func TestDecimalFromAny_KeepsFloatPrecision(t *testing.T) {
+	got, err := decimalFromAny(4500.567)
+	if err != nil {
+		t.Fatalf("decimalFromAny(4500.567) unexpected error: %v", err)
+	}
+	if got.String() != "4500.567" {
+		t.Fatalf("decimalFromAny(4500.567) = %s, want 4500.567", got.String())
+	}
 }

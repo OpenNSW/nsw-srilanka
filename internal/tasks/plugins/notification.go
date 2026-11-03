@@ -53,18 +53,18 @@ type notificationConfig struct {
 func (p *NotificationPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg notificationConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
-		return fmt.Errorf("notification: invalid config: %w", err)
+		return configError(fmt.Errorf("notification: invalid config: %w", err))
 	}
 
 	// Recipient comes from the workflow inputs only (input_mapping) — it's the
 	// per-consignment trader phone/email, never a static config value.
 	raw, exists := ctx.Inputs["to"]
 	if !exists {
-		return errors.New(`notification: recipient input "to" is missing`)
+		return inputError(errors.New(`notification: recipient input "to" is missing`))
 	}
 	to, ok := raw.(string)
 	if !ok || to == "" {
-		return fmt.Errorf("notification: recipient input %q must be a non-empty string, got %T", "to", raw)
+		return inputError(fmt.Errorf("notification: recipient input %q must be a non-empty string, got %T", "to", raw))
 	}
 
 	req := notification.Request{
@@ -76,7 +76,7 @@ func (p *NotificationPlugin) Execute(ctx pluginContext, configRaw json.RawMessag
 	}
 
 	if err := req.Validate(); err != nil {
-		return fmt.Errorf("notification: invalid request: %w", err)
+		return inputError(fmt.Errorf("notification: invalid request: %w", err))
 	}
 
 	slog.Info("taskv2 notification: dispatching",
@@ -85,7 +85,7 @@ func (p *NotificationPlugin) Execute(ctx pluginContext, configRaw json.RawMessag
 	status := "sent"
 	if err := p.sender.Send(ctx.Context, req); err != nil {
 		if !p.devMode {
-			return fmt.Errorf("notification: send: %w", err)
+			return classifyRemote(fmt.Errorf("notification: send: %w", err))
 		}
 		slog.Warn("taskv2 notification: send failed (dev mode — swallowing)",
 			"taskId", ctx.Record.TaskID, "channel", req.Channel, "error", err)

@@ -67,15 +67,15 @@ type paymentReferenceConfig struct {
 func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg paymentConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
-		return fmt.Errorf("payment: failed to parse generic_payment config: %w", err)
+		return configError(fmt.Errorf("payment: failed to parse generic_payment config: %w", err))
 	}
 
 	payee := payment.Payee{OrgID: strings.TrimSpace(cfg.OrgID), ServiceID: strings.TrimSpace(cfg.ServiceID)}
 	if payee.OrgID == "" || payee.ServiceID == "" {
-		return errors.New("payment: plugin_properties.org_id and plugin_properties.service_id are required")
+		return configError(errors.New("payment: plugin_properties.org_id and plugin_properties.service_id are required"))
 	}
 	if cfg.Currency == "" {
-		return fmt.Errorf("payment: plugin_properties.currency is required")
+		return configError(fmt.Errorf("payment: plugin_properties.currency is required"))
 	}
 
 	// 1. Determine the payment method: the one the payer selected, which must
@@ -103,7 +103,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 
 	referenceMetadata, err := paymentReferenceMetadata(ctx.Inputs, cfg.Reference)
 	if err != nil {
-		return fmt.Errorf("payment (%s): reference: %w", payee, err)
+		return configError(fmt.Errorf("payment (%s): reference: %w", payee, err))
 	}
 
 	// 3. Transition task state to PENDING_PAYMENT
@@ -122,7 +122,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	// token back to the task manager when the webhook arrives.
 	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
 	if err != nil {
-		return fmt.Errorf("payment: %w", err)
+		return inputError(fmt.Errorf("payment: %w", err))
 	}
 	resp, err := p.paymentService.CreateCheckoutSession(ctx.Context, payment.CreateCheckoutRequest{
 		GatewayID:     selectedMethod,
@@ -134,7 +134,11 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		CallbackToken: callbackToken,
 	})
 	if err != nil {
-		return fmt.Errorf("payment (%s): failed to create checkout session: %w", payee, err)
+		err = fmt.Errorf("payment (%s): failed to create checkout session: %w", payee, err)
+		if errors.Is(err, payment.ErrPayeeNotMapped) {
+			return configError(err)
+		}
+		return classifyRemote(err)
 	}
 
 	slog.Info("task payment: checkout session registered",
@@ -187,16 +191,16 @@ func selectPaymentMethod(selected string, methods []payment.GatewayInfo) (string
 		ids = append(ids, m.ID)
 	}
 	if len(ids) == 0 {
-		return "", errors.New("no payment method can pay this payee; map it under payment.methods[].payees in config.yaml")
+		return "", configError(errors.New("no payment method can pay this payee; map it under payment.methods[].payees in config.yaml"))
 	}
 	if selected != "" {
 		if !slices.Contains(ids, selected) {
-			return "", fmt.Errorf("payment method %q cannot pay this payee (available: %s)", selected, strings.Join(ids, ", "))
+			return "", inputError(fmt.Errorf("payment method %q cannot pay this payee (available: %s)", selected, strings.Join(ids, ", ")))
 		}
 		return selected, nil
 	}
 	if len(ids) > 1 {
-		return "", fmt.Errorf(`input "selected_method" is required: available methods are %s`, strings.Join(ids, ", "))
+		return "", inputError(fmt.Errorf(`input "selected_method" is required: available methods are %s`, strings.Join(ids, ", ")))
 	}
 	return ids[0], nil
 }
@@ -248,19 +252,43 @@ func paymentReferenceMetadata(inputs map[string]any, cfg *paymentReferenceConfig
 func resolvePaymentAmount(input any, configured decimal.Decimal) (decimal.Decimal, error) {
 	if input == nil {
 		if !configured.IsPositive() {
-			return decimal.Decimal{}, errors.New(`plugin_properties.amount is required and must be positive when no "amount" input is supplied`)
+			return decimal.Decimal{}, configError(errors.New(`plugin_properties.amount is required and must be positive when no "amount" input is supplied`))
+		}
+		if err := storableAmount(configured); err != nil {
+			return decimal.Decimal{}, configError(fmt.Errorf("plugin_properties.amount %w", err))
 		}
 		return configured, nil
 	}
 
 	amount, err := decimalFromAny(input)
 	if err != nil {
-		return decimal.Decimal{}, fmt.Errorf(`input "amount" is invalid: %w`, err)
+		return decimal.Decimal{}, inputError(fmt.Errorf(`input "amount" is invalid: %w`, err))
 	}
 	if !amount.IsPositive() {
-		return decimal.Decimal{}, fmt.Errorf(`input "amount" must be positive, got %s`, amount.String())
+		return decimal.Decimal{}, inputError(fmt.Errorf(`input "amount" must be positive, got %s`, amount.String()))
+	}
+	if err := storableAmount(amount); err != nil {
+		return decimal.Decimal{}, inputError(fmt.Errorf(`input "amount" %w`, err))
 	}
 	return amount, nil
+}
+
+// maxAmount is the largest amount payment_transactions.amount, a
+// NUMERIC(15, 2) column, can hold.
+var maxAmount = decimal.RequireFromString("9999999999999.99")
+
+// storableAmount reports an amount the payment's transaction can't store: one
+// past maxAmount, which the database refuses, or one with more than two
+// decimal places, which it would round, charging a different amount than the
+// step was given. Retrying can't fix either, so the step parks at once.
+func storableAmount(amount decimal.Decimal) error {
+	if amount.GreaterThan(maxAmount) {
+		return fmt.Errorf("must be at most %s, got %s", maxAmount.StringFixed(2), amount.String())
+	}
+	if !amount.Equal(amount.Round(2)) {
+		return fmt.Errorf("must have at most two decimal places, got %s", amount.String())
+	}
+	return nil
 }
 
 // decimalFromAny converts a workflow input value into a decimal. Workflow

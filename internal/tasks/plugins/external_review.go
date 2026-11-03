@@ -12,7 +12,6 @@ import (
 	"github.com/OpenNSW/core/remote"
 	coreplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/store"
-	"go.temporal.io/sdk/temporal"
 )
 
 // ExternalReviewPlugin is our custom replacement for the generic
@@ -63,10 +62,10 @@ const replyPayloadInput = "payload"
 func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg externalReviewConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
-		return fmt.Errorf("external_review: invalid config: %w", err)
+		return configError(fmt.Errorf("external_review: invalid config: %w", err))
 	}
 	if cfg.ServiceID == "" {
-		return fmt.Errorf("external_review: service_id is required")
+		return configError(fmt.Errorf("external_review: service_id is required"))
 	}
 	replyToken, err := replyTokenFrom(ctx.Inputs)
 	if err != nil {
@@ -74,7 +73,7 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	}
 	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
 	if err != nil {
-		return fmt.Errorf("external_review: %w", err)
+		return inputError(fmt.Errorf("external_review: %w", err))
 	}
 
 	var (
@@ -96,12 +95,11 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 
 	err = p.client.post(ctx.Context, cfg.ServiceID, path, body)
 	if replyToken != "" && isConflict(err) {
-		return temporal.NewNonRetryableApplicationError(
-			fmt.Sprintf("external_review: %s rejected the reply: its step is no longer waiting", cfg.ServiceID),
-			"StaleReplyToken", err)
+		return coreplugins.Permanent("StaleReplyToken",
+			fmt.Errorf("external_review: %s rejected the reply: its step is no longer waiting: %w", cfg.ServiceID, err))
 	}
 	if err != nil {
-		return err
+		return classifyRemote(err)
 	}
 	return ErrSuspended
 }
@@ -110,7 +108,7 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 // the configured path.
 func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalReviewConfig, callbackToken string) (string, map[string]any, error) {
 	if cfg.Path == "" {
-		return "", nil, fmt.Errorf("external_review: path is required")
+		return "", nil, configError(fmt.Errorf("external_review: path is required"))
 	}
 
 	// Convention: if input_mapping placed a value under the reserved key
@@ -143,9 +141,8 @@ func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig
 	if payload, ok := ctx.Inputs[replyPayloadInput]; ok {
 		if _, ok := payload.(map[string]any); !ok {
 			// The inputs are the same on every retry, so none can succeed.
-			return "", nil, temporal.NewNonRetryableApplicationError(
-				fmt.Sprintf("external_review: %s must be an object, got %T", replyPayloadInput, payload),
-				"InvalidReplyPayload", nil)
+			return "", nil, coreplugins.Permanent("InvalidReplyPayload",
+				fmt.Errorf("external_review: %s must be an object, got %T", replyPayloadInput, payload))
 		}
 		root, data = replyPayloadInput, payload
 	}
@@ -170,7 +167,7 @@ func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig
 // step's output_mapping reads them by the names this node gave them.
 func replyRequest(cfg externalReviewConfig, payload map[string]any, replyToken, callbackToken string) (string, map[string]any, error) {
 	if cfg.ReplyCommand == "" {
-		return "", nil, fmt.Errorf("external_review: reply_command is required to reply")
+		return "", nil, configError(fmt.Errorf("external_review: reply_command is required to reply"))
 	}
 	payload["callbackToken"] = callbackToken
 	return callbacksPath + "/" + url.PathEscape(replyToken),
@@ -194,7 +191,7 @@ func replyTokenFrom(inputs map[string]any) (string, error) {
 	}
 	token, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("external_review: %s must be a string, got %T", replyTokenInput, v)
+		return "", inputError(fmt.Errorf("external_review: %s must be a string, got %T", replyTokenInput, v))
 	}
 	return token, nil
 }

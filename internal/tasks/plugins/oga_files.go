@@ -46,7 +46,7 @@ func (f OGAFiles) tokenize(ctx context.Context, record store.TaskRecord, root st
 	}
 	paths, err := filefields.Parse(renderConfig)
 	if err != nil {
-		return nil, err
+		return nil, configError(err)
 	}
 	var inData []filefields.Path
 	for _, path := range paths {
@@ -61,7 +61,7 @@ func (f OGAFiles) tokenize(ctx context.Context, record store.TaskRecord, root st
 	err = filefields.Replace(sent, inData, func(value string) (string, error) {
 		clientID, ok := f.ClientFor(serviceID)
 		if !ok {
-			return "", fmt.Errorf("service %q maps to no client in the catalog, so it cannot be sent file tokens", serviceID)
+			return "", configError(fmt.Errorf("service %q maps to no client in the catalog, so it cannot be sent file tokens", serviceID))
 		}
 		return f.IssueForClient(clientID, value)
 	})

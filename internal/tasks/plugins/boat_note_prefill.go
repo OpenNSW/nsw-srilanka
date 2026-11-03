@@ -54,16 +54,16 @@ type boatNotePrefillConfig struct {
 func (p *BoatNotePrefillPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg boatNotePrefillConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
-		return fmt.Errorf("boat_note_prefill: invalid config: %w", err)
+		return configError(fmt.Errorf("boat_note_prefill: invalid config: %w", err))
 	}
 	if cfg.ServiceID == "" {
-		return fmt.Errorf("boat_note_prefill: service_id is required")
+		return configError(fmt.Errorf("boat_note_prefill: service_id is required"))
 	}
 	if ctx.Record == nil {
-		return fmt.Errorf("boat_note_prefill: task record is nil")
+		return inputError(fmt.Errorf("boat_note_prefill: task record is nil"))
 	}
 	if ctx.OutputNamespace == "" {
-		return fmt.Errorf("boat_note_prefill: an output namespace is required")
+		return configError(fmt.Errorf("boat_note_prefill: an output namespace is required"))
 	}
 
 	declarant, company := document.TraderCodes(asMap(ctx.Inputs[cusdec.RetrieveFormKey]))
