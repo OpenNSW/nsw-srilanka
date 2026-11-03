@@ -121,7 +121,8 @@ func Start(ctx context.Context, cfg Config) (*Provider, error) {
 		serviceName: serviceName,
 		enabled:     true,
 		shutdown: func(ctx context.Context) error {
-			return errors.Join(mp.Shutdown(ctx), tp.Shutdown(ctx), lp.Shutdown(ctx))
+			// Preserve failure logs before another signal can exhaust the deadline.
+			return errors.Join(lp.Shutdown(ctx), mp.Shutdown(ctx), tp.Shutdown(ctx))
 		},
 	}, nil
 }

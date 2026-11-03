@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -23,7 +24,9 @@ func main() {
 
 	app, err := bootstrap.Build(context.Background(), cfg)
 	if err != nil {
-		// Build reports the failure and flushes telemetry before returning.
+		// Build has flushed telemetry. Keep the exit cause visible even when
+		// server.logLevel filters out its structured error record.
+		_, _ = fmt.Fprintf(os.Stderr, "failed to bootstrap application: %v\n", err)
 		os.Exit(1)
 	}
 	defer func() {

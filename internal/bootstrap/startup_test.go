@@ -147,8 +147,10 @@ func TestBuildFailureWithUnavailableCollector(t *testing.T) {
 	if app != nil || err == nil || !strings.Contains(err.Error(), "unsupported database driver") {
 		t.Fatalf("Build = (%v, %v), want the original database failure", app, err)
 	}
-	if elapsed := time.Since(start); elapsed > 10*time.Second {
-		t.Errorf("Build took %v with an unavailable collector; shutdown should be bounded", elapsed)
+	// Build allows five seconds for telemetry shutdown, plus scheduling tolerance.
+	const maxElapsed = 5*time.Second + time.Second
+	if elapsed := time.Since(start); elapsed > maxElapsed {
+		t.Errorf("Build took %v with an unavailable collector; want at most %v", elapsed, maxElapsed)
 	}
 	select {
 	case <-attempted:
