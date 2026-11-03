@@ -4,14 +4,14 @@ This guide stands up a government agency on the TNSW platform itself: its own de
 of this backend in `mode: agency`, its own database and Temporal namespace, and an officer
 portal (the trader-app in agency mode). CDA runs this way.
 
-TNSW starts such an agency's review workflows on
-`POST /api/v1/internal/cases/{caseId}/flows`, and the agency's workflow sends the
-officer's decision back on TNSW's callback route. What agency mode itself does
+TNSW sends such an agency review tasks on `POST /api/v1/inject`, and the agency's workflow
+sends the officer's decision back on TNSW's callback route. What agency mode itself does
 is in [docs/agency.md](../agency.md).
 
 It takes five places, and the order matters:
 
-1. **The agency's artifacts** in `one-trade-artifacts`: a workflow per kind of review.
+1. **The agency's artifacts** in `one-trade-artifacts`: a task config and workflow per
+   kind of review.
 2. **ThunderID (the IdP)**: the agency's OU, its API, the officer role and group, the
    portal application and the two M2M clients, created in the console; then the
    officers.
@@ -31,14 +31,14 @@ lists them all.
 ```mermaid
 flowchart LR
     subgraph tnsw["TNSW deployment (mode: tnsw)"]
-        tflow["Trade flow<br/>EXTERNAL_REVIEW<br/>service_id: dea<br/>task_code: dea_permit_review"]
+        tflow["Trade flow<br/>EXTERNAL_REVIEW<br/>service_id: dea<br/>task_code: dea_permit_review_v1"]
         tcb["POST /api/v1/callbacks/{token}"]
         tstore[("TNSW storage")]
     end
 
     subgraph agency["DEA deployment (mode: agency)"]
-        start["POST /api/v1/internal/cases/{caseId}/flows"]
-        fc["flows.clients<br/>dea_permit_review, owner: officer"]
+        inject["POST /api/v1/inject"]
+        tc["task_config<br/>dea_permit_review_v1 → workflow"]
         wf["Agency workflow<br/>officer review → notify_decision"]
         db[("dea_db")]
         ns["Temporal namespace: dea"]
@@ -52,8 +52,8 @@ flowchart LR
         a2n["Agency-to-TNSW client → its role<br/>task:write, storage:*"]
     end
 
-    tflow -- "as the TNSW-to-agency client" --> start
-    start --> fc --> wf
+    tflow -- "as the TNSW-to-agency client" --> inject
+    inject --> tc --> wf
     wf --- db
     wf --- ns
     portal -- "officer token" --> agency
@@ -65,17 +65,14 @@ flowchart LR
   carry its identifier as `aud`, which the agency checks as `authn.audience`. Its scopes
   reuse the NSW API's names (`task:write`, `workflow:inject`, ...) because the backend
   checks those names in both modes.
-- **TNSW names the workflow to start.** The agency starts it only if `flows.clients` in
-  its configuration lists it for TNSW's client. Anything else is a `404 flow not found`
-  and records nothing.
-- **The agency's OU owns the case.** Starting a flow records the agency's OU
-  (`flows.clients.ouHandle`) as an owner of the case, in the role the flow's `owner`
-  names. Officers whose token carries that OU and role see the case.
-- **The task decides who may act.** Each task names the roles that may open it and run
-  its commands. The catalog maps those names to IdP roles, such as `officer` to the
-  officer role.
+- **The task code picks the workflow.** TNSW's artifact names a `task_code`; the agency
+  looks it up in its manifest as a `task_config`, which names the workflow to start. An
+  unknown code is a `400` and records nothing.
+- **The task decides who may act.** Every role in the agency's catalog owns every injected
+  workflow, so each task names the roles that may open it and run its commands. The
+  catalog maps those names to IdP roles, such as `officer` to the officer role.
 - **TNSW can reply on a parked step.** Where the artifacts are wired for it, a request for
-  more information goes back and forth by reply tokens instead of a new flow, which is
+  more information goes back and forth by reply tokens instead of a new inject, which is
   why the TNSW-to-agency client also needs `task:write`. See
   [docs/agency.md, Asking for more information](../agency.md#asking-for-more-information).
 - **The agency keeps no files.** Its storage proxies TNSW's as the agency-to-TNSW client,
@@ -131,9 +128,20 @@ This is design work rather than operations, so it only outlines what has to exis
 
 In the agency's folder (for example `dea-v2/`), for each kind of review:
 
-- The **workflow**, registered in the folder's manifest (for example
-  `dea_permit_review`): the officer's review steps, ending in a `notify_decision` step
-  that posts the decision back to TNSW:
+- A **`task_config`** (`schemaVersion` 2), registered in the folder's manifest with the
+  task code as its id, naming the workflow to start:
+
+  ```json
+  {
+    "schemaVersion": 2,
+    "taskCode": "dea_permit_review_v1",
+    "workflow": "dea_permit_review_v1",
+    "meta": { "title": "Export Permit Review", "description": "…", "category": "DEA" }
+  }
+  ```
+
+- The **workflow**: the officer's review steps, ending in a `notify_decision` step that
+  posts the decision back to TNSW:
 
   ```json
   {
@@ -147,19 +155,16 @@ In the agency's folder (for example `dea-v2/`), for each kind of review:
   }
   ```
 
-  The request's `input` is the workflow's `notification` variable, and `callbackToken` is
+  The injected payload is the workflow's `notification` variable, and `callbackToken` is
   set from the request. The decision's `command` must be one TNSW's step allows (Step 6).
-  List the workflow in the agency's `flows.clients` (Step 4b) once the agency's artifact
-  `ref` includes it.
 
 - On every officer step, the roles that may act: the step's `authz` extension (for example
   `"PENDING_USER": { "submit": ["officer"] }`) and the task template's `read.roles` (for
-  example `["officer"]`). A step without `authz` refuses every write, and a task template
-  without `read.roles` is readable by every role the agency's OU owns the case in. See
-  [docs/agency.md, Roles per task](../agency.md#roles-per-task).
+  example `["officer"]`). A task without them is open to every role in the agency's
+  catalog. See [docs/agency.md, Roles per task](../agency.md#roles-per-task).
 
-The TNSW-side step is covered in Step 6. Agree the workflow ids and commands for both
-sides before starting.
+The TNSW-side step is covered in Step 6. Agree the task codes and commands for both sides
+before starting.
 
 ## Step 2: Set up the agency in ThunderID
 
@@ -331,8 +336,7 @@ email or SMS.
 
 In the Helm values below, the names, hosts and URLs are the examples; use yours.
 
-The agency's catalog lives in `backend.config.catalog`, and the workflows TNSW may start
-in `backend.config.flows.clients`. The agency's outbound `tnsw`
+The agency's catalog lives in `backend.config.catalog`. The agency's outbound `tnsw`
 service, used by `notify_decision` and storage, lives in `backend.config.services`. Its
 OAuth2 secret is a `{{env:NAME}}` placeholder expanded while loading the YAML config. An
 agency takes no payments, so drop the example's `payment` section and the GovPay+ private
@@ -440,16 +444,6 @@ backend:
     notification:
       providers: { … }   # as for TNSW
     # refid: only if the agency's workflows generate reference numbers
-    # The workflows TNSW may start, one per kind of review (Step 1). Starting one records
-    # the agency's OU (ouHandle) as an owner of the case in the flow's owner role, a
-    # catalog role. The backend refuses to start if a listed workflow isn't in the
-    # manifest at artifactLoader's ref.
-    flows:
-      clients:
-        enabled: true
-        ouHandle: dea
-        workflows:
-          - { id: dea_permit_review, clients: [tnsw], owner: officer }
 
 migration:
   enabled: true
@@ -492,12 +486,6 @@ And this, or officers are signed in but their calls get `403`:
 | ------------------------- | --------------------------------- |
 | the `catalog.roles` value | the officer role's name (Step 2f) |
 
-And this, or officers see no cases and get `403` on every task:
-
-| This                     | must equal                   |
-| ------------------------ | ---------------------------- |
-| `flows.clients.ouHandle` | the OU's handle (Step 2a)    |
-
 ### 4c. Install
 
 ```sh
@@ -532,8 +520,8 @@ IdP's JWKS.
    Check `aud` is the API identifier and `scope` has `workflow:inject` and
    `task:write`.
 
-Starting a flow by hand would leave a case no one can finish, so the first real one
-comes from TNSW in Step 6.
+Injecting by hand would leave a case no one can finish, so the first real inject comes
+from TNSW in Step 6.
 
 ## Step 6: Connect TNSW to the agency
 
@@ -613,8 +601,7 @@ first, then `kubectl rollout restart deployment/<backend> -n tnsw`.
 ### 6c. The trade-flow step
 
 In `one-trade-artifacts`, under `tnsw/`, the step that hands work to the agency is an
-`EXTERNAL_REVIEW` task. It starts the agency's workflow on
-`POST /api/v1/internal/cases/{caseId}/flows`, with the consignment as the case:
+`EXTERNAL_REVIEW` task:
 
 ```json
 {
@@ -623,7 +610,8 @@ In `one-trade-artifacts`, under `tnsw/`, the step that hands work to the agency 
   "output_namespace": "reviewerform",
   "plugin_properties": {
     "service_id": "dea",
-    "task_code": "dea_permit_review"
+    "path": "/api/v1/inject",
+    "task_code": "dea_permit_review_v1"
   },
   "extensions": [
     {
@@ -637,8 +625,8 @@ In `one-trade-artifacts`, under `tnsw/`, the step that hands work to the agency 
 }
 ```
 
-- `service_id` is the `config.yaml` services `id`, and `task_code` the workflow's id from
-  Step 1, as the agency's `flows.clients` lists it.
+- `service_id` is the `config.yaml` services `id`, and `task_code` the agency's manifest id from
+  Step 1.
 - The `authz` extension lists, per command, the catalog names allowed to send it: the
   commands the agency's `notify_decision` sends. Without it, any client TNSW accepts could
   decide this step.
@@ -648,16 +636,16 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 
 ## Common changes
 
-| Task                                      | Where                                                                                                                         |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Add an officer                            | Step 2h only                                                                                                                  |
-| Add a role                                | A role and group in ThunderID (Step 2f), the agency's catalog, and the tasks' `authz` and `read.roles` (Step 1)               |
-| Add a kind of review                      | A workflow (Step 1), its `flows.clients` entry (Step 4b), the TNSW step (Step 6c), then move both deployments' artifact `ref` |
-| Add a portal URL                          | Add it to the portal application's redirect URIs in the console, to the agency's `cors`, and to ThunderID's CORS (Step 2g)    |
-| Change the officer role's name            | The IdP role and the agency's catalog together                                                                                |
-| Rotate the agency-to-TNSW client's secret | **Regenerate Client Secret** in the console (Step 2e), update the agency's Secret, then restart the agency backend            |
-| Rotate the TNSW-to-agency client's secret | **Regenerate Client Secret** in the console (Step 2e), update TNSW's Secret, then restart the TNSW backend                    |
-| Upgrade                                   | `helm upgrade <release> …` with the same chart version as TNSW. Migrations are shared, so keep the two on the same release    |
+| Task                                      | Where                                                                                                                      |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Add an officer                            | Step 2h only                                                                                                               |
+| Add a role                                | A role and group in ThunderID (Step 2f), the agency's catalog, and the tasks' `authz` and `read.roles` (Step 1)            |
+| Add a kind of review                      | A task config and workflow (Step 1), the TNSW step (Step 6c), then move both deployments' artifact `ref`                   |
+| Add a portal URL                          | Add it to the portal application's redirect URIs in the console, to the agency's `cors`, and to ThunderID's CORS (Step 2g) |
+| Change the officer role's name            | The IdP role and the agency's catalog together                                                                             |
+| Rotate the agency-to-TNSW client's secret | **Regenerate Client Secret** in the console (Step 2e), update the agency's Secret, then restart the agency backend         |
+| Rotate the TNSW-to-agency client's secret | **Regenerate Client Secret** in the console (Step 2e), update TNSW's Secret, then restart the TNSW backend                 |
+| Upgrade                                   | `helm upgrade <release> …` with the same chart version as TNSW. Migrations are shared, so keep the two on the same release |
 
 ## Troubleshooting
 
@@ -667,14 +655,12 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                               |
 | Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                      |
 | Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                               |
-| Backend exits at startup naming `flows.clients`         | A listed workflow isn't in the manifest at `artifactLoader`'s `ref`, an `owner` or client isn't in the catalog, or `ouHandle` is missing                                                                                          |
-| Officer sees no cases, or gets `403` on every task      | `flows.clients.ouHandle` isn't the OU handle in the officer's token, or the officer doesn't hold the flow's `owner` role                                                                                                          |
 | Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                         |
-| Flow start `401`                                        | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                              |
+| Inject `401`                                            | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                              |
 | Reply `403` `client … is not permitted`                 | The agency's catalog doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                    |
-| Flow start or reply `403` `insufficient scope`          | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `workflow:inject` and `task:write`                                                                                        |
-| Flow start `404` `flow not found`                       | `flows.clients` is off or doesn't list the workflow for TNSW's client, or the catalog doesn't map `tnsw` under `clients`. The agency's log says which                                                                             |
-| Flow start `409`                                        | The same `flowId` was used before for another case or workflow                                                                                                                                                                    |
+| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `workflow:inject` and `task:write`                                                                                        |
+| Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                      |
+| Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                              |
 | Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                           |
 | Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `task:write` or isn't the agency's client in TNSW's catalog (6b) |
 
