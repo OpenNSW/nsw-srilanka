@@ -126,10 +126,13 @@ function App() {
             path={APP_ROUTES.adminConsignment.path}
             element={restrictTo(APP_ROUTES.adminConsignment, <AdminConsignmentEngineStatusScreen />)}
           />
-          <Route
-            path={APP_ROUTES.adminConsignmentView.path}
-            element={restrictTo(APP_ROUTES.adminConsignmentView, <AdminConsignmentDetailScreen />)}
-          />
+          {/* No case equivalent: the debugger's "View consignment" link is TNSW-only. */}
+          {!isAgencyMode && (
+            <Route
+              path={APP_ROUTES.adminConsignmentView.path}
+              element={restrictTo(APP_ROUTES.adminConsignmentView, <AdminConsignmentDetailScreen />)}
+            />
+          )}
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

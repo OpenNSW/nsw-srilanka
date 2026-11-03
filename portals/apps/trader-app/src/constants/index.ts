@@ -13,9 +13,11 @@ export const API_CONFIG = {
   TIMEOUT: 30000, // 30 seconds
 } as const
 
-// Application Routes. An agency portal serves the same screens for its cases, under /cases.
+// Application Routes. An agency portal serves the same screens for its cases, under /cases —
+// including the admin debugger, under /admin/cases (ADMIN_CONSIGNMENT_VIEW has no case
+// equivalent: it is never routed to in agency mode, see App.tsx).
 const CONSIGNMENTS_PATH = isAgencyMode ? '/cases' : '/consignments'
-const ADMIN_CONSIGNMENTS_PATH = '/admin/consignments'
+const ADMIN_CONSIGNMENTS_PATH = isAgencyMode ? '/admin/cases' : '/admin/consignments'
 
 export const ROUTES = {
   HOME: '/',
