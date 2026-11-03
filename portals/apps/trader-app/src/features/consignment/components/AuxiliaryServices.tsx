@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Badge, Button } from '@radix-ui/themes'
-import { ChevronRightIcon, CubeIcon, ExclamationTriangleIcon, LayersIcon } from '@radix-ui/react-icons'
+import { ChevronDownIcon, ChevronRightIcon, CubeIcon, ExclamationTriangleIcon, LayersIcon } from '@radix-ui/react-icons'
 import { ConfirmDialog, Surface } from '@portals/ui'
 import { useTranslation } from 'react-i18next'
 import type { FlowOption } from '@/features/consignment/types.ts'
@@ -13,10 +13,12 @@ interface AuxiliaryServicesProps {
 
 // The flows the caller may start on the consignment (DetailDTO.startableFlows), offered in a
 // section of their own below the workflow steps: they are services beside the consignment's
-// own flow, such as an SLPA sundry payment. Each is a card with its own Start button. A started
-// flow cannot be withdrawn, so each start is confirmed first.
+// own flow, such as an SLPA sundry payment. Each is a card with its own Start button, and the
+// list folds away under its header. A started flow cannot be withdrawn, so each start is
+// confirmed first.
 export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
   const { t } = useTranslation()
+  const [open, setOpen] = useState(true)
   const [pending, setPending] = useState<FlowOption | null>(null)
   const [starting, setStarting] = useState(false)
   const [failed, setFailed] = useState<FlowOption | null>(null)
@@ -41,21 +43,38 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
   return (
     <Surface className="mt-6 overflow-hidden">
       <section aria-labelledby="auxiliary-services-title">
-        <header className="flex items-center gap-3 border-b border-border p-4 sm:p-6">
-          <span className="flex-shrink-0 rounded-xl border border-info/30 bg-info-subtle p-2.5 text-info-strong">
-            <LayersIcon aria-hidden width={20} height={20} />
-          </span>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h2 id="auxiliary-services-title" className="text-lg font-semibold tracking-tight text-foreground">
-              {t('consignments.detail.flows.title')}
-            </h2>
-            <Badge color="blue" variant="soft" radius="full">
-              {t('consignments.detail.flows.available', { count: flows.length })}
-            </Badge>
-          </div>
-        </header>
+        {/* The header opens and closes the list, an accordion that starts open. */}
+        <h2 id="auxiliary-services-title">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls="auxiliary-services-list"
+            onClick={() => setOpen((o) => !o)}
+            className="group flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-app-surface sm:p-6"
+          >
+            <span className="flex-shrink-0 rounded-xl border border-info/30 bg-info-subtle p-2.5 text-info-strong">
+              <LayersIcon aria-hidden width={20} height={20} />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+              <span className="text-lg font-semibold tracking-tight text-foreground">
+                {t('consignments.detail.flows.title')}
+              </span>
+              <Badge color="blue" variant="soft" radius="full">
+                {t('consignments.detail.flows.available', { count: flows.length })}
+              </Badge>
+            </span>
+            <ChevronDownIcon
+              aria-hidden
+              width={20}
+              height={20}
+              className={`flex-shrink-0 text-foreground-muted transition-transform duration-200 group-hover:text-foreground ${
+                open ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+        </h2>
 
-        <div className="p-4 sm:p-6">
+        <div id="auxiliary-services-list" hidden={!open} className="border-t border-border p-4 sm:p-6">
           {failed && (
             <p className="mb-3 flex items-center gap-1 text-sm font-medium text-error-strong">
               <ExclamationTriangleIcon aria-hidden />
