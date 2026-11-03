@@ -630,6 +630,8 @@ flows:
 # omit the section) leaves export off. Endpoint is the OTLP/HTTP base without
 # /v1/{metrics,traces,logs} — those paths are appended. serviceName is required
 # when endpoint is set so TNSW, CDA and EFC can be told apart.
+# Queries, fragments, and incomplete/nested /v1 signal paths fail startup.
+# Put authentication in headers, not in the endpoint URL.
 #
 # Local OpenObserve (`make otel`), native API on the host. OpenObserve requires
 # Basic auth for ingest; the header matches compose.yml's fixed local root user
