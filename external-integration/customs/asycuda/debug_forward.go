@@ -17,7 +17,7 @@ package asycuda
 //	        tokenURL: https://other-idp.example.com/oauth2/token
 //	        clientID: OTHER_CLIENT_ID
 //	        clientSecret: "{{env:SLCE_DEBUG_FORWARD_SECRET}}"
-//	        scopes: [nsw:slce-webhooks:write]
+//	        scopes: [slce-webhooks:write]
 //
 // The copy is sent in the background: it never changes the answer SLC Edge gets,
 // and a failed copy is only logged.

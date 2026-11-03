@@ -4,7 +4,7 @@
   "identity": {
     "clientID": "GOVPAY_TO_NSW",
     "roles": ["PaymentWebhookM2M"],
-    "scopes": ["nsw:payment-webhooks:validate", "nsw:payment-webhooks:process"]
+    "scopes": ["payment-webhooks:validate", "payment-webhooks:process"]
   },
   "identityFields": {
     "subinstId": "subinst_id",

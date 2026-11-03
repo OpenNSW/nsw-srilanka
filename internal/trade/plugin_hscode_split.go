@@ -9,6 +9,12 @@ import (
 
 type hscodeSplitConfig struct {
 	Mappings map[string][]string `json:"mappings"`
+	// Replaces names, for a workflow, the workflows it takes the place of: when a
+	// consignment starts it, those are not started, whichever HS codes asked for
+	// them. A flow that does another's work for some goods (the tea flow submits the
+	// CusDec that customs-workflow would) replaces it for the whole consignment, so a
+	// consignment mixing those goods with others still gets one of them.
+	Replaces map[string][]string `json:"replaces"`
 }
 
 // HscodeSplitBuilderFunc transforms a list of HS codes (stored in hs_codes by the
@@ -17,7 +23,8 @@ type hscodeSplitConfig struct {
 //
 // The mapping of each HS code to its corresponding set of workflow template IDs is strictly
 // driven by plugin_properties.mappings in the task template config artifact (transform.json).
-// If an unmapped HS code is requested, it fails with an error.
+// If an unmapped HS code is requested, it fails with an error. plugin_properties.replaces
+// then drops the workflows that a selected workflow takes the place of.
 //
 // Each item carries the submitting company, and the CHA chosen for the consignment, in its
 // payload when they are mapped in.
@@ -42,6 +49,9 @@ func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) e
 	if len(cfg.Mappings) == 0 {
 		return fmt.Errorf("hscode_split_builder: no mappings configured")
 	}
+	if err := validateReplaces(cfg.Replaces); err != nil {
+		return err
+	}
 
 	raw, ok := ctx.Inputs["hs_codes"]
 	if !ok {
@@ -64,6 +74,7 @@ func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) e
 	if err != nil {
 		return err
 	}
+	templates = applyReplaces(templates, cfg.Replaces)
 
 	splitItems := make([]map[string]any, 0, len(templates))
 	for _, templateID := range templates {
@@ -117,4 +128,46 @@ func resolveTemplates(items []any, mappings map[string][]string) ([]string, erro
 		}
 	}
 	return templates, nil
+}
+
+// validateReplaces rejects a replaces rule with no single reading: a workflow
+// replacing itself, or one that replaces others while another replaces it, which
+// leaves open whether a workflow that is dropped still drops the ones it replaces.
+func validateReplaces(replaces map[string][]string) error {
+	replaced := make(map[string]bool)
+	for wf, others := range replaces {
+		for _, other := range others {
+			if other == "" {
+				return fmt.Errorf("hscode_split_builder: %q replaces an empty workflow template ID", wf)
+			}
+			if other == wf {
+				return fmt.Errorf("hscode_split_builder: %q replaces itself", wf)
+			}
+			replaced[other] = true
+		}
+	}
+	for wf := range replaces {
+		if replaced[wf] {
+			return fmt.Errorf("hscode_split_builder: %q both replaces workflows and is replaced", wf)
+		}
+	}
+	return nil
+}
+
+// applyReplaces drops every workflow that a workflow in templates replaces,
+// keeping the order of the rest.
+func applyReplaces(templates []string, replaces map[string][]string) []string {
+	dropped := make(map[string]bool)
+	for _, wf := range templates {
+		for _, other := range replaces[wf] {
+			dropped[other] = true
+		}
+	}
+	kept := make([]string, 0, len(templates))
+	for _, wf := range templates {
+		if !dropped[wf] {
+			kept = append(kept, wf)
+		}
+	}
+	return kept
 }

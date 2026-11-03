@@ -421,7 +421,7 @@ func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Con
 
 // GetAgencySummary returns the allowlisted projection for an Agency caller.
 // It does not enforce trader/CHA ownership — the route is gated by
-// nsw:consignment:read and an unguessable consignment UUID.
+// consignment:read and an unguessable consignment UUID.
 func (s *Service) GetAgencySummary(ctx context.Context, consignmentID string) (*AgencyDTO, error) {
 	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
 	if err != nil {

@@ -3,6 +3,7 @@ package cusdec
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/OpenNSW/core/remote"
@@ -60,6 +61,34 @@ func TestRetrieveInterpreter_CapturesTheCurrentContainerCount(t *testing.T) {
 	assert.Equal(t, []map[string]any{}, out[RetrieveCDNRefsKey])
 }
 
+// The dispatch notes registered against the declaration and not cancelled are
+// counted, and the containers without one: Customs cancelling a note leaves its
+// container uncovered until another is raised.
+func TestRetrieveInterpreter_CountsTheContainersWithoutADispatchNote(t *testing.T) {
+	for name, tc := range map[string]struct {
+		cdnRefs           string
+		containers        int
+		wantCDNs, missing int
+	}{
+		"every container covered": {`[{"office":"CBEX1","year":"2026","serial":"C","number":1,"status":"Registered"},{"office":"CBEX1","year":"2026","serial":"C","number":2,"status":"Registered"}]`, 2, 2, 0},
+		"one cancelled":           {`[{"office":"CBEX1","year":"2026","serial":"C","number":1,"status":"Registered"},{"office":"CBEX1","year":"2026","serial":"C","number":2,"status":"Cancelled"}]`, 2, 1, 1},
+		"none raised":             {`[]`, 3, 0, 3},
+		"more notes than now":     {`[{"office":"CBEX1","year":"2026","serial":"C","number":1},{"office":"CBEX1","year":"2026","serial":"C","number":2}]`, 1, 2, 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal([]byte(`{"payload": {"cusdec": {"generalSegment": {"numberOfContainers": `+
+				strconv.Itoa(tc.containers)+`}}, "cdnRefs": `+tc.cdnRefs+`}}`), &resp))
+
+			accepted, out := NewRetrieveInterpreter().Interpret(nil, resp)
+
+			assert.True(t, accepted)
+			assert.Equal(t, tc.wantCDNs, out[RetrieveCDNCountKey])
+			assert.Equal(t, tc.missing, out[RetrieveMissingCDNsKey])
+		})
+	}
+}
+
 // The amendment notification spells the declaration cusDec; that is read too.
 func TestRetrieveInterpreter_ReadsTheCusDecSpelling(t *testing.T) {
 	var resp map[string]any
@@ -106,6 +135,7 @@ func TestRetrieveInterpreter_WithoutAUsableCountCapturesTheDeclaration(t *testin
 
 			assert.True(t, accepted)
 			assert.NotContains(t, out, RetrieveCountKey)
+			assert.NotContains(t, out, RetrieveMissingCDNsKey, "without a count, nothing says how many are missing")
 			assert.NotContains(t, out, "error")
 			assert.NotNil(t, out[RetrieveDeclarationKey])
 		})

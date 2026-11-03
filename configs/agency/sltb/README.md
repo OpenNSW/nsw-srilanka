@@ -14,7 +14,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 SLTB keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `SLTB_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`). SLTB generates no files itself, so its client doesn't hold `nsw:storage:internalwrite`, the scope of TNSW's internal upload route. `storage.proxy.allowedUploadTypes` is what its officers may upload.
+TNSW as `SLTB_TO_NSW`. Officers' uploads go to TNSW's upload route (`storage:write`). SLTB generates no files itself, so its client doesn't hold `storage:internalwrite`, the scope of TNSW's internal upload route. `storage.proxy.allowedUploadTypes` is what its officers may upload.
 
 One thing nsw-agency did for SLTB isn't here yet: a second round on the same
 TNSW step. A review sent back to the trader (`needs_more_info` on the application
@@ -72,13 +72,13 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates SLTB for this deployment, on the `SLTB API` resource server
 (`https://api.sltb.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                             | Client                | Grant                                                                                                                              |
-| ---------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`               |
-| TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on SLTB's parked steps, which its catalog maps `tnsw` to |
-| SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                       |
+| Caller                             | Client                | Grant                                                                                                                      |
+| ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
+| TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `workflow:inject`, and `task:write` to reply on SLTB's parked steps, which its catalog maps `tnsw` to |
+| SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `task:write` and `storage:read`/`write` on TNSW                                                       |
 
-TNSW's `config.yaml` services entry `sltb` requests `nsw:workflow:inject` and `nsw:task:write` with
+TNSW's `config.yaml` services entry `sltb` requests `workflow:inject` and `task:write` with
 `resource=https://api.sltb.nsw-agency.local` (see `configs/config*.example.yaml`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
