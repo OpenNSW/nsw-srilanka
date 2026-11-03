@@ -2,9 +2,10 @@
 //
 // core's TaskStore lists tasks only through GetTasks, which returns a task only to a
 // caller holding one of its read.roles. The listings here are not a caller's: the
-// consignment detail and the agency case view authorize the caller on the case
-// first, and plugins and admin views read the case as the system. So they read the
-// task table by case directly, as they did through core's former GetAllTasks.
+// consignment detail authorizes its caller on the consignment first, and plugins and
+// admin views read the case as the system. So they read the task table by case
+// directly, as they did through core's former GetAllTasks. The agency case view,
+// whose officers hold their roles in every case, lists through GetTasks.
 package casetasks
 
 import (
