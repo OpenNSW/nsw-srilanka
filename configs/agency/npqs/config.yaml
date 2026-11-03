@@ -85,8 +85,9 @@ authn:
   audience: https://api.npqs.nsw-agency.local
 
 # The catalog: the logical names the agency's workflow rules use, mapped to
-# this deployment's IdP token roles and OAuth2 client ids. Each role here
-# owns an injected workflow; tnsw names the client TNSW calls this agency as.
+# this deployment's IdP token roles and OAuth2 client ids. A role owns an
+# injected case only where case_parties records it for the agency's own
+# company; tnsw names the client TNSW calls this agency as.
 catalog:
   roles:
     officer: NPQS Officer
