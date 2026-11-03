@@ -36,7 +36,7 @@ updatedAt:
 resource_type: user
 id: 01a13912-d991-7ad2-8c81-cc6907d3865e
 type: Admin_User
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 attributes:
   email: "nswadmin@default.dev"
   family_name: "Admin"
@@ -191,7 +191,7 @@ resource_type: group
 id: 01a13912-d377-73d1-a3e4-a5877421ca85
 name: NSW Admins
 description: NSW admin members group
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 members:
   - id: 01a13912-d991-7ad2-8c81-cc6907d3865e
     type: user

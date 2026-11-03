@@ -5,6 +5,9 @@ const ta: Locale = {
   translation: {
     auth: {
       userFallback: 'பயனர்',
+      userMenu: {
+        roles: 'பங்குகள்',
+      },
       login: {
         tagline: 'உங்கள் அனுப்புப்பொருள் விவரங்களைத் தொடர்ந்து பார்க்க உள்நுழையவும்.',
         button: 'உள்நுழைக',

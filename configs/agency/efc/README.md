@@ -70,7 +70,10 @@ creates EFC for this deployment, on the `EFC API` resource server
 | --------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Officer `efc_officer`             | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
 | TNSW injecting and replying       | `NSW_TO_EFC`         | `NswToEfcM2M` role: `workflow:inject`, and `task:write` to reply on EFC's parked steps, which its catalog maps `tnsw` to |
-| EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `task:write` and `storage:read`/`write` on TNSW                                                      |
+| EFC decision callback and storage | `EFC_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` and `storage:read`/`write` on TNSW                                                   |
+
+`EFC_TO_NSW` and the roles that grant it the NSW API are in TNSW's OU, in
+[`idp/bootstrap/15-tnsw-agency-clients.yaml`](../../../idp/bootstrap/15-tnsw-agency-clients.yaml).
 
 TNSW's `config.yaml` services entry `efc` requests `workflow:inject` and `task:write` with
 `resource=https://api.efc.nsw-agency.local` (see `configs/config*.example.yaml`).

@@ -3,6 +3,9 @@ const en = {
   translation: {
     auth: {
       userFallback: 'User',
+      userMenu: {
+        roles: 'Roles',
+      },
       login: {
         tagline: 'Sign in to continue to your consignments.',
         button: 'Sign In',

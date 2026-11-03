@@ -13,8 +13,8 @@ It takes five places, and the order matters:
 
 1. **The agency's artifacts** in `one-trade-artifacts`: a workflow per kind of review.
 2. **ThunderID (the IdP)**: the agency's OU, its API, the officer role and group, the
-   portal application and the two M2M clients, created in the console; then the
-   officers.
+   portal application and the two M2M clients, created in the console (the one that
+   calls TNSW in TNSW's OU, with TNSW's shared role); then the officers.
 3. **Infrastructure**: a database and a Temporal namespace of its own.
 4. **The agency deployment**: a second release of the `lk-tnsw` chart.
 5. **The TNSW deployment**: where to reach the agency, and the trade-flow step that hands
@@ -49,7 +49,7 @@ flowchart LR
         rs["Agency API (resource server)"]
         officer["Officers' group → officer role"]
         n2a["TNSW-to-agency client → its role<br/>workflow:inject, task:write"]
-        a2n["Agency-to-TNSW client → its role<br/>task:write, storage:*"]
+        a2n["Agency-to-TNSW client → AGENCY_TO_TNSW<br/>task:write, storage:*"]
     end
 
     tflow -- "as the TNSW-to-agency client" --> start
@@ -87,7 +87,8 @@ flowchart LR
 You need:
 
 - A **ThunderID admin** with console access at `https://<idp-host>/console`. The IdP must
-  already have the platform resources: the NSW API and a user type for government officers
+  already have the platform resources: the NSW API, the `AGENCY_TO_TNSW` roles and a user
+  type for government officers
   (see [idp/README.md, UAT / production](../../idp/README.md#uat--production)).
 - **Cluster access** to create a namespace, Secrets and ConfigMaps, and to install a Helm
   release.
@@ -112,7 +113,7 @@ All examples. Decide yours before starting; the notes say where a value is repea
 | Officers' group       | `DEA Officers`                            |                                                                                         |
 | Officer role          | `DEA Officer`                             | Repeated in the agency's catalog and portal config; must match exactly                  |
 | Portal application    | `DEAPortalApp`                            |                                                                                         |
-| Agency-to-TNSW client | `DEA_TO_NSW_M2M`, with role `DeaToNswM2M` | The agency calling TNSW                                                                 |
+| Agency-to-TNSW client | `DEA_TO_NSW_M2M`                          | The agency calling TNSW. In TNSW's OU (`tnsw`), with TNSW's role `AGENCY_TO_TNSW`       |
 | TNSW-to-agency client | `NSW_TO_DEA_M2M`, with role `NswToDeaM2M` | TNSW calling the agency                                                                 |
 | Database              | `dea_db`                                  |                                                                                         |
 | Temporal namespace    | `dea`                                     |                                                                                         |
@@ -162,7 +163,8 @@ the ones before it. ThunderID generates every ID, client ID and client secret. T
 shown are the examples from [Names used in this guide](#names-used-in-this-guide).
 
 Put every resource in the agency's own OU: where a wizard has an **Organization Unit**
-step, choose it.
+step, choose it. The exception is the agency-to-TNSW client (2e), which goes in TNSW's OU
+(`tnsw` in the local setup): TNSW owns the NSW API it calls and the role that grants it.
 
 ### 2a. The organization unit
 
@@ -233,19 +235,20 @@ local-dev equivalent, and shows every setting of the three applications.
 
 ### 2e. The two M2M applications
 
-Create two more applications in the agency's OU, each a **Backend Service** (client
-credentials, client secret sent as HTTP Basic):
+Create two more applications, each a **Backend Service** (client credentials, client
+secret sent as HTTP Basic). The TNSW-to-agency client goes in the agency's OU; the
+agency-to-TNSW client goes in TNSW's OU:
 
-| Application           | Example name     | Custom scopes                                                     |
-| --------------------- | ---------------- | ----------------------------------------------------------------- |
-| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `task:write`, `consignment:read`, `storage:read`, `storage:write` |
-| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `workflow:inject`, `task:write`                                   |
+| Application           | Example name     | In OU    | Custom scopes                                                     |
+| --------------------- | ---------------- | -------- | ----------------------------------------------------------------- |
+| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | TNSW's   | `task:write`, `consignment:read`, `storage:read`, `storage:write` |
+| TNSW-to-agency client | `NSW_TO_DEA_M2M` | agency's | `workflow:inject`, `task:write`                                   |
 
 If the agency's workflows generate documents (an `HTML_DOCUMENT_GENERATOR` step), the
 agency-to-TNSW client also needs `storage:internalwrite`, the scope of TNSW's internal
-upload route, where the agency stores them. Add it here, to the client's role (Step 2f) and
-to its `scopes` (Step 4b), and grant the documents' types in TNSW (Step 6b). Leave it out
-otherwise.
+upload route, where the agency stores them. Add it here, assign the client to
+`AGENCY_TO_TNSW_PRIVILEGED` (Step 2f) and add it to its `scopes` (Step 4b), and grant the
+documents' types in TNSW (Step 6b). Leave it out otherwise.
 
 For each, note the client ID from **Credentials**, and copy the client secret straight
 into its cluster Secret: the agency-to-TNSW client's into the agency's Secret (Step 4a),
@@ -263,7 +266,12 @@ Assignment**):
 | ---------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | Officer role                 | `DEA Officer` | On the agency API: `consignment:read`, `profile:read`, `storage:read`, `storage:write`, `task:read`, `task:write` | The officers' group       |
 | TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `workflow:inject`, `task:write`                                                                | The TNSW-to-agency client |
-| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `consignment:read`, `storage:read`, `storage:write`, `task:write`                                 | The agency-to-TNSW client |
+
+The agency-to-TNSW client needs no role of its own: every agency's client shares TNSW's.
+Open `AGENCY_TO_TNSW` (in TNSW's OU, granting `consignment:read`, `storage:read`,
+`storage:write` and `task:write` on the NSW API) and, on its **Assignments** tab, add the
+client. A client that stores documents through the internal upload route (2e) is also
+added to `AGENCY_TO_TNSW_PRIVILEGED`, which grants `storage:internalwrite`.
 
 The officer role's name is repeated in the agency's configuration in Step 4, and must
 match there exactly. If the agency's tasks name more roles than `officer`, create one
@@ -462,6 +470,11 @@ frontend:
     IDP_CLIENT_ID: "<portal client ID>"
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.dea.nsw-agency.local"
     IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read"
+    IDP_ROLE_CLAIM_NAME: "roles"
+    IDP_ROLE_LABELS:
+      "DEA Officer":
+        title: "DEA Officer"
+        description: "Reviews and completes the tasks DEA receives from the National Single Window."
     SHOW_AUTOFILL_BUTTON: "false"
   branding:
     systemName: "DEA"
@@ -477,6 +490,11 @@ These values must agree, or officers and TNSW get `401`:
 | ------------------------------------------------------- | ---------------------------- |
 | `backend.config.authn.audience`                         | the API identifier (Step 2b) |
 | `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier          |
+
+`IDP_ROLE_LABELS` is optional. The portal's user menu lists the roles in the officer's token
+(the `roles` claim, or the claim `IDP_ROLE_CLAIM_NAME` names), and this sets the title and
+description it shows for each. Key it by the role name exactly as the token carries it. A role
+with no entry shows its own name.
 
 And this, or officers are signed in but their calls get `403`:
 

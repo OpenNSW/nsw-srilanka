@@ -88,11 +88,14 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates NPQS for this deployment, on the `NPQS API` resource server
 (`https://api.npqs.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                             | Client                | Grant                                                                                                                      |
-| ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
-| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `workflow:inject`, and `task:write` to reply on NPQS's parked steps, which its catalog maps `tnsw` to |
-| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `task:write` and `storage:read`/`write`/`internalwrite` on TNSW                                       |
+| Caller                             | Client                | Grant                                                                                                                            |
+| ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                             |
+| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `workflow:inject`, and `task:write` to reply on NPQS's parked steps, which its catalog maps `tnsw` to       |
+| NPQS decision callback and storage | `NPQS_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` and `storage:read`/`write` on TNSW, and `AGENCY_TO_TNSW_PRIVILEGED`: `storage:internalwrite` |
+
+`NPQS_TO_NSW` and the roles that grant it the NSW API are in TNSW's OU, in
+[`idp/bootstrap/15-tnsw-agency-clients.yaml`](../../../idp/bootstrap/15-tnsw-agency-clients.yaml).
 
 TNSW's `config.yaml` services entry `npqs` requests `workflow:inject` and `task:write` with
 `resource=https://api.npqs.nsw-agency.local` (see `configs/config*.example.yaml`).

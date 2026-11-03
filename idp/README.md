@@ -124,20 +124,39 @@ mounts our [`bootstrap/`](bootstrap/) directory beside them, as
 
 Ours, all **local-dev only** (see _UAT / production_ below):
 
-| File                                                             | Contents                                                                                                                                                         |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`03-nsw-resources.yaml`](bootstrap/03-nsw-resources.yaml)       | The `admin-cli` machine client (`ADMIN_CLI`, secret `ADMIN_CLI_SECRET`) and the `NSW Admin CLI` role granting it `system`, for a management token                |
-| [`10-nsw-platform.yaml`](bootstrap/10-nsw-platform.yaml)         | User types, the Government Organization and Private Sector OUs, NSW API, `Trader`/`CHA`/`NSW Admin` roles and groups, `TraderApp`, SLCE and GovPay clients, CORS |
-| `20-agency-<handle>.yaml` (`cda`, `efc`, `fcau`, `npqs`, `sltb`) | One agency each: its OU and API resource server, `<A> Officer` role and `<A> Officers` group, portal app, `<A>_TO_NSW` and `NSW_TO_<A>` clients and roles        |
-| [`90-sample-data.yaml`](bootstrap/90-sample-data.yaml)           | Sample company OUs (ADAM, EDWARD), the sample users, and their group memberships                                                                                 |
+| File                                                                   | Contents                                                                                                                                                               |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`10-nsw-platform.yaml`](bootstrap/10-nsw-platform.yaml)               | User types, the TNSW, Government Organization and Private Sector OUs, NSW API, `Trader`/`CHA`/`NSW Admin` roles and groups, `TraderApp`, SLCE and GovPay clients, CORS |
+| [`15-tnsw-agency-clients.yaml`](bootstrap/15-tnsw-agency-clients.yaml) | The five `<A>_TO_NSW` clients the agencies call TNSW with, and the `AGENCY_TO_TNSW` and `AGENCY_TO_TNSW_PRIVILEGED` roles that grant them the NSW API                  |
+| `20-agency-<handle>.yaml` (`cda`, `efc`, `fcau`, `npqs`, `sltb`)       | One agency each: its OU and API resource server, `<A> Officer` role and `<A> Officers` group, portal app, `NSW_TO_<A>` client and role                                 |
+| [`90-sample-data.yaml`](bootstrap/90-sample-data.yaml)                 | Sample company OUs (ADAM, EDWARD), the sample users, and their group memberships                                                                                       |
 
-Each file names what it needs: the platform file references nothing of ours, each agency
-file needs only the platform, and the sample data needs everything. So a deployment can
-mount the platform with any subset of agencies.
+Each file names what it needs: the platform file references nothing of ours, the agency
+clients file and each agency file need only the platform, and the sample data needs
+everything. So a deployment can mount the platform with any subset of agencies, though
+the clients file always declares all five `<A>_TO_NSW` clients.
 
-`admin-cli` grants management scope from a file-supplied secret, so never mount
-`03-nsw-resources.yaml` into a shared or UAT/prod deployment. Its role is a _new_ role
-rather than a re-declaration of the built-in `Administrator` — see the rules below.
+### Organization units
+
+```text
+default                 the image's, for administering ThunderID; nothing of ours
+tnsw                    the NSW API, its roles, inbound clients and admins
+government-organization
+└─ cda, efc, …          one OU per agency: its API, officers, portal, NSW_TO_<A> client
+private-sector          the Traders and CHA groups
+└─ adam-pvt-ltd, …      one OU per company (sample data)
+```
+
+`tnsw` owns the NSW API and what protects or calls it: its roles, its inbound clients
+(the agencies' `<A>_TO_NSW` and the SLCE and GovPay ones), the `NSW Admins` group, and
+the `Admin_User` type and `nswadmin` user. Each agency OU owns its own API, officers and
+portal, and the `NSW_TO_<A>` client TNSW calls it with. `private-sector` holds the
+traders' side: the `Traders` and `CHA` groups and, under it, one OU per company, whose
+handle is the `ouHandle` of its users' tokens.
+
+A role sits with the API it grants, not with the people who hold it, so `Trader` and
+`CHA` are in `tnsw` while their groups are in `private-sector`. ThunderID doesn't
+require a role, its assignees and the resource server it grants on to share an OU.
 
 ### Writing bootstrap documents
 
@@ -159,8 +178,8 @@ tested against this image:
 - **Re-declaring a resource** (same `id`, in a later file) is how sample data adds group
   members without the platform file depending on it. Group `members` and role
   `assignments` **merge**; but a role re-declared **without** `permissions` loses them.
-  Never re-declare a role without its full permissions — which is why `admin-cli` gets
-  its own `NSW Admin CLI` role instead of an assignment on `Administrator`.
+  Never re-declare a role without its full permissions: re-declaring the image's
+  `Administrator` role just to assign something to it would drop its `system` permission.
 - **Users.** Set a password under `credentials`, as the image does for `admin`. In
   `attributes` it works once, then fails the next run with `USR-1028 Credential update
 not allowed`, because `thunderid-setup` reruns the import on every `docker compose up`.
@@ -179,7 +198,9 @@ docker compose up
 ```
 
 An upsert updates what the documents still declare, so a plain `docker compose up`
-applies additions and edits; it never removes what a document no longer declares.
+applies additions and edits; it never removes what a document no longer declares. It
+also leaves an existing application in the OU it was created in: the import succeeds
+without moving it. So recreate the volumes after changing any resource's `ouId`.
 
 A console export (`POST /export`) is in this same format and a useful starting point,
 but it also carries the image's own resources (IDs `01900000-…`), random IDs, and users
@@ -187,27 +208,11 @@ without passwords; strip and fix those before committing.
 
 To add an agency run by this backend in agency mode, copy one of the
 `20-agency-*.yaml` files, change the handle, names and port, and give every document a
-new `id` (and update the references to it). Then add its port to the `cors` server
-config, and its clients to the backends' catalog and `config.yaml` services.
-
-### Management token (local dev)
-
-The management API, the console's API, and `POST /import` need a `system`-scoped
-token. Locally, mint one from `admin-cli`:
-
-```bash
-TOKEN=$(curl -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials" -d "scope=system" \
-  -d "resource=https://localhost:8090/mcp" \
-  http://localhost:8090/oauth2/token | jq -r .access_token)
-```
-
-The `resource` parameter is **required** here: `system` is a permission scope, so the
-token must bind to a resource server, and this is the identifier of the System
-resource server the image bootstraps. Omit it and the request fails with
-`invalid_target`, since this deployment configures no `defaultResourceServer` (see
-_API authorization_ below).
+new `id` (and update the references to it). Then add the agency's `<A>_TO_NSW` client to
+`15-tnsw-agency-clients.yaml`, copying an existing one into the TNSW OU, and assign it to
+`AGENCY_TO_TNSW`, and to `AGENCY_TO_TNSW_PRIVILEGED` if it stores files through the
+internal upload route. Finally add its port to the `cors` server config, and its
+clients to the backends' catalog and `config.yaml` services.
 
 ### UAT / production
 
@@ -235,8 +240,9 @@ walks through creating its resources in the console.
 
 M2M (client-credentials) apps (auth method: `client_secret_basic`):
 
-- **OGA → NSW** (`aud=NSW_API`, each with its own `<Agency>ToNswM2M` role, e.g.
-  `CdaToNswM2M`): `NPQS_TO_NSW`, `FCAU_TO_NSW`, `CDA_TO_NSW`, `EFC_TO_NSW`, `SLTB_TO_NSW`.
+- **OGA → NSW** (`aud=NSW_API`, in the TNSW OU, all with the `AGENCY_TO_TNSW` role):
+  `NPQS_TO_NSW`, `FCAU_TO_NSW`, `CDA_TO_NSW`, `EFC_TO_NSW`, `SLTB_TO_NSW`. `NPQS_TO_NSW`
+  also has `AGENCY_TO_TNSW_PRIVILEGED`, for `storage:internalwrite`.
 - **NSW → CDA** (`aud=https://api.cda.nsw-agency.local`, `NswToCdaM2M` role): `NSW_TO_CDA`.
 - **NSW → EFC** (`aud=https://api.efc.nsw-agency.local`, `NswToEfcM2M` role): `NSW_TO_EFC`.
 - **NSW → NPQS** (`aud=https://api.npqs.nsw-agency.local`, `NswToNpqsM2M` role): `NSW_TO_NPQS`.
@@ -300,7 +306,8 @@ scopes via a role:
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes. Both get `consignment:flow:write` (start a flow on a consignment); only `Trader` gets `consignment:write` (create one) |
 | NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                |
-| `*_TO_NSW` M2M clients | **`<Agency>ToNswM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                                                                                     |
+| `*_TO_NSW` M2M clients | **`AGENCY_TO_TNSW` role assigned to the application** (`type: app`) → `consignment:read`, `task:write`, `storage:read`, `storage:write` on `NSW_API`                         |
+| `NPQS_TO_NSW`          | Also **`AGENCY_TO_TNSW_PRIVILEGED`**, assigned to the application → `storage:internalwrite` on `NSW_API`, for the internal upload route                                      |
 | CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                                                                                               |
 | `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `workflow:inject`, `task:write` on the CDA API                                                                          |
 | EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                                                                                               |
@@ -352,13 +359,12 @@ gets a hard `invalid_target` at the token endpoint, naming the problem.
 
 So every permission-bearing caller sends `resource`:
 
-| Caller                       | Sends `resource` | Where it is configured                            | Token `aud`                         |
-| ---------------------------- | ---------------- | ------------------------------------------------- | ----------------------------------- |
-| TraderApp users              | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`) | `https://api.nsw-srilanka.local`    |
-| `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency          | `https://api.nsw-srilanka.local`    |
-| `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                           | `https://api.nsw-srilanka.local`    |
-| `admin-cli` management token | System RS        | _Management token_ above                          | `https://localhost:8090/mcp`        |
-| `customs-asycuda`            | n/a              | requests no scopes, so stays unbound              | app `defaultAudience` / `client_id` |
+| Caller                | Sends `resource` | Where it is configured                            | Token `aud`                         |
+| --------------------- | ---------------- | ------------------------------------------------- | ----------------------------------- |
+| TraderApp users       | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`) | `https://api.nsw-srilanka.local`    |
+| `*_TO_NSW` M2M        | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency          | `https://api.nsw-srilanka.local`    |
+| `SLCE_TO_NSW` webhook | NSW_API          | ⚠️ external — see below                           | `https://api.nsw-srilanka.local`    |
+| `customs-asycuda`     | n/a              | requests no scopes, so stays unbound              | app `defaultAudience` / `client_id` |
 
 **SPAs** send it on `/authorize` via oidc-client-ts `extraQueryParams`. That covers the
 whole session: the IdP records the value on the authorization code and reuses the bound

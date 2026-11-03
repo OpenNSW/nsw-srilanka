@@ -1,0 +1,326 @@
+# TNSW's agency clients: the M2M client each agency calls TNSW with (CDA_TO_NSW,
+# EFC_TO_NSW, FCAU_TO_NSW, NPQS_TO_NSW and SLTB_TO_NSW), and the roles that grant them
+# the NSW API. All five hold AGENCY_TO_TNSW; NPQS_TO_NSW also holds
+# AGENCY_TO_TNSW_PRIVILEGED for storage:internalwrite, the scope of the internal
+# upload route. Needs 10-nsw-platform.yaml.
+#
+# LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
+# image's own documents as one upsert import (see idp/README.md). Client IDs and the
+# localhost URIs are the local-dev values; client secrets come from M2M_CLIENT_SECRET.
+# Placeholders resolve from idp/.env before parsing, comments included, so never
+# write placeholder syntax in a comment.
+
+# File: AGENCY_TO_TNSW.yaml
+resource_type: role
+id: 01a1a224-2dc3-79d6-a97f-801e129acf94
+name: AGENCY_TO_TNSW
+description: Role for the agencies' machine-to-machine clients calling the NSW API
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - consignment:read
+      - storage:read
+      - storage:write
+      - task:write
+assignments:
+  - id: 01a13912-e039-7385-947d-9c38ce44e56d
+    type: app
+  - id: 01a13912-e193-75f7-b42d-bb146f782490
+    type: app
+  - id: 01a13912-e345-7d54-8bc2-d72a77458fda
+    type: app
+  - id: 01a13912-e499-78f1-9b2d-44e5c852cc46
+    type: app
+  - id: 01a13912-e66f-7d35-b722-1dda19c2f501
+    type: app
+---
+# File: AGENCY_TO_TNSW_PRIVILEGED.yaml
+resource_type: role
+id: 01a1a224-2dcf-7bbe-b5a7-a9bb3ac0c17f
+name: AGENCY_TO_TNSW_PRIVILEGED
+description: Role for agency clients that store files through the NSW API's internal upload route
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - storage:internalwrite
+assignments:
+  - id: 01a13912-e499-78f1-9b2d-44e5c852cc46
+    type: app
+---
+# File: CDA_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e039-7385-947d-9c38ce44e56d
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
+name: CDA_TO_NSW_M2M
+description: Machine-to-machine integration for CDA to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: CDA_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - task:write
+        - consignment:read
+        - storage:read
+        - storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
+        phone:
+---
+# File: EFC_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e193-75f7-b42d-bb146f782490
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
+name: EFC_TO_NSW_M2M
+description: Machine-to-machine integration for EFC to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: EFC_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - task:write
+        - consignment:read
+        - storage:read
+        - storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
+---
+# File: FCAU_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e345-7d54-8bc2-d72a77458fda
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
+name: FCAU_TO_NSW_M2M
+description: Machine-to-machine integration for FCAU to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: FCAU_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - task:write
+        - consignment:read
+        - storage:read
+        - storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
+---
+# File: NPQS_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e499-78f1-9b2d-44e5c852cc46
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
+name: NPQS_TO_NSW_M2M
+description: Machine-to-machine integration for NPQS to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: NPQS_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - task:write
+        - consignment:read
+        - storage:read
+        - storage:write
+        - storage:internalwrite
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
+        phone:
+---
+# File: SLTB_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e66f-7d35-b722-1dda19c2f501
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
+name: SLTB_TO_NSW_M2M
+description: Machine-to-machine integration for SLTB to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: SLTB_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - task:write
+        - consignment:read
+        - storage:read
+        - storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        email:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:

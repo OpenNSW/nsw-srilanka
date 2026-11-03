@@ -151,6 +151,8 @@ export type TaskClaim = {
 export type ZoneView = {
   task_id: string
   task_type: string
+  // title names the task: its render config's title, else its task template's id.
+  title?: string
   state: string
   // step_id is the step the task is on. A submission is posted to it, so one made
   // against a step the task has since left is rejected (409) instead of applied.

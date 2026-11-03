@@ -288,6 +288,7 @@ func getTaskHandler(t *testing.T, fetcher *fakeTaskFetcher, templates *stubTempl
 		AuthzCatalog:   taskauthz.Catalog{Roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
 		Files:          NewFileBinding(newFakeFileRefs(), nil, renderConfigOf),
 		TaskTemplateOf: TaskTemplates(set),
+		RenderConfigOf: renderConfigOf,
 	}
 }
 
@@ -539,6 +540,31 @@ func TestHandleGetTask_MalformedTaskTemplateIsNotADenial(t *testing.T) {
 	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("got %d, want 500: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+// The task view names the task by its render config's title, else by its task template.
+func TestHandleGetTask_Title(t *testing.T) {
+	for name, tc := range map[string]struct {
+		renderConfig string
+		want         string
+	}{
+		"render config title":         {`{"id":"x:render","title":"Select HS codes","sections":{}}`, "Select HS codes"},
+		"no title, the task template": {`{"id":"x:render","sections":{}}`, testTaskTemplateID},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fetcher := pendingHSCodeTask()
+			fetcher.renderConfig = tc.renderConfig
+			in := ownerInput("Trader", "trader")
+
+			recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			var body struct {
+				Title string `json:"title"`
+			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+			assert.Equal(t, tc.want, body.Title)
+		})
 	}
 }
 

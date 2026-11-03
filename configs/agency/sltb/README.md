@@ -76,7 +76,10 @@ creates SLTB for this deployment, on the `SLTB API` resource server
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
 | TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `workflow:inject`, and `task:write` to reply on SLTB's parked steps, which its catalog maps `tnsw` to |
-| SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `task:write` and `storage:read`/`write` on TNSW                                                       |
+| SLTB decision callback and storage | `SLTB_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` and `storage:read`/`write` on TNSW                                                     |
+
+`SLTB_TO_NSW` and the roles that grant it the NSW API are in TNSW's OU, in
+[`idp/bootstrap/15-tnsw-agency-clients.yaml`](../../../idp/bootstrap/15-tnsw-agency-clients.yaml).
 
 TNSW's `config.yaml` services entry `sltb` requests `workflow:inject` and `task:write` with
 `resource=https://api.sltb.nsw-agency.local` (see `configs/config*.example.yaml`).
