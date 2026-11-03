@@ -1,25 +1,21 @@
+import type { StatusTone } from '@portals/ui'
 import type { ConsignmentState } from './types'
 import i18n from '@/i18n'
 import { humanizeStatus } from '@/utils/formatStatus'
 
 /**
- * Get the appropriate color for a consignment state badge.
- *
- * Returns Radix UI semantic color names (consumed by Radix <Badge color={...}>).
- * Radix is aligned to the brand tokens in main.tsx (<Theme>), so these map to:
- *   blue → info, green → success, gray → secondary.
- * In progress is blue to match an in-progress task (TaskRow), so the same
- * label never shows in two colors on one page.
- * See the token block in @portals/ui's theme.css.
+ * The StatusBadge tone for a consignment state. In progress is info, as an
+ * in-progress task is (workflowStatusTone), so the same label never shows in
+ * two colors on one page.
  */
-export function getStateColor(state: ConsignmentState): 'gray' | 'blue' | 'green' {
+export function getStateTone(state: ConsignmentState): StatusTone {
   switch (state) {
     case 'IN_PROGRESS':
-      return 'blue'
+      return 'info'
     case 'FINISHED':
-      return 'green'
+      return 'success'
     default:
-      return 'gray'
+      return 'neutral'
   }
 }
 

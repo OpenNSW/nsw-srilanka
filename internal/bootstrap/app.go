@@ -111,6 +111,52 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // Build initializes dependencies and returns a fully wired application server.
 // The initialization flow is structured in distinct stages to ensure readability.
 func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //nolint:gocyclo
+	// Start export before any dependency initialization so even a failed database
+	// connection is observable. Build owns failure logging and flushing; main
+	// must not exit until this defer has completed.
+	configureLogging(cfg, os.Stdout)
+	var tel *telemetry.Provider
+	defer func() {
+		if err == nil {
+			return
+		}
+		slog.Error("failed to bootstrap application", "error", err)
+		if tel != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			shutdownErr := tel.Shutdown(shutdownCtx)
+			configureLogging(cfg, os.Stdout)
+			if shutdownErr != nil {
+				slog.Error("failed to shut down telemetry", "error", shutdownErr)
+			}
+		}
+	}()
+	tel, err = telemetry.Start(ctx, cfg.Otel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start telemetry: %w", err)
+	}
+	exportLogs := tel.SlogHandler()
+	configureLogging(cfg, os.Stdout, exportLogs)
+
+	slog.Info("configuration loaded successfully",
+		"db_host", cfg.Database.Postgres.Host,
+		"db_port", cfg.Database.Postgres.Port,
+		"db_name", cfg.Database.Postgres.Name,
+		"db_sslmode", cfg.Database.Postgres.SSLMode,
+	)
+
+	slog.Info("CORS configuration",
+		"allowed_origins", cfg.CORS.AllowedOrigins,
+		"allowed_methods", cfg.CORS.AllowedMethods,
+		"allowed_headers", cfg.CORS.AllowedHeaders,
+		"allow_credentials", cfg.CORS.AllowCredentials,
+		"max_age", cfg.CORS.MaxAge,
+	)
+
+	slog.Info("server configuration",
+		"port", cfg.Server.Port,
+	)
+
 	// -------------------------------------------------------------------
 	// Stage 1: Relational Database & Connection Health Check
 	// -------------------------------------------------------------------
@@ -124,21 +170,6 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		return nil, fmt.Errorf("database health check failed: %w", err)
 	}
 
-	// OTLP before the auditor and workers so in-flight workflow audit on
-	// restart is not dropped while telemetry was still starting. On a later
-	// Build failure, shut telemetry down here; App.Close does it on success.
-	tel, err := telemetry.Start(ctx, cfg.Otel)
-	if err != nil {
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to start telemetry: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tel.Shutdown(context.Background())
-		}
-	}()
-	exportLogs := tel.SlogHandler()
-	configureLogging(cfg, os.Stdout, exportLogs)
 	var auditLogger *slog.Logger
 	if h := auditExportHandler(cfg, exportLogs); h != nil {
 		auditLogger = slog.New(h)
@@ -983,13 +1014,15 @@ func (p registryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]b
 // separately (see Stage 5 below).
 // registerFlowPlugins installs the plugins this deployment adds on top of the
 // task-plugin set: the synchronous transforms that shape a fan-out, the CHA
-// writer, the reference ID generator, and the HTML document generator.
+// writer, the reference ID generator, the HTML document generator, the lookup
+// that lists a consignment's SLPA containers from its tasks, and the archiver
+// that stores a copy of a document another service links to.
 //
 // A table rather than a run of near-identical registrations, as
 // taskplugins.Register does for the same reason — seven of them inline was most
 // of initTask's branching, and adding an eighth meant editing a function that
 // has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver) error {
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -1002,6 +1035,8 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
 		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
 		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files)},
+		{taskplugins.TaskTypeSLPACaseContainers, taskplugins.NewSLPACaseContainersPlugin(caseTasks)},
+		{taskplugins.TaskTypeRemoteFileArchiver, taskplugins.NewRemoteFileArchiverPlugin(fetcher, files)},
 	}
 
 	for _, e := range entries {
@@ -1044,18 +1079,20 @@ func initTask(
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
 	declarations := cusdec.NewDeclarationRepository(db)
+	dispatchNotes := cdn.NewDispatchNoteRepository(db)
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
 		Declarations:  declarations,
-		DispatchNotes: cdn.NewDispatchNoteRepository(db),
+		DispatchNotes: dispatchNotes,
 		Cases:         declarations,
+		Notes:         dispatchNotes,
 	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
-	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService); err != nil {
+	taskStore := gormstore.New(db)
+
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, taskStore, remoteManager); err != nil {
 		return nil, nil, err
 	}
-
-	taskStore := gormstore.New(db)
 
 	// Construct UI projectors and the renderer/zoneview assembler
 	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector(), taskrenderer.NewSLPASundryProjector())
