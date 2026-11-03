@@ -1,0 +1,163 @@
+package plugins
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"testing"
+
+	"github.com/OpenNSW/core/remote"
+	"github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/core/taskflow/store"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// fakeFetcher answers every download with one response, and records the request.
+type fakeFetcher struct {
+	resp      *remote.RawResponse
+	err       error
+	calls     int
+	serviceID string
+	req       remote.Request
+}
+
+func (f *fakeFetcher) CallRaw(_ context.Context, serviceID string, req remote.Request) (*remote.RawResponse, error) {
+	f.calls++
+	f.serviceID, f.req = serviceID, req
+	return f.resp, f.err
+}
+
+func pdfResponse(status int, body string) *remote.RawResponse {
+	return &remote.RawResponse{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{"application/octet-stream"}},
+		Body:       []byte(body),
+	}
+}
+
+const archiveConfig = `{"service_id": "slpa", "source_input": "payment_slip_url", "mime_type": "application/pdf", "filename": "slpa-payment-slip.pdf"}`
+
+const slipURL = "https://slpacargoapi.slpa.lk/pdf/payment-slip/26213643263442?signature=a8f1fc80"
+
+func archiveCtx(source any) plugins.PluginContext {
+	inputs := map[string]any{}
+	if source != nil {
+		inputs["payment_slip_url"] = source
+	}
+	return plugins.PluginContext{
+		Context:         context.Background(),
+		Inputs:          inputs,
+		Record:          &store.TaskRecord{TaskID: "task-1", Data: map[string]any{}},
+		OutputNamespace: "payment_slip_file",
+	}
+}
+
+func TestRemoteFileArchiver_DownloadsAndStoresTheSource(t *testing.T) {
+	fetcher := &fakeFetcher{resp: pdfResponse(http.StatusOK, "%PDF-1.7 slip")}
+	files := &fakeSaver{}
+	p := NewRemoteFileArchiverPlugin(fetcher, files)
+	ctx := archiveCtx(slipURL)
+
+	require.NoError(t, p.Execute(ctx, json.RawMessage(archiveConfig)))
+
+	assert.Equal(t, "slpa", fetcher.serviceID, "the download goes through the service's own client")
+	assert.Equal(t, http.MethodGet, fetcher.req.Method)
+	assert.Equal(t, slipURL, fetcher.req.Path, "the signed link is fetched as sent")
+	assert.Equal(t, "%PDF-1.7 slip", string(files.content))
+	assert.Equal(t, "slpa-payment-slip.pdf", files.filename)
+	assert.Equal(t, "application/pdf", files.mime, "stored as the configured type, whatever the service labels it")
+	assert.Equal(t, map[string]any{
+		"key":       "0f8e7c1a-0000-4000-8000-000000000001.html",
+		"name":      "slpa-payment-slip.pdf",
+		"mime_type": "application/pdf",
+		"size":      int64(len("%PDF-1.7 slip")),
+	}, ctx.Record.Data["payment_slip_file"])
+}
+
+func TestRemoteFileArchiver_StoresNothingWithoutASource(t *testing.T) {
+	for name, source := range map[string]any{
+		"no source":    nil,
+		"empty":        "  ",
+		"not a string": 42,
+	} {
+		t.Run(name, func(t *testing.T) {
+			fetcher, files := &fakeFetcher{}, &fakeSaver{}
+			ctx := archiveCtx(source)
+
+			require.NoError(t, NewRemoteFileArchiverPlugin(fetcher, files).Execute(ctx, json.RawMessage(archiveConfig)))
+
+			assert.Zero(t, fetcher.calls)
+			assert.Zero(t, files.calls)
+			assert.NotContains(t, ctx.Record.Data, "payment_slip_file", "the page keeps what the service sent")
+		})
+	}
+}
+
+func TestRemoteFileArchiver_RecordsARefusedDownloadAndGoesOn(t *testing.T) {
+	for name, tc := range map[string]struct {
+		resp *remote.RawResponse
+		want string
+	}{
+		"an expired link": {pdfResponse(http.StatusForbidden, "expired"), "slpa refused the download with status 403"},
+		"an empty answer": {pdfResponse(http.StatusOK, ""), "slpa sent an empty document"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			files := &fakeSaver{}
+			ctx := archiveCtx(slipURL)
+
+			err := NewRemoteFileArchiverPlugin(&fakeFetcher{resp: tc.resp}, files).Execute(ctx, json.RawMessage(archiveConfig))
+
+			require.NoError(t, err, "the trader still has the service's own link, and a retry would be refused again")
+			assert.Zero(t, files.calls)
+			assert.Equal(t, map[string]any{"error": tc.want}, ctx.Record.Data["payment_slip_file"])
+		})
+	}
+}
+
+func TestRemoteFileArchiver_ReturnsAFailureARetryCanFix(t *testing.T) {
+	for name, fetcher := range map[string]*fakeFetcher{
+		"transport": {err: errors.New("connection reset")},
+		"5xx":       {resp: pdfResponse(http.StatusBadGateway, "")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			files := &fakeSaver{}
+			ctx := archiveCtx(slipURL)
+
+			err := NewRemoteFileArchiverPlugin(fetcher, files).Execute(ctx, json.RawMessage(archiveConfig))
+
+			require.Error(t, err)
+			assert.Zero(t, files.calls)
+			assert.NotContains(t, ctx.Record.Data, "payment_slip_file")
+		})
+	}
+}
+
+func TestRemoteFileArchiver_ReturnsAStorageFailure(t *testing.T) {
+	files := &fakeSaver{err: errors.New("bucket unavailable")}
+	ctx := archiveCtx(slipURL)
+
+	err := NewRemoteFileArchiverPlugin(&fakeFetcher{resp: pdfResponse(http.StatusOK, "%PDF")}, files).Execute(ctx, json.RawMessage(archiveConfig))
+
+	require.ErrorContains(t, err, "bucket unavailable")
+	assert.NotContains(t, ctx.Record.Data, "payment_slip_file")
+}
+
+func TestRemoteFileArchiver_RequiresItsConfig(t *testing.T) {
+	p := NewRemoteFileArchiverPlugin(&fakeFetcher{}, &fakeSaver{})
+	for _, field := range []string{"service_id", "source_input", "mime_type", "filename"} {
+		t.Run(field, func(t *testing.T) {
+			var cfg map[string]string
+			require.NoError(t, json.Unmarshal([]byte(archiveConfig), &cfg))
+			delete(cfg, field)
+			raw, _ := json.Marshal(cfg)
+
+			require.ErrorContains(t, p.Execute(archiveCtx(slipURL), raw), field)
+		})
+	}
+
+	ctx := archiveCtx(slipURL)
+	ctx.OutputNamespace = ""
+	require.ErrorContains(t, p.Execute(ctx, json.RawMessage(archiveConfig)), "output_namespace")
+}
