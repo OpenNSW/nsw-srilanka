@@ -101,7 +101,9 @@ const si: Locale = {
         },
         flows: {
           title: 'සහායක සේවා',
-          placeholder: 'සේවාවක් තෝරන්න',
+          available: 'ලබා ගත හැකි {{count}}',
+          startService: '{{label}} ආරම්භ කරන්න',
+          footer: 'මෙම භාණ්ඩ තොගයට අදාළ වන විට තවත් සහායක සේවා මෙහි දිස් වේ.',
           confirmTitle: 'ආරම්භ කරන්න {{label}}?',
           confirmDescription: 'මෙය {{label}} භාණ්ඩ තොගය මත ආරම්භ වේ. එහි පියවර ඉහත ලැයිස්තුවේ දැක් වේ.',
           cancel: 'අවලංගු කරන්න',

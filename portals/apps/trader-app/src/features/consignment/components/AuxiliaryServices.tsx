@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Badge, Button, Select } from '@radix-ui/themes'
-import { ChevronRightIcon, ExclamationTriangleIcon, LayersIcon } from '@radix-ui/react-icons'
+import { Badge, Button } from '@radix-ui/themes'
+import { ChevronRightIcon, CubeIcon, ExclamationTriangleIcon, LayersIcon } from '@radix-ui/react-icons'
 import { ConfirmDialog, Surface } from '@portals/ui'
 import { useTranslation } from 'react-i18next'
 import type { FlowOption } from '@/features/consignment/types.ts'
@@ -13,18 +13,15 @@ interface AuxiliaryServicesProps {
 
 // The flows the caller may start on the consignment (DetailDTO.startableFlows), offered in a
 // section of their own below the workflow steps: they are services beside the consignment's
-// own flow, such as an SLPA sundry payment. The trader picks one from a list and starts it. A
-// started flow cannot be withdrawn, so each start is confirmed first.
+// own flow, such as an SLPA sundry payment. Each is a card with its own Start button. A started
+// flow cannot be withdrawn, so each start is confirmed first.
 export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
   const { t } = useTranslation()
-  const [selectedId, setSelectedId] = useState('')
   const [pending, setPending] = useState<FlowOption | null>(null)
   const [starting, setStarting] = useState(false)
   const [failed, setFailed] = useState<FlowOption | null>(null)
 
   if (flows.length === 0) return null
-
-  const selected = flows.find((flow) => flow.templateId === selectedId) ?? null
 
   const start = async (flow: FlowOption) => {
     setStarting(true)
@@ -32,7 +29,6 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
     try {
       await onStart(flow.templateId)
       setPending(null)
-      setSelectedId('')
     } catch (err) {
       console.error('Failed to start flow:', err)
       setPending(null)
@@ -43,44 +39,57 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
   }
 
   return (
-    <Surface className="mt-6">
-      {/* Headed and laid out like the workflow steps card above it. */}
-      <section aria-labelledby="auxiliary-services-title" className="p-4 sm:p-6">
-        <h2
-          id="auxiliary-services-title"
-          className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"
-        >
-          <LayersIcon aria-hidden className="text-info-strong" />
-          {t('consignments.detail.flows.title')}
-          <Badge color="gray" variant="soft" radius="full">
-            {flows.length}
-          </Badge>
-        </h2>
-        {failed && (
-          <p className="mb-3 flex items-center gap-1 text-sm font-medium text-error-strong">
-            <ExclamationTriangleIcon aria-hidden />
-            {t('consignments.detail.flows.failed', { label: failed.label })}
+    <Surface className="mt-6 overflow-hidden">
+      <section aria-labelledby="auxiliary-services-title">
+        <header className="flex items-center gap-3 border-b border-border p-4 sm:p-6">
+          <span className="flex-shrink-0 rounded-xl border border-info/30 bg-info-subtle p-2.5 text-info-strong">
+            <LayersIcon aria-hidden width={20} height={20} />
+          </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 id="auxiliary-services-title" className="text-lg font-semibold tracking-tight text-foreground">
+              {t('consignments.detail.flows.title')}
+            </h2>
+            <Badge color="blue" variant="soft" radius="full">
+              {t('consignments.detail.flows.available', { count: flows.length })}
+            </Badge>
+          </div>
+        </header>
+
+        <div className="p-4 sm:p-6">
+          {failed && (
+            <p className="mb-3 flex items-center gap-1 text-sm font-medium text-error-strong">
+              <ExclamationTriangleIcon aria-hidden />
+              {t('consignments.detail.flows.failed', { label: failed.label })}
+            </p>
+          )}
+          <ul className="space-y-3">
+            {flows.map((flow) => (
+              <li
+                key={flow.templateId}
+                className="flex flex-col gap-4 rounded-xl border border-border bg-app-surface p-4 transition-colors hover:border-info/40 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+              >
+                <div className="flex min-w-0 items-center gap-3.5">
+                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-info-subtle text-info-strong">
+                    <CubeIcon aria-hidden width={18} height={18} />
+                  </span>
+                  <span className="font-semibold text-foreground">{flow.label}</span>
+                </div>
+                <Button
+                  size="2"
+                  className="self-end sm:self-auto"
+                  onClick={() => setPending(flow)}
+                  disabled={starting}
+                  aria-label={t('consignments.detail.flows.startService', { label: flow.label })}
+                >
+                  {t('consignments.detail.flows.start')}
+                  <ChevronRightIcon aria-hidden />
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 border-t border-border pt-3 text-xs text-foreground-muted">
+            {t('consignments.detail.flows.footer')}
           </p>
-        )}
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-app-surface px-4 py-3 sm:flex-row sm:items-center">
-          <Select.Root value={selectedId} onValueChange={setSelectedId} disabled={starting}>
-            <Select.Trigger
-              className="w-full sm:flex-1"
-              placeholder={t('consignments.detail.flows.placeholder')}
-              aria-label={t('consignments.detail.flows.title')}
-            />
-            <Select.Content position="popper">
-              {flows.map((flow) => (
-                <Select.Item key={flow.templateId} value={flow.templateId}>
-                  {flow.label}
-                </Select.Item>
-              ))}
-            </Select.Content>
-          </Select.Root>
-          <Button size="2" onClick={() => setPending(selected)} disabled={!selected || starting}>
-            {t('consignments.detail.flows.start')}
-            <ChevronRightIcon aria-hidden />
-          </Button>
         </div>
       </section>
 

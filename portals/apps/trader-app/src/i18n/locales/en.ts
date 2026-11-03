@@ -102,7 +102,9 @@ const en = {
         },
         flows: {
           title: 'Auxiliary services',
-          placeholder: 'Select a service',
+          available: '{{count}} available',
+          startService: 'Start {{label}}',
+          footer: 'More auxiliary services appear here when they apply to this consignment.',
           confirmTitle: 'Start {{label}}?',
           confirmDescription: 'This starts {{label}} on the consignment. Its steps appear in the list above.',
           cancel: 'Cancel',
