@@ -254,6 +254,9 @@ func resolvePaymentAmount(input any, configured decimal.Decimal) (decimal.Decima
 		if !configured.IsPositive() {
 			return decimal.Decimal{}, configError(errors.New(`plugin_properties.amount is required and must be positive when no "amount" input is supplied`))
 		}
+		if err := storableAmount(configured); err != nil {
+			return decimal.Decimal{}, configError(fmt.Errorf("plugin_properties.amount %w", err))
+		}
 		return configured, nil
 	}
 
@@ -264,7 +267,28 @@ func resolvePaymentAmount(input any, configured decimal.Decimal) (decimal.Decima
 	if !amount.IsPositive() {
 		return decimal.Decimal{}, inputError(fmt.Errorf(`input "amount" must be positive, got %s`, amount.String()))
 	}
+	if err := storableAmount(amount); err != nil {
+		return decimal.Decimal{}, inputError(fmt.Errorf(`input "amount" %w`, err))
+	}
 	return amount, nil
+}
+
+// maxAmount is the largest amount payment_transactions.amount, a
+// NUMERIC(15, 2) column, can hold.
+var maxAmount = decimal.RequireFromString("9999999999999.99")
+
+// storableAmount reports an amount the payment's transaction can't store: one
+// past maxAmount, which the database refuses, or one with more than two
+// decimal places, which it would round, charging a different amount than the
+// step was given. Retrying can't fix either, so the step parks at once.
+func storableAmount(amount decimal.Decimal) error {
+	if amount.GreaterThan(maxAmount) {
+		return fmt.Errorf("must be at most %s, got %s", maxAmount.StringFixed(2), amount.String())
+	}
+	if !amount.Equal(amount.Round(2)) {
+		return fmt.Errorf("must have at most two decimal places, got %s", amount.String())
+	}
+	return nil
 }
 
 // decimalFromAny converts a workflow input value into a decimal. Workflow
