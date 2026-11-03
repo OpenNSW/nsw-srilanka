@@ -59,9 +59,6 @@ type Repository interface {
 	Record(ctx context.Context, w Workflow) error
 	MarkStarted(ctx context.Context, taskID string) error
 	Get(ctx context.Context, taskID string) (*Workflow, error)
-	// Exists reports whether taskID is an injected workflow — the check the task authz
-	// gate uses to decide officer ownership.
-	Exists(ctx context.Context, taskID string) (bool, error)
 	// MarkCompleted marks taskID's workflow COMPLETED and, once every workflow of its
 	// case is, the case FINISHED. found is false when taskID is not an injected
 	// workflow. It is idempotent, so a retried completion is harmless.
@@ -177,15 +174,6 @@ func (r *repository) Get(ctx context.Context, taskID string) (*Workflow, error) 
 		return nil, ErrWorkflowNotFound
 	}
 	return &w, nil
-}
-
-func (r *repository) Exists(ctx context.Context, taskID string) (bool, error) {
-	const q = `SELECT EXISTS (SELECT 1 FROM agency_workflow WHERE task_id = ?)`
-	var exists bool
-	if err := r.db.WithContext(ctx).Raw(q, taskID).Scan(&exists).Error; err != nil {
-		return false, err
-	}
-	return exists, nil
 }
 
 // ErrCaseNotFound is returned when no cases row exists for an id.
