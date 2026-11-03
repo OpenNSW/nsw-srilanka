@@ -94,7 +94,6 @@ inboundAuthConfig:
         - consignment:flow:write
         - task:read
         - task:write
-        - hscode:read
         - company:read
         - cha:read
         - profile:read
@@ -360,13 +359,6 @@ resources:
       - name: Write
         handle: write
         description: Write action
-  - name: HS Code
-    handle: hscode
-    description: HS Code resource
-    actions:
-      - name: Read
-        handle: read
-        description: Read action
   - name: Company
     handle: company
     description: Company resource
@@ -418,7 +410,6 @@ permissions:
       - consignment:flow:write
       - consignment:read
       - consignment:write
-      - hscode:read
       - profile:read
       - storage:read
       - storage:write
@@ -441,7 +432,6 @@ permissions:
       - company:read
       - consignment:flow:write
       - consignment:read
-      - hscode:read
       - profile:read
       - storage:read
       - storage:write

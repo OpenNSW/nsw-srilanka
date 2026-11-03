@@ -33,7 +33,6 @@ const (
 	TaskWrite = "task:write"
 
 	// Reference data (read-only).
-	HSCodeRead  = "hscode:read"
 	CompanyRead = "company:read"
 	CHARead     = "cha:read"
 
