@@ -25,7 +25,6 @@ import (
 	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
-	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
@@ -298,7 +297,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 			IssueForClient: func(clientID, value string) (string, error) {
 				return fileAccess.IssueForClient(clientID, value, fileaccess.ScopeRead)
 			},
-			RenderConfigOf: renderConfigOf(artifacts),
+			RenderConfigOf: tasks.RenderConfigs(artifacts),
 		}
 	}
 	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifacts, globalCatalog, cfg, onTaskCompleted)
@@ -480,12 +479,12 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
-	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), renderConfigOf(artifacts))
+	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), tasks.RenderConfigs(artifacts))
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
 	// A task's template decides who may read it and whether it can be claimed.
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
-	taskHandler.RenderConfigOf = renderConfigOf(artifacts)
+	taskHandler.RenderConfigOf = tasks.RenderConfigs(artifacts)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. A user owns a task in every role
@@ -807,14 +806,6 @@ func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
 		return nil, err
 	}
 	return fileaccess.New(codec, cfg.TokenTTL())
-}
-
-// renderConfigOf resolves a task's render config through its task template, in the
-// manifest version the task runs on.
-func renderConfigOf(artifacts *artifact.Set) tasks.RenderConfigOf {
-	return func(ctx context.Context, record store.TaskRecord) (json.RawMessage, error) {
-		return renderconfig.Load(ctx, artifacts, record)
-	}
 }
 
 // stepNamespace looks up the output namespace of a task's active step template,

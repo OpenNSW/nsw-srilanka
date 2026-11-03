@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
-	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
@@ -25,6 +23,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
+	nswtasks "github.com/OpenNSW/nsw-srilanka/internal/tasks"
 )
 
 // TaskStore is the narrow interface needed from taskv2 package to load task records.
@@ -630,37 +629,13 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 			CreatedAt: t.CreatedAt.Format(time.RFC3339),
 			UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
 			WorkflowNodeTemplate: WorkflowNodeTemplateResponseDTO{
-				Name: s.taskDisplayName(ctx, t),
+				Name: nswtasks.Title(ctx, nswtasks.RenderConfigs(s.artifacts), t),
 				Type: t.TaskType,
 			},
 			State: nodeState,
 		})
 	}
 	return dtos, nil
-}
-
-// taskDisplayName returns the title at the root of t's render config, falling back to its
-// task template's ID. A config that does not resolve only costs the title, so it is logged.
-func (s *Service) taskDisplayName(ctx context.Context, t store.TaskRecord) string {
-	renderConfig, err := renderconfig.Load(ctx, s.artifacts, t)
-	if err != nil {
-		slog.WarnContext(ctx, "consignment: render config unavailable for task name", "taskId", t.TaskID, "error", err)
-		return t.TaskTemplateID
-	}
-	return titleOrFallback(renderConfig, t.TaskTemplateID)
-}
-
-// titleOrFallback returns the title at the root of renderConfig, or fallback when it has none.
-func titleOrFallback(renderConfig json.RawMessage, fallback string) string {
-	if len(renderConfig) > 0 {
-		var rc struct {
-			Title string `json:"title"`
-		}
-		if err := json.Unmarshal(renderConfig, &rc); err == nil && rc.Title != "" {
-			return rc.Title
-		}
-	}
-	return fallback
 }
 
 // companyRecordToMap converts a company.Record to a map[string]any via its JSON tags.

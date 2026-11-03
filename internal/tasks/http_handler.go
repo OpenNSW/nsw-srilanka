@@ -175,7 +175,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
 	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, false, nil))
-	resp := taskResponse{ZoneView: zv, Title: h.title(ctx, record)}
+	resp := taskResponse{ZoneView: zv, Title: Title(ctx, h.RenderConfigOf, record)}
 	if taskTemplate.Claimable {
 		// From the stored record, not the view: the view only swaps file values.
 		claim := h.claimOf(ctx, in, record)
@@ -576,24 +576,4 @@ func attrBool(attrs []any, key string) (bool, bool) {
 type completeTaskStepRequest struct {
 	Command string         `json:"command"`
 	Payload map[string]any `json:"payload"`
-}
-
-// title names record's task: the title at the root of its render config, else its task
-// template's id. A render config that doesn't load only costs the name, so it is logged.
-func (h *HTTPHandler) title(ctx context.Context, record store.TaskRecord) string {
-	if h.RenderConfigOf == nil {
-		return record.TaskTemplateID
-	}
-	rc, err := h.RenderConfigOf(ctx, record)
-	if err != nil {
-		slog.WarnContext(ctx, "tasks: render config unavailable for the task's title", "taskId", record.TaskID, "error", err)
-		return record.TaskTemplateID
-	}
-	var named struct {
-		Title string `json:"title"`
-	}
-	if err := json.Unmarshal(rc, &named); err != nil || named.Title == "" {
-		return record.TaskTemplateID
-	}
-	return named.Title
 }
