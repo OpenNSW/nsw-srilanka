@@ -182,6 +182,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
 - Observability: set `otel.endpoint` and `otel.serviceName` in `config.yaml` to push OTLP/HTTP metrics, logs and traces (e.g. to OpenObserve). Leave `otel.endpoint` empty (or omit the section) for a no-op.
+- Log export starts before dependency initialization. Startup failures are logged and telemetry is flushed for up to five seconds before exit. Configuration-load failures remain in the container log because telemetry settings are not yet available; collector failures are also reported locally.
 - Logs will report DB connection, Temporal worker startup, and the artifact manifests loaded via the artifact loader from `tnsw/manifest_v<N>.json`, or `tnsw/manifest.json` as version 1 where there are none, in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)
