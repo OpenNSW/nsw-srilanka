@@ -2,7 +2,6 @@ package readauthz
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,7 +14,7 @@ import (
 )
 
 // noPolicy declares no read.roles, so no precedence applies.
-const noPolicy = `{"id":"x","workflow_id":"x-flow","render_config_id":"x:render"}`
+var noPolicy []string
 
 var testCatalog = taskauthz.Catalog{
 	Roles:   map[string]string{"trader": "Trader", "cha": "CHA"},
@@ -59,7 +58,7 @@ func TestResolve_EmptyCatalogDenies(t *testing.T) {
 	calls := 0
 	in := userInput([]string{"Trader"}, map[string]bool{"trader": true}, &calls)
 
-	_, err := Resolve(context.Background(), taskauthz.Catalog{Clients: testCatalog.Clients}, in, json.RawMessage(noPolicy), "consignment-1")
+	_, err := Resolve(context.Background(), taskauthz.Catalog{Clients: testCatalog.Clients}, in, noPolicy, "consignment-1")
 	if !errors.Is(err, ErrDenied) {
 		t.Fatalf("got %v, want ErrDenied", err)
 	}
@@ -137,7 +136,7 @@ func TestResolve_RoleTiedOwnership(t *testing.T) {
 			calls := 0
 			in := userInput(tt.heldRoles, tt.owned, &calls)
 
-			got, err := Resolve(context.Background(), testCatalog, in, json.RawMessage(noPolicy), "consignment-1")
+			got, err := Resolve(context.Background(), testCatalog, in, noPolicy, "consignment-1")
 			if tt.wantDenied {
 				if !errors.Is(err, ErrDenied) {
 					t.Fatalf("got (%v, %v), want ErrDenied", got, err)
@@ -169,7 +168,7 @@ func TestResolve_NonUserPrincipalsDenyWithoutLookup(t *testing.T) {
 		"unknown kind":      {},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Resolve(context.Background(), testCatalog, in, json.RawMessage(noPolicy), "consignment-1")
+			_, err := Resolve(context.Background(), testCatalog, in, noPolicy, "consignment-1")
 			if !errors.Is(err, ErrDenied) {
 				t.Fatalf("got %v, want ErrDenied", err)
 			}
@@ -190,7 +189,7 @@ func TestResolve_OwnershipErrorIsNotADenial(t *testing.T) {
 		},
 	}
 
-	_, err := Resolve(context.Background(), testCatalog, in, json.RawMessage(noPolicy), "consignment-1")
+	_, err := Resolve(context.Background(), testCatalog, in, noPolicy, "consignment-1")
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("got %v, want the resolver's error wrapped", err)
 	}
@@ -205,21 +204,21 @@ func TestResolve_OwnershipErrorIsNotADenial(t *testing.T) {
 func TestResolve_ReadRolesOrderIsPrecedence(t *testing.T) {
 	tests := []struct {
 		name       string
-		config     string
+		roles      []string
 		heldRoles  []string
 		owned      map[string]bool
 		wantClaims map[string]bool
 	}{
 		{
 			name:       "dual-role user acts as trader when trader is listed first",
-			config:     `{"read":{"roles":["trader","cha"]}}`,
+			roles:      []string{"trader", "cha"},
 			heldRoles:  []string{"Trader", "CHA"},
 			owned:      map[string]bool{"trader": true, "cha": true},
 			wantClaims: map[string]bool{"role:trader": true, "role:cha": false},
 		},
 		{
 			name:       "the same user acts as cha when cha is listed first",
-			config:     `{"read":{"roles":["cha","trader"]}}`,
+			roles:      []string{"cha", "trader"},
 			heldRoles:  []string{"Trader", "CHA"},
 			owned:      map[string]bool{"trader": true, "cha": true},
 			wantClaims: map[string]bool{"role:trader": false, "role:cha": true},
@@ -228,14 +227,14 @@ func TestResolve_ReadRolesOrderIsPrecedence(t *testing.T) {
 			// Precedence only chooses among roles the caller is actually eligible
 			// for; it never grants the higher-precedence one.
 			name:       "precedence skips a listed role the caller is not eligible for",
-			config:     `{"read":{"roles":["trader","cha"]}}`,
+			roles:      []string{"trader", "cha"},
 			heldRoles:  []string{"CHA"},
 			owned:      map[string]bool{"trader": true, "cha": true},
 			wantClaims: map[string]bool{"role:trader": false, "role:cha": true},
 		},
 		{
 			name:       "a single-role user is unaffected by the order",
-			config:     `{"read":{"roles":["cha","trader"]}}`,
+			roles:      []string{"cha", "trader"},
 			heldRoles:  []string{"Trader"},
 			owned:      map[string]bool{"trader": true, "cha": false},
 			wantClaims: map[string]bool{"role:trader": true, "role:cha": false},
@@ -244,7 +243,7 @@ func TestResolve_ReadRolesOrderIsPrecedence(t *testing.T) {
 			// An undefined name cannot be owned by anyone, so it drops out of the
 			// order without shadowing the real entry behind it.
 			name:       "unknown names drop out of the precedence order",
-			config:     `{"read":{"roles":["chaa","trader"]}}`,
+			roles:      []string{"chaa", "trader"},
 			heldRoles:  []string{"Trader", "CHA"},
 			owned:      map[string]bool{"trader": true, "cha": true},
 			wantClaims: map[string]bool{"role:trader": true, "role:cha": false},
@@ -256,7 +255,7 @@ func TestResolve_ReadRolesOrderIsPrecedence(t *testing.T) {
 			calls := 0
 			in := userInput(tt.heldRoles, tt.owned, &calls)
 
-			got, err := Resolve(context.Background(), testCatalog, in, json.RawMessage(tt.config), "consignment-1")
+			got, err := Resolve(context.Background(), testCatalog, in, tt.roles, "consignment-1")
 			if err != nil {
 				t.Fatalf("Resolve: %v", err)
 			}
@@ -278,39 +277,39 @@ func TestResolve_ReadRolesOrderIsPrecedence(t *testing.T) {
 func TestResolve_ReadRolesGatesAccess(t *testing.T) {
 	tests := []struct {
 		name       string
-		config     string
+		roles      []string
 		heldRoles  []string
 		owned      map[string]bool
 		wantDenied bool
 	}{
 		{
 			name:      "listed role is eligible",
-			config:    `{"read":{"roles":["trader","cha"]}}`,
+			roles:     []string{"trader", "cha"},
 			heldRoles: []string{"Trader"},
 			owned:     map[string]bool{"trader": true},
 		},
 		{
 			name:       "eligible role is not listed",
-			config:     `{"read":{"roles":["cha"]}}`,
+			roles:      []string{"cha"},
 			heldRoles:  []string{"Trader"},
 			owned:      map[string]bool{"trader": true},
 			wantDenied: true,
 		},
 		{
 			name:      "empty roles list falls back to any eligible role",
-			config:    `{"read":{"roles":[]}}`,
+			roles:     []string{},
 			heldRoles: []string{"Trader"},
 			owned:     map[string]bool{"trader": true},
 		},
 		{
-			name:      "absent task template admits any eligible role",
-			config:    "",
+			name:      "no read.roles admits any eligible role",
+			roles:     nil,
 			heldRoles: []string{"Trader"},
 			owned:     map[string]bool{"trader": true},
 		},
 		{
 			name:       "a policy of only unknown names admits nobody",
-			config:     `{"read":{"roles":["chaa"]}}`,
+			roles:      []string{"chaa"},
 			heldRoles:  []string{"Trader", "CHA"},
 			owned:      map[string]bool{"trader": true, "cha": true},
 			wantDenied: true,
@@ -322,7 +321,7 @@ func TestResolve_ReadRolesGatesAccess(t *testing.T) {
 			calls := 0
 			in := userInput(tt.heldRoles, tt.owned, &calls)
 
-			_, err := Resolve(context.Background(), testCatalog, in, json.RawMessage(tt.config), "consignment-1")
+			_, err := Resolve(context.Background(), testCatalog, in, tt.roles, "consignment-1")
 			if tt.wantDenied {
 				if !errors.Is(err, ErrDenied) {
 					t.Fatalf("got %v, want ErrDenied", err)
@@ -342,13 +341,13 @@ func TestResolve_ReadRolesGatesAccess(t *testing.T) {
 func TestResolve_PopulatesEveryCatalogRole(t *testing.T) {
 	calls := 0
 
-	for name, cfg := range map[string]string{
+	for name, roles := range map[string][]string{
 		"no read policy":  noPolicy,
-		"with precedence": `{"read":{"roles":["cha","trader"]}}`,
+		"with precedence": {"cha", "trader"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			in := userInput([]string{"CHA"}, map[string]bool{"cha": true}, &calls)
-			got, err := Resolve(context.Background(), testCatalog, in, json.RawMessage(cfg), "consignment-1")
+			got, err := Resolve(context.Background(), testCatalog, in, roles, "consignment-1")
 			if err != nil {
 				t.Fatalf("Resolve: %v", err)
 			}
@@ -358,21 +357,6 @@ func TestResolve_PopulatesEveryCatalogRole(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// A malformed task template is a real failure, not a denial: a 500 says "fix the
-// config", a 404 would quietly hide the task instead.
-func TestResolve_MalformedConfigIsNotADenial(t *testing.T) {
-	calls := 0
-	in := userInput([]string{"Trader"}, map[string]bool{"trader": true}, &calls)
-
-	_, err := Resolve(context.Background(), testCatalog, in, json.RawMessage(`{"read":`), "consignment-1")
-	if err == nil {
-		t.Fatal("want an error for a malformed task template, got none")
-	}
-	if errors.Is(err, ErrDenied) {
-		t.Error("a malformed task template must not be reported as a denial")
 	}
 }
 
@@ -397,7 +381,7 @@ func TestClaimKeysMatchCatalog(t *testing.T) {
 
 	calls := 0
 	in := userInput([]string{"Trader", "CHA"}, map[string]bool{"trader": true, "cha": true}, &calls)
-	claims, err := Resolve(context.Background(), cat, in, json.RawMessage(noPolicy), "consignment-1")
+	claims, err := Resolve(context.Background(), cat, in, noPolicy, "consignment-1")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

@@ -71,8 +71,8 @@ type HTTPHandler struct {
 	// CanAct decides whether a reader's file references can be submitted.
 	// Without it, they can only be opened.
 	CanAct CanAct
-	// TaskTemplateOf resolves a task's task template, whose read policy decides
-	// who may read the task.
+	// TaskTemplateOf resolves a task's task template, whose read.roles decide who
+	// may read the task and whose claimable field whether it has claims.
 	TaskTemplateOf TaskTemplateOf
 }
 
@@ -171,15 +171,9 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	// claimed_at would repeat it, and show the holder's internal user id.
 	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
-	canClaim, err := claimable(taskTemplate)
-	if err != nil {
-		httputil.InternalServerError(w, r, "tasks: failed to read whether the task can be claimed", err, "taskId", taskID)
-		return
-	}
-
 	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, false, nil))
 	resp := taskResponse{ZoneView: zv}
-	if canClaim {
+	if taskTemplate.Claimable {
 		// From the stored record, not the view: the view only swaps file values.
 		claim := h.claimOf(ctx, in, record)
 		resp.Claim = &claim
