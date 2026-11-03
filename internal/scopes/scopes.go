@@ -1,7 +1,8 @@
 // Package scopes defines the NSW API OAuth2 scope constants.
 //
 // These values must stay in sync with the NSW_API resource server defined in
-// idp/bootstrap/10-nsw-platform.yaml. Each constant corresponds to a permission
+// idp/bootstrap/10-nsw-platform.yaml, and with the trader portal's
+// portals/apps/trader-app/src/constants/scopes.ts. Each constant corresponds to a permission
 // derived from a resource + action handle in the IdP, following the pattern
 // "<resource>:<action>".
 //
@@ -33,7 +34,6 @@ const (
 	TaskWrite = "task:write"
 
 	// Reference data (read-only).
-	HSCodeRead  = "hscode:read"
 	CompanyRead = "company:read"
 	CHARead     = "cha:read"
 

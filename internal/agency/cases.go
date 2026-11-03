@@ -25,32 +25,34 @@ const (
 	errInvalidPaging = "invalid pagination parameters"
 )
 
-// TaskLister is the narrow surface CaseHandler needs from the task store.
+// TaskLister is the narrow surface CaseHandler needs from the task store: the tasks of a
+// case whose task templates list, in read.roles, one of the catalog roles the officer
+// holds. core's task store satisfies it. The roles must never be empty, or GetTasks would
+// list every task of the case: requireCatalogRole admits no officer without one.
 type TaskLister interface {
-	GetAllTasks(ctx context.Context, caseID string) []store.TaskRecord
+	GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord
 }
 
 // CaseHandler serves the officer-facing case list and detail. Responses reuse the
 // JSON field names of the consignment list/detail, so trader-app's existing
 // ConsignmentDetailScreen renders a case without changes.
 type CaseHandler struct {
-	repo      CaseRepository
-	tasks     TaskLister
-	artifacts *artifact.Set // resolves each task's render config for its title
-	// tokenRoles maps each token role the catalog maps a role to back to the roles'
-	// logical names: two names may share one token role.
-	tokenRoles map[string][]string
+	repo       CaseRepository
+	tasks      TaskLister
+	artifacts  *artifact.Set       // resolves each task's render config for its title
+	tokenRoles map[string][]string // token role -> the catalog roles mapped to it
 }
 
-// NewCaseHandler creates a CaseHandler. roles is the agency catalog's Roles map: an
-// officer holding the token role of any of its entries may use the case views, and sees
-// the cases their OU owns in those roles.
+// NewCaseHandler creates a CaseHandler. roles is the agency catalog's Roles map, from
+// catalog role to token role: an officer holding the token role of any of its entries may
+// use the case views, sees the cases their OU owns in those roles, and in each the tasks
+// whose read.roles list one of them.
 func NewCaseHandler(repo CaseRepository, tasks TaskLister, artifacts *artifact.Set, roles map[string]string) *CaseHandler {
 	tokenRoles := make(map[string][]string, len(roles))
-	for name, tokenRole := range roles {
+	for role, tokenRole := range roles {
 		// An empty token role would match a caller whose roles hold an empty string.
 		if tokenRole != "" {
-			tokenRoles[tokenRole] = append(tokenRoles[tokenRole], name)
+			tokenRoles[tokenRole] = append(tokenRoles[tokenRole], role)
 		}
 	}
 	return &CaseHandler{repo: repo, tasks: tasks, artifacts: artifacts, tokenRoles: tokenRoles}
@@ -116,8 +118,10 @@ func (h *CaseHandler) HandleListCases(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, pagination.NewPageResult(items, total, offset, limit))
 }
 
-// HandleGetCase handles GET /api/v1/cases/{id}: the case plus the tasks of every flow
-// on it, if the officer's OU owns it; otherwise 404, as for a case that does not exist.
+// HandleGetCase handles GET /api/v1/cases/{id}: the case, if the officer's OU owns it
+// (otherwise 404, as for a case that does not exist), plus the tasks of every flow on it
+// that the officer may read. A task is listed when its task template's read.roles name a
+// catalog role the officer holds; one listing none is not.
 func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 	owner, ok := h.requireCatalogRole(w, r)
 	if !ok {
@@ -137,7 +141,7 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 	}
 	// Every flow on the case files its tasks under the case ID.
 	nodes := make([]WorkflowNode, 0)
-	for _, t := range h.tasks.GetAllTasks(ctx, id) {
+	for _, t := range h.tasks.GetTasks(ctx, store.TaskFilter{CaseID: id, Roles: owner.Roles}) {
 		if t.TaskType == "SYSTEM" {
 			continue
 		}
@@ -158,9 +162,10 @@ func (h *CaseHandler) title(r *http.Request, t store.TaskRecord) string {
 }
 
 // requireCatalogRole returns the caller as an Owner: their OU and the catalog roles their
-// token holds. It writes the error response and returns false unless the caller is a user
-// holding the token role of any catalog role. A machine client is authenticated but never
-// an officer, so it gets 403 rather than 401.
+// token holds, sorted. It writes the error response and returns false unless the caller
+// is a user holding the token role of any catalog role. A machine client is authenticated
+// but never an officer, so it gets 403 rather than 401. An officer's roles come from their
+// token, so they hold them in every case.
 func (h *CaseHandler) requireCatalogRole(w http.ResponseWriter, r *http.Request) (Owner, bool) {
 	p, ok := authn.FromContext(r.Context())
 	if !ok {
@@ -170,11 +175,7 @@ func (h *CaseHandler) requireCatalogRole(w http.ResponseWriter, r *http.Request)
 	var roles []string
 	if p.Kind == authn.KindUser {
 		for _, tokenRole := range p.Roles {
-			for _, name := range h.tokenRoles[tokenRole] {
-				if !slices.Contains(roles, name) {
-					roles = append(roles, name)
-				}
-			}
+			roles = append(roles, h.tokenRoles[tokenRole]...)
 		}
 	}
 	if len(roles) == 0 {
@@ -182,7 +183,8 @@ func (h *CaseHandler) requireCatalogRole(w http.ResponseWriter, r *http.Request)
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
 		return Owner{}, false
 	}
-	return Owner{OUHandle: p.OUHandle, Roles: roles}, true
+	slices.Sort(roles)
+	return Owner{OUHandle: p.OUHandle, Roles: slices.Compact(roles)}, true
 }
 
 func toSummary(c Case) CaseSummary {

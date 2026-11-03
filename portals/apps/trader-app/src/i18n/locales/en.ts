@@ -10,7 +10,7 @@ const en = {
       },
       unauthorized: {
         title: 'Access Restricted',
-        message: 'Your account is signed in, but it does not currently have an application role.',
+        message: 'Your account is signed in, but it does not have access to this page.',
         signOut: 'Sign out',
       },
     },

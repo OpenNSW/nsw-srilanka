@@ -111,7 +111,7 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(consignmentID, "My Test Consignment", "IMPORT", "trader1", companyID, "IN_PROGRESS", time.Now(), time.Now()))
 
-	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(([]store.TaskRecord)(nil))
 
 	result, err := svc.GetConsignmentByID(ctx, consignmentID, companyID, []string{"Trader"})
 	assert.NoError(t, err)
@@ -146,7 +146,7 @@ func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(consignmentID, "Someone Else's Consignment", "IMPORT", "trader1", "some-other-company", "IN_PROGRESS", time.Now(), time.Now()))
 
-	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(([]store.TaskRecord)(nil))
 
 	result, err := svc.GetConsignmentByIDForAdmin(ctx, consignmentID)
 	assert.NoError(t, err)
@@ -250,7 +250,7 @@ func TestConsignmentService_GetConsignmentByID_SameCompanyBothSlots_SingleRoleGr
 		WithArgs(fetchConsignmentArgs(id)...).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(id, "IN_PROGRESS", companyID, companyID))
-	mockTaskStore.On("GetAllTasks", mock.Anything, id).Return(([]store.TaskRecord)(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: id}).Return(([]store.TaskRecord)(nil))
 
 	result, err := svc.GetConsignmentByID(context.Background(), id, companyID, []string{"CHA"})
 	assert.NoError(t, err)
@@ -493,7 +493,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(returnedID, "EXPORT", traderID, traderCompanyID, "IN_PROGRESS", time.Now(), time.Now()))
-	mockTaskStore.On("GetAllTasks", mock.Anything, returnedID).Return([]store.TaskRecord(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: returnedID}).Return([]store.TaskRecord(nil))
 
 	result, err := svc.CreateAndStartConsignment(context.Background(), traderID, defaultExportWorkflowTemplateID)
 	assert.NoError(t, err)
@@ -633,7 +633,7 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 		{TaskID: "t6", TaskType: "FORM", State: store.StateCancelled, ActiveTaskTemplateID: "step-6", CreatedAt: now, UpdatedAt: now},
 		{TaskID: "t7", TaskType: "FORM", State: store.StateOnHold, ActiveTaskTemplateID: "step-7", CreatedAt: now, UpdatedAt: now},
 	}
-	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(tasks)
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(tasks)
 
 	dtos, err := svc.buildNodeDTOsFromTaskRecords(ctx, consignmentID)
 	assert.NoError(t, err)

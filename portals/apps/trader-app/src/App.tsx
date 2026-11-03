@@ -8,7 +8,6 @@ import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
 import { UnsavedChangesGuard } from '@/features/zone/components/UnsavedChangesGuard'
 import { CaseDetailScreen, CaseListScreen } from '@/features/case'
 import { isAgencyMode } from '@/features/case/mode'
-import { ROUTES } from '@/constants'
 import { AdminConsignmentEngineStatusScreen } from '@/features/admin/screens/AdminConsignmentEngineStatusScreen.tsx'
 import { AdminConsignmentDetailScreen } from '@/features/admin/screens/AdminConsignmentDetailScreen.tsx'
 import { useAuth } from 'react-oidc-context'
@@ -19,6 +18,11 @@ import { uploadFile, getDownloadUrl } from './services/storage'
 import { searchServices } from './services/searchService'
 import { useAuthContext } from './hooks/useAuthContext'
 import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
+import { AccessRestrictedScreen } from '@/screens/AccessRestrictedScreen'
+import { Can } from '@/components/Can'
+import { NAV_STRUCTURE, firstPermittedPath } from '@/navigation/navItems'
+import { APP_ROUTES, type AppRoute } from '@/navigation/routes'
+import { useAbilities } from '@/hooks/useCan'
 import { appConfig, displayName } from './config'
 import { useEffect } from 'react'
 
@@ -38,8 +42,8 @@ function ProtectedLayout() {
   if (isLoading) return null
   if (!isSignedIn) return <Navigate to="/login" replace />
 
-  // Every signed-in user is admitted; the backend authorizes each request by the
-  // token's roles.
+  // Every signed-in user gets the layout; each route shows its screen only to a
+  // user who may open it (see restrictTo).
   return (
     <ProfileProvider>
       <UploadWrapper>
@@ -47,6 +51,21 @@ function ProtectedLayout() {
       </UploadWrapper>
     </ProfileProvider>
   )
+}
+
+function restrictTo(route: AppRoute, screen: ReactNode) {
+  return (
+    <Can I={route.ability} fallback={<AccessRestrictedScreen />}>
+      {screen}
+    </Can>
+  )
+}
+
+// Sends / to the first nav destination the user may open.
+function HomeRedirect() {
+  const { can } = useAbilities()
+  const path = firstPermittedPath(NAV_STRUCTURE, can)
+  return path ? <Navigate to={path} replace /> : <AccessRestrictedScreen />
 }
 
 function SignedOutRoute() {
@@ -81,23 +100,36 @@ function App() {
         <Route path="/login" element={<SignedOutRoute />} />
 
         <Route element={<ProtectedLayout />}>
-          <Route path="/" element={<Navigate to={ROUTES.CONSIGNMENTS} replace />} />
-          <Route path={ROUTES.CONSIGNMENTS} element={isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />} />
+          <Route path="/" element={<HomeRedirect />} />
           <Route
-            path={ROUTES.CONSIGNMENT_DETAIL_PATTERN}
-            element={isAgencyMode ? <CaseDetailScreen /> : <ConsignmentDetailScreen />}
+            path={APP_ROUTES.consignments.path}
+            element={restrictTo(APP_ROUTES.consignments, isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />)}
           />
           <Route
-            path={ROUTES.TASK_FORM_PATTERN}
-            element={
+            path={APP_ROUTES.consignmentDetail.path}
+            element={restrictTo(
+              APP_ROUTES.consignmentDetail,
+              isAgencyMode ? <CaseDetailScreen /> : <ConsignmentDetailScreen />,
+            )}
+          />
+          <Route
+            path={APP_ROUTES.task.path}
+            element={restrictTo(
+              APP_ROUTES.task,
               <UnsavedChangesGuard>
                 <TaskDetailScreen />
-              </UnsavedChangesGuard>
-            }
+              </UnsavedChangesGuard>,
+            )}
           />
           {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
-          <Route path="/admin/consignments/:consignmentId" element={<AdminConsignmentEngineStatusScreen />} />
-          <Route path="/admin/consignments/:consignmentId/view" element={<AdminConsignmentDetailScreen />} />
+          <Route
+            path={APP_ROUTES.adminConsignment.path}
+            element={restrictTo(APP_ROUTES.adminConsignment, <AdminConsignmentEngineStatusScreen />)}
+          />
+          <Route
+            path={APP_ROUTES.adminConsignmentView.path}
+            element={restrictTo(APP_ROUTES.adminConsignmentView, <AdminConsignmentDetailScreen />)}
+          />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

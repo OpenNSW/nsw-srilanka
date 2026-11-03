@@ -72,14 +72,6 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, config json.RawMes
 	if !record.HasCHA {
 		return plugins.Permanent(plugins.ErrorTypeInput, fmt.Errorf("cha_persist: company %q is not enabled as a CHA", chaCompanyID))
 	}
-	// The case's party is the company's OU, which its users' tokens name.
-	if record.OUHandle == "" {
-		return fmt.Errorf("cha_persist: company %q has no OU handle", chaCompanyID)
-	}
-	// The case's party is the company's OU, which its users' tokens name.
-	if record.OUHandle == "" {
-		return fmt.Errorf("cha_persist: company %q has no OU handle", chaCompanyID)
-	}
 	// Read before anything is written, so unreadable data fails the step with nothing saved.
 	cha, err := chaSeed(record, cfg.CHADataFields)
 	if err != nil {

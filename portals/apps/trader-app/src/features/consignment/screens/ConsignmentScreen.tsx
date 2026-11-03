@@ -14,6 +14,7 @@ import { ROUTES } from '@/constants'
 import { LinkRow, LoadingOverlay, PageHeader, PageState, PaginationControl, RowLink, Surface, Table } from '@portals/ui'
 import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
 import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
+import { Can } from '@/components/Can'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -71,17 +72,19 @@ export function ConsignmentScreen() {
         title={t('consignments.list.title')}
         count={totalCount}
         actions={
-          <div className="flex flex-col items-end gap-2">
-            <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
-              <PlusIcon />
-              {creating ? t('consignments.list.creating') : t('consignments.list.create')}
-            </Button>
-            {createError && (
-              <Text size="2" color="red">
-                {t('consignments.list.error.createFailed')}
-              </Text>
-            )}
-          </div>
+          <Can I="consignment.create">
+            <div className="flex flex-col items-end gap-2">
+              <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
+                <PlusIcon />
+                {creating ? t('consignments.list.creating') : t('consignments.list.create')}
+              </Button>
+              {createError && (
+                <Text size="2" color="red">
+                  {t('consignments.list.error.createFailed')}
+                </Text>
+              )}
+            </div>
+          </Can>
         }
       />
 

@@ -297,10 +297,10 @@ func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
 // parks at once.
 func TestExternalReview_RefusedDispatchIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusBadRequest)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
 
 	err := p.Execute(reviewContext(map[string]any{}),
-		json.RawMessage(`{"service_id": "agency", "path": "/api/v1/inject"}`))
+		json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review"}`))
 
 	errType, permanent := plugins.PermanentType(err)
 	assert.True(t, permanent, "err = %v", err)

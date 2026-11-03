@@ -10,6 +10,9 @@ type Props = {
   // A completed task keeps its claim as a record of who worked on it, but can no
   // longer be claimed, and is not worth releasing.
   completed: boolean
+  // Whether the user may claim, release or take over tasks at all. Without it the
+  // banner only says who holds the claim.
+  canChange: boolean
   busy: boolean
   error: string | null
   // Claims the task, taking it over when another user holds it.
@@ -19,9 +22,10 @@ type Props = {
 
 // ClaimBanner says who holds the task's claim and offers Claim, Release or Take over.
 // A claim is a hint for other users: it never locks the task.
-export function ClaimBanner({ claim, completed, busy, error, onClaim, onRelease }: Props) {
+export function ClaimBanner({ claim, completed, canChange, busy, error, onClaim, onRelease }: Props) {
   const { t } = useTranslation()
   const [confirmingTakeOver, setConfirmingTakeOver] = useState(false)
+  const changeable = canChange && !completed
   const name = claim.holder?.name || t('tasks.claim.anotherUser')
 
   let badge
@@ -49,19 +53,19 @@ export function ClaimBanner({ claim, completed, busy, error, onClaim, onRelease 
     <Surface elevation="sm" className="px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {badge}
-        {!completed && !claim.holder && (
+        {changeable && !claim.holder && (
           <Button variant="soft" size="2" onClick={onClaim} disabled={busy} className="cursor-pointer">
             {busy ? <Spinner size="1" /> : <LockClosedIcon />}
             {t('tasks.claim.claim')}
           </Button>
         )}
-        {!completed && claim.mine && (
+        {changeable && claim.mine && (
           <Button variant="soft" color="gray" size="2" onClick={onRelease} disabled={busy} className="cursor-pointer">
             {busy ? <Spinner size="1" /> : <LockOpen1Icon />}
             {t('tasks.claim.release')}
           </Button>
         )}
-        {!completed && claim.holder && !claim.mine && (
+        {changeable && claim.holder && !claim.mine && (
           <>
             <Button
               variant="soft"

@@ -1,7 +1,7 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/OpenNSW/core v0.0.0-20261103043610-00b489c0f926 h1:4XXOhir1vDhoZE3Fv8HynA6in12UOBaYnreDW7xlmrc=
-github.com/OpenNSW/core v0.0.0-20261103043610-00b489c0f926/go.mod h1:ww5Ydue9keDzxrPb0h+2RBGM789WLdDDaDaavICUYks=
+github.com/OpenNSW/core v0.0.0-20261103124646-910de3146602 h1:0QJwD6uXjUhF6X7OMupN2RMtDodEEKzcs+yutO/r7jg=
+github.com/OpenNSW/core v0.0.0-20261103124646-910de3146602/go.mod h1:ww5Ydue9keDzxrPb0h+2RBGM789WLdDDaDaavICUYks=
 github.com/OpenNSW/core/authn v0.4.0 h1:kZNUGp49aAZ1ui19soMKF2qGVOc2os1PyS6UuRpT7UY=
 github.com/OpenNSW/core/authn v0.4.0/go.mod h1:9/yGWkx5t5u0+YBUH4FsaZO6wpq/5WK5tdyOD+yL2Ek=
 github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2vbo=
@@ -24,8 +24,8 @@ github.com/OpenNSW/core/pagination v0.1.0 h1:xLpgHAdgYxzJkXXBtQoTMxMxsjZZ9RNYvJO
 github.com/OpenNSW/core/pagination v0.1.0/go.mod h1:UdpPJO/wMu2mv1nCJ1G1X0WEvFso8hh9OpDz2meA/Ts=
 github.com/OpenNSW/core/payment v0.5.0 h1:Xt5qPsEMNXQuyzcL/lR+QVkKmLvyJyHy/x+nMpLYDaU=
 github.com/OpenNSW/core/payment v0.5.0/go.mod h1:pg2hsryKmPVkiN42MWHEpwaPIuVGG5M32QUegd1AE+g=
-github.com/OpenNSW/core/refid v0.4.0 h1:1j+S4FoiSf1709cfNl0kYbEs4fLdquwEPZUQhXDvsKA=
-github.com/OpenNSW/core/refid v0.4.0/go.mod h1:XAsH8UTKJU4Zu6d9WcqBUP21xqmi8afqxAOH9T2pph4=
+github.com/OpenNSW/core/refid v0.5.0 h1:dEOimyV5tHrlmF+9RFMwH/MwPd9aKT0AkDm3JUc07mo=
+github.com/OpenNSW/core/refid v0.5.0/go.mod h1:XAsH8UTKJU4Zu6d9WcqBUP21xqmi8afqxAOH9T2pph4=
 github.com/OpenNSW/core/remote v0.9.0 h1:vwmzRZTvYqDkHW4hDX641TD6nNvLjykpWe6v5Xe0coU=
 github.com/OpenNSW/core/remote v0.9.0/go.mod h1:ldtY4TRSPVX5L9BGEB7c4cIgpyJSSEVDit7fiTh4Qzs=
 github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrxBChQ=

@@ -87,13 +87,19 @@ APP_MODE: 'agency',
 
 In agency mode `/consignments` lists cases (`GET /api/v1/cases`), and
 `/consignments/:id` reuses `ConsignmentDetailScreen` with a `getCase` fetcher
-(`GET /api/v1/cases/{id}`): the tasks of every workflow in the case, in the
-consignment's `workflowNodes` shape. Opening a task uses the normal
+(`GET /api/v1/cases/{id}`): the tasks of every workflow in the case whose
+`read.roles` name a catalog role the officer holds, in the consignment's
+`workflowNodes` shape. Opening a task uses the normal
 `/api/v1/tasks/{id}`, authorized by the task gate. The screens keep the
 `/consignments` paths because task cards and the task screen link there directly.
 
-The app has no roles of its own: it admits every signed-in user, and the backend
-checks the token's catalog roles on each call.
+The app has no roles of its own. It shows each screen and button only to a user whose token
+carries the scope its API calls need, for example `consignment:read` for the cases and
+`task:write` for working on a task; anyone else sees **Access Restricted** in place of a
+screen. An agency portal's `IDP_SCOPES` leaves out the scopes for creating consignments,
+their flows and the admin views, so it never shows them. To give one role a different view
+than another (a supervisor, say), grant the two IdP roles different scopes on the agency's
+API. The backend still checks the token's catalog roles on each call.
 
 ## Flow
 
@@ -166,7 +172,7 @@ hint, not a lock: submitting a step never checks it.
 Any officer who can open the task may claim it; both routes need `task:write`.
 Claims, takeovers and releases are recorded in the audit trail as task updates. Claims
 are on in agency mode and off in TNSW, where the routes answer 404 and the task view
-has no `claim`. The claim is stored on the task row (`task_records_v2.claimed_by` and
+has no `claim`. The claim is stored on the task row (`taskflow_tasks.claimed_by` and
 `claimed_at`, migration `000028`) and lasts across every step of the task. The full
 contract is in `api/tasks.openapi.yaml`.
 
@@ -208,8 +214,12 @@ every task:
   `["officer"]`.
 
 A step without an `authz` block is refused on writes, so every step must declare one.
-A task template without a `read` block is readable by every role that owns the case,
-so a task that should be open to one role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
+A task template without a `read` block is readable by every role that owns the case, so a task
+that should be open to one role only must say so. The case detail, though, lists a task
+only when its `read.roles` name a role the officer holds, so a task without them can be
+opened but never appears in a case: give every task `read.roles`. The roles are copied
+to the task when it starts, so changing a template's `read.roles` only affects tasks
+started after the change. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
 (read authorization) and the
 [authz extension](../internal/tasks/extensions/authz/README.md).
 

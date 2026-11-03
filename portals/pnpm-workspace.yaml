@@ -30,3 +30,8 @@ allowBuilds:
 
 # Fail the install when Node.js or pnpm don't satisfy package.json `engines`.
 engineStrict: true
+
+# Our own packages (OpenNSW/ui-packages) are trusted as soon as they are
+# published; everything else waits pnpm's minimum release age.
+minimumReleaseAgeExclude:
+  - '@opennsw/*'

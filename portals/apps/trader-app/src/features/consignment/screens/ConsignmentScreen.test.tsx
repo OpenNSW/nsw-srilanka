@@ -12,6 +12,8 @@ vi.hoisted(() => {
 })
 
 vi.mock('@/features/consignment/service', () => ({ getAllConsignments: vi.fn(), createConsignment: vi.fn() }))
+// The list needs a signed-in user granted to read consignments.
+vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { scope: 'openid consignment:read' } }) }))
 // The keys are the text: what each test checks is which message shows, not its wording.
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-i18next')>()),

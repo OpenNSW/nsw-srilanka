@@ -12,14 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeCaseTasks answers with the tasks it holds, and records the case asked for.
+// fakeCaseTasks answers with the tasks it holds, and records the filter asked with.
 type fakeCaseTasks struct {
 	tasks  []store.TaskRecord
-	caseID string
+	filter store.TaskFilter
 }
 
-func (f *fakeCaseTasks) GetAllTasks(_ context.Context, caseID string) []store.TaskRecord {
-	f.caseID = caseID
+func (f *fakeCaseTasks) GetTasks(_ context.Context, filter store.TaskFilter) []store.TaskRecord {
+	f.filter = filter
 	return f.tasks
 }
 
@@ -72,7 +72,8 @@ func TestSLPACaseContainers_PairsEachDummyWithTheContainerItWasConsolidatedTo(t 
 		task("slpa-consolidation-flow", 10, map[string]any{"so_container_no": "CBEX1E68944-20261102-01", "container_no": "MSCU8492019", "deleted": false}),
 	)
 
-	assert.Equal(t, "consignment-1", source.caseID, "the containers are the sundry order's own consignment's")
+	// Only the case is set: every task of the consignment is read, whatever its read roles.
+	assert.Equal(t, store.TaskFilter{CaseID: "consignment-1"}, source.filter, "the containers are the sundry order's own consignment's")
 	assert.Equal(t, []any{
 		container("CBEX1E68944-20261102-01", "MSCU8492019"),
 		container("CBEX1E68944-20261102-02", ""),

@@ -4,7 +4,8 @@
 // `docker compose` (bind-mounted into the container — see compose.yml).
 // A real deployment supplies its own values via Helm (see
 // deployments/helm/values-example.yaml). IDP_SCOPES must include the
-// API scopes the backend checks, or it rejects the resulting token.
+// API scopes: the backend checks them on every call, and the portal
+// shows a screen or action only to a user the IdP granted its scope.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8080',
   IDP_BASE_URL: 'http://localhost:8090',
@@ -12,7 +13,7 @@ window.__APP_CONFIG__ = {
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.nsw-srilanka.local',
   APP_URL: 'http://localhost:5173',
   IDP_SCOPES:
-    'openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,hscode:read,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
+    'openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
   // ID-token claim holding the roles (an array), and the role names in it. For an
   // IdP that models roles as groups, set the claim to 'groups' and use the group names.
   SHOW_AUTOFILL_BUTTON: 'true',

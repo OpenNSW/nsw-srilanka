@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/OpenNSW/core v0.0.0-20261103043610-00b489c0f926
+	github.com/OpenNSW/core v0.0.0-20261103124646-910de3146602
 	github.com/OpenNSW/core/authn v0.4.0
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea
@@ -16,7 +16,7 @@ require (
 	github.com/OpenNSW/core/notification v0.3.0
 	github.com/OpenNSW/core/pagination v0.1.0
 	github.com/OpenNSW/core/payment v0.5.0
-	github.com/OpenNSW/core/refid v0.4.0
+	github.com/OpenNSW/core/refid v0.5.0
 	github.com/OpenNSW/core/remote v0.9.0
 	github.com/OpenNSW/core/secret v0.2.0
 	github.com/OpenNSW/core/shared v0.3.1-0.20261022063536-f6b1f0bced69

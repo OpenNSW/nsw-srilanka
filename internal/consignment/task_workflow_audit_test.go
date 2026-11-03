@@ -138,7 +138,7 @@ func TestTaskWorkflowActions_AuditTarget(t *testing.T) {
 
 func TestWorkflowEngineStatus_AuditTargetUnchanged(t *testing.T) {
 	tasks := new(MockTaskStore) // A flow audit must not use the task-workflow lookup.
-	tasks.On("GetAllTasks", mock.Anything, "flow-1").Return([]store.TaskRecord(nil)).Once()
+	tasks.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: "flow-1"}).Return([]store.TaskRecord(nil)).Once()
 	svc := mustNewService(t, nil, nil, nil, nil, nil, tasks)
 	wm := new(MockWM)
 	require.NoError(t, svc.RegisterWorkflowManager(wm))

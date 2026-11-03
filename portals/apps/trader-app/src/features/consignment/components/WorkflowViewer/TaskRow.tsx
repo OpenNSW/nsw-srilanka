@@ -7,6 +7,8 @@ import type { WorkflowNode } from '@/features/consignment/types'
 import { WORKFLOW_STATUS_I18N_KEYS, WORKFLOW_STATUS_TONES } from '@/features/consignment/workflowStatus'
 import { formatDateTime } from '@/features/consignment/utils'
 import { ROUTES } from '@/constants'
+import { useCan } from '@/hooks/useCan'
+import { APP_ROUTES } from '@/navigation/routes'
 
 // One task of a consignment, as a card that opens it.
 export function TaskRow({
@@ -19,6 +21,10 @@ export function TaskRow({
   needsAction?: boolean
 }) {
   const { t } = useTranslation()
+  // A user who may not open the task gets no link, and one who may not act on
+  // it is offered View, not Continue, on a task that needs action.
+  const canOpen = useCan(APP_ROUTES.task.ability)
+  const canAct = useCan('task.act')
   const name = step.workflowNodeTemplate.name || t('workflow.untitledTask')
   const href = ROUTES.TASK_FORM(consignmentId, step.id)
   const status = (
@@ -58,7 +64,7 @@ export function TaskRow({
         {when && <p className="mt-0.5 text-xs text-foreground-muted">{when}</p>}
         {note}
       </div>
-      {needsAction ? (
+      {!canOpen ? null : needsAction && canAct ? (
         step.state !== 'LOCKED' && (
           <Button asChild size="2">
             <Link to={href} aria-label={t('workflow.continueTask', { name })}>

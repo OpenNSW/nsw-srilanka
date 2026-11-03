@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -44,10 +45,24 @@ func (f fakeCaseRepo) GetCase(_ context.Context, o Owner, id string) (*Case, err
 	return &c, nil
 }
 
-type fakeTasks map[string][]store.TaskRecord // case id -> tasks
+// fakeTasks answers GetTasks the way core's store does, through TaskFilter.Matches, and
+// records each filter it was asked with.
+type fakeTasks struct {
+	tasks   []store.TaskRecord
+	filters *[]store.TaskFilter
+}
 
-func (f fakeTasks) GetAllTasks(_ context.Context, caseID string) []store.TaskRecord {
-	return f[caseID]
+func (f fakeTasks) GetTasks(_ context.Context, filter store.TaskFilter) []store.TaskRecord {
+	if f.filters != nil {
+		*f.filters = append(*f.filters, filter)
+	}
+	var out []store.TaskRecord
+	for _, t := range f.tasks {
+		if filter.Matches(t) {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // officer is a CDA user holding roles.
@@ -67,26 +82,31 @@ func requestBy(p *authn.Principal, target string, id string) *http.Request {
 	return r
 }
 
-// newCaseHandler serves case C1, owned by CDA's OU as officer, with two officer tasks and
-// a system one.
-func newCaseHandler(t *testing.T) *CaseHandler {
+// newCaseFixture serves case C1, owned by CDA's OU as officer, with tasks of several
+// roles, and returns the filters its task store is asked with.
+func newCaseFixture(t *testing.T) (*CaseHandler, *[]store.TaskFilter) {
 	t.Helper()
 	now := time.Now()
 	repo := fakeCaseRepo{
 		cases:  map[string]Case{"C1": {ID: "C1", State: "IN_PROGRESS", CreatedAt: now, UpdatedAt: now}},
 		owners: map[string]Owner{"C1": {OUHandle: "cda", Roles: []string{"officer"}}},
 	}
+	officerRole := []string{"officer"}
+	var filters []store.TaskFilter
 	// Every flow on a case files its tasks under the case ID.
-	tasks := fakeTasks{"C1": {
-		{TaskID: "n1", TaskType: "APPLICATION", State: "PENDING_USER", TaskTemplateID: "tpl-a"},
-		{TaskID: "n2", TaskType: "APPLICATION", State: "COMPLETED", TaskTemplateID: "tpl-b"},
-		{TaskID: "n3", TaskType: "SYSTEM", State: "COMPLETED"},
+	tasks := fakeTasks{filters: &filters, tasks: []store.TaskRecord{
+		{TaskID: "n1", CaseID: "C1", ReadRoles: officerRole, TaskType: "APPLICATION", State: "PENDING_USER", TaskTemplateID: "tpl-a"},
+		{TaskID: "n2", CaseID: "C1", ReadRoles: officerRole, TaskType: "APPLICATION", State: "COMPLETED", TaskTemplateID: "tpl-b"},
+		{TaskID: "n3", CaseID: "C1", ReadRoles: officerRole, TaskType: "SYSTEM", State: "COMPLETED"},
+		{TaskID: "n4", CaseID: "C1", ReadRoles: []string{"reviewer"}, TaskType: "REVIEW", State: "PENDING_USER", TaskTemplateID: "tpl-r"},
+		{TaskID: "n5", CaseID: "C1", TaskType: "APPLICATION", State: "PENDING_USER", TaskTemplateID: "tpl-none"},
+		{TaskID: "other-case", CaseID: "C9", ReadRoles: officerRole, TaskType: "APPLICATION", State: "PENDING_USER"},
 	}}
-	return NewCaseHandler(repo, tasks, newSet(t, nil, nil), map[string]string{"officer": "Officer", "reviewer": "Reviewer"})
+	return NewCaseHandler(repo, tasks, newSet(t, nil, nil), map[string]string{"officer": "Officer", "reviewer": "Reviewer"}), &filters
 }
 
 func TestCaseHandlerRequiresACatalogRole(t *testing.T) {
-	h := newCaseHandler(t)
+	h, _ := newCaseFixture(t)
 	for name, tc := range map[string]struct {
 		p    *authn.Principal
 		want int
@@ -113,7 +133,7 @@ func TestCaseHandlerRequiresACatalogRole(t *testing.T) {
 
 // A case is shown only to an OU that owns it, in a role the caller's token holds.
 func TestCaseHandlerShowsOnlyTheCallersCases(t *testing.T) {
-	h := newCaseHandler(t)
+	h, _ := newCaseFixture(t)
 	for name, p := range map[string]*authn.Principal{
 		"another role": officer("Reviewer"),
 		"another OU":   {Kind: authn.KindUser, OUHandle: "sltb", Roles: []string{"Officer"}},
@@ -132,10 +152,13 @@ func TestCaseHandlerShowsOnlyTheCallersCases(t *testing.T) {
 	}
 }
 
-func TestCaseHandlerDetailListsTheCasesTasks(t *testing.T) {
-	h := newCaseHandler(t)
+// The detail lists the case's tasks the officer may read: those whose read.roles name a
+// catalog role they hold, asking the store once for the case with those catalog roles.
+func TestCaseHandlerDetailListsTheReadableTasks(t *testing.T) {
+	h, filters := newCaseFixture(t)
+
 	rec := httptest.NewRecorder()
-	h.HandleGetCase(rec, requestBy(officer("Officer"), "/api/v1/cases/C1", "C1"))
+	h.HandleGetCase(rec, requestBy(officer("Reviewer", "Trader", "Officer"), "/api/v1/cases/C1", "C1"))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
 	}
@@ -143,24 +166,54 @@ func TestCaseHandlerDetailListsTheCasesTasks(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.WorkflowNodes) != 2 {
-		t.Fatalf("nodes = %+v, want n1 and n2 (SYSTEM skipped)", got.WorkflowNodes)
+	// n3 is SYSTEM, n5 lists no read roles, and other-case is another case's.
+	var ids []string
+	for _, n := range got.WorkflowNodes {
+		ids = append(ids, n.ID)
 	}
-	// Neither task's render config resolves, so each falls back to its template id.
-	n1, n2 := got.WorkflowNodes[0], got.WorkflowNodes[1]
-	if n1.ID != "n1" || n1.State != "IN_PROGRESS" || n1.WorkflowNodeTemplate.Name != "tpl-a" {
+	if !slices.Equal(ids, []string{"n1", "n2", "n4"}) {
+		t.Errorf("nodes = %v, want n1, n2 and n4", ids)
+	}
+	// No render config resolves, so each falls back to its template id.
+	if n1 := got.WorkflowNodes[0]; n1.State != "IN_PROGRESS" || n1.WorkflowNodeTemplate.Name != "tpl-a" {
 		t.Errorf("n1 = %+v", n1)
 	}
-	if n2.ID != "n2" || n2.State != "COMPLETED" || n2.WorkflowNodeTemplate.Name != "tpl-b" {
-		t.Errorf("n2 = %+v", n2)
+	// The catalog roles, not the token roles; a token role outside the catalog adds none.
+	want := []store.TaskFilter{{CaseID: "C1", Roles: []string{"officer", "reviewer"}}}
+	if !reflect.DeepEqual(*filters, want) {
+		t.Errorf("filters = %+v, want %+v", *filters, want)
 	}
 }
 
 func TestCaseHandlerUnknownCase(t *testing.T) {
+	h, _ := newCaseFixture(t)
 	rec := httptest.NewRecorder()
-	newCaseHandler(t).HandleGetCase(rec, requestBy(officer("Officer"), "/api/v1/cases/nope", "nope"))
+	h.HandleGetCase(rec, requestBy(officer("Officer"), "/api/v1/cases/nope", "nope"))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+// Catalog roles sharing a token role are all held by an officer holding it, so a case
+// owned in either is theirs.
+func TestCaseHandlerSharedTokenRole(t *testing.T) {
+	var filters []store.TaskFilter
+	repo := fakeCaseRepo{
+		cases:  map[string]Case{"C1": {ID: "C1"}},
+		owners: map[string]Owner{"C1": {OUHandle: "cda", Roles: []string{"accountant"}}},
+	}
+	h := NewCaseHandler(repo, fakeTasks{filters: &filters}, newSet(t, nil, nil),
+		map[string]string{"accountant": "CDA Officer", "officer": "CDA Officer"})
+
+	rec := httptest.NewRecorder()
+	h.HandleGetCase(rec, requestBy(officer("CDA Officer", "CDA Officer"), "/api/v1/cases/C1", "C1"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+	}
+	want := []store.TaskFilter{{CaseID: "C1", Roles: []string{"accountant", "officer"}}}
+	if !reflect.DeepEqual(filters, want) {
+		t.Errorf("filters = %+v, want %+v", filters, want)
 	}
 }
 
@@ -173,20 +226,5 @@ func TestCaseHandlerEmptyTokenRole(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("roles %q: status = %d, want 403", roles, rec.Code)
 		}
-	}
-}
-
-// Two catalog roles may share one token role: its holder reads the cases owned in either.
-func TestCaseHandlerSharedTokenRole(t *testing.T) {
-	now := time.Now()
-	repo := fakeCaseRepo{
-		cases:  map[string]Case{"C1": {ID: "C1", State: "IN_PROGRESS", CreatedAt: now, UpdatedAt: now}},
-		owners: map[string]Owner{"C1": {OUHandle: "cda", Roles: []string{"accountant"}}},
-	}
-	h := NewCaseHandler(repo, fakeTasks{}, newSet(t, nil, nil), map[string]string{"officer": "CDA Officer", "accountant": "CDA Officer"})
-	rec := httptest.NewRecorder()
-	h.HandleGetCase(rec, requestBy(officer("CDA Officer"), "/api/v1/cases/C1", "C1"))
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", rec.Code)
 	}
 }

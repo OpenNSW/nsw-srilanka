@@ -71,7 +71,7 @@ func mockDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	return db, mock
 }
 
-const tasksOfCaseQuery = `SELECT * FROM "task_records_v2" WHERE case_id = $1`
+const tasksOfCaseQuery = `SELECT * FROM "taskflow_tasks" WHERE case_id = $1`
 
 // The store returns a failed query's error rather than an empty list.
 func TestStore_ReturnsTheQueryError(t *testing.T) {

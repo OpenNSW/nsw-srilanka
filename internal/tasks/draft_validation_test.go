@@ -64,7 +64,9 @@ func (s *memTaskStore) InitTask(context.Context, store.TaskRecord) error { panic
 func (s *memTaskStore) GetTaskByWorkflowID(context.Context, string) (store.TaskRecord, bool) {
 	panic("not used")
 }
-func (s *memTaskStore) GetAllTasks(context.Context, string) []store.TaskRecord { panic("not used") }
+func (s *memTaskStore) GetTasks(context.Context, store.TaskFilter) []store.TaskRecord {
+	panic("not used")
+}
 func (s *memTaskStore) ClaimStep(context.Context, string, store.StepClaim) (int64, error) {
 	panic("not used")
 }
