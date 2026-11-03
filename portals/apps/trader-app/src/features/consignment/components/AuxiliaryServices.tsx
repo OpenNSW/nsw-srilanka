@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Button, Select, Text } from '@radix-ui/themes'
+import { Badge, Button, Select } from '@radix-ui/themes'
+import { ChevronRightIcon, ExclamationTriangleIcon, LayersIcon } from '@radix-ui/react-icons'
 import { ConfirmDialog, Surface } from '@portals/ui'
 import { useTranslation } from 'react-i18next'
 import type { FlowOption } from '@/features/consignment/types.ts'
@@ -43,23 +44,32 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
 
   return (
     <Surface className="mt-6">
+      {/* Headed and laid out like the workflow steps card above it. */}
       <section aria-labelledby="auxiliary-services-title" className="p-4 sm:p-6">
-        <h2 id="auxiliary-services-title" className="text-sm font-semibold text-foreground">
+        <h2
+          id="auxiliary-services-title"
+          className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"
+        >
+          <LayersIcon aria-hidden className="text-info-strong" />
           {t('consignments.detail.flows.title')}
+          <Badge color="gray" variant="soft" radius="full">
+            {flows.length}
+          </Badge>
         </h2>
         {failed && (
-          <Text as="p" size="2" color="red" className="mt-3">
+          <p className="mb-3 flex items-center gap-1 text-sm font-medium text-error-strong">
+            <ExclamationTriangleIcon aria-hidden />
             {t('consignments.detail.flows.failed', { label: failed.label })}
-          </Text>
+          </p>
         )}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-app-surface px-4 py-3 sm:flex-row sm:items-center">
           <Select.Root value={selectedId} onValueChange={setSelectedId} disabled={starting}>
             <Select.Trigger
-              className="min-w-64"
+              className="w-full sm:flex-1"
               placeholder={t('consignments.detail.flows.placeholder')}
               aria-label={t('consignments.detail.flows.title')}
             />
-            <Select.Content>
+            <Select.Content position="popper">
               {flows.map((flow) => (
                 <Select.Item key={flow.templateId} value={flow.templateId}>
                   {flow.label}
@@ -69,6 +79,7 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
           </Select.Root>
           <Button size="2" onClick={() => setPending(selected)} disabled={!selected || starting}>
             {t('consignments.detail.flows.start')}
+            <ChevronRightIcon aria-hidden />
           </Button>
         </div>
       </section>
