@@ -69,7 +69,10 @@ CDA for this deployment, on the `CDA API` resource server
 | ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
 | TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `workflow:inject`, and `task:write` to reply on CDA's parked steps, which its catalog maps `tnsw` to |
-| CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `task:write` on TNSW, which maps `cda` to it in its catalog, and `storage:read`/`write`              |
+| CDA's decision callback and storage | `CDA_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` on TNSW, which maps `cda` to it in its catalog, and `storage:read`/`write`           |
+
+`CDA_TO_NSW` and the roles that grant it the NSW API are in TNSW's OU, in
+[`idp/bootstrap/15-tnsw-agency-clients.yaml`](../../../idp/bootstrap/15-tnsw-agency-clients.yaml).
 
 TNSW's `config.yaml` services entry `cda` requests `workflow:inject` and `task:write` with
 `resource=https://api.cda.nsw-agency.local` (see `configs/config*.example.yaml`).

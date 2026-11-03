@@ -1,7 +1,12 @@
-# NSW platform: user types, the Government Organization and Private Sector OUs, the
-# NSW API resource server, the trader, CHA and NSW admin roles and groups, the trader
-# portal, the SLCE and GovPay webhook clients, and CORS. References nothing in the
-# agency or sample files.
+# NSW platform: user types, the TNSW, Government Organization and Private Sector OUs,
+# the NSW API resource server, the trader, CHA and NSW admin roles and groups, the
+# trader portal, the SLCE and GovPay webhook clients, and CORS. References nothing in
+# the agency or sample files.
+#
+# The TNSW OU owns the NSW API and everything that protects or calls it: its roles, its
+# inbound clients (the agencies' are in 15-tnsw-agency-clients.yaml), and its admins.
+# The Traders and CHA groups sit in Private Sector with the companies, and the image's
+# own default OU is left to administering ThunderID.
 #
 # LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
 # image's own documents as one upsert import (see idp/README.md). Client IDs and the
@@ -12,7 +17,7 @@
 # File: TraderApp.yaml
 resource_type: application
 id: 01a13912-e79b-7f19-999c-ae0911abc18f
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 name: TraderApp
 description: Application for trader portal built with React
 type: browser
@@ -125,7 +130,7 @@ inboundAuthConfig:
 # File: SLCE_to_NSW.yaml
 resource_type: application
 id: 01a13912-e7d9-7dd6-a187-1e9c60456335
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 name: SLCE to NSW
 description: Machine-to-machine client for SLC Edge (ASYCUDA) to call the NSW SLCE webhook endpoint
 type: m2m
@@ -177,7 +182,7 @@ inboundAuthConfig:
 # File: GOVPAY_to_NSW.yaml
 resource_type: application
 id: 01a13912-e91b-75dc-a2f1-06ddd1668388
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 name: GOVPAY to NSW
 description: Machine-to-machine client for GOVPAY to call the NSW payment webhook and validate endpoints
 type: m2m
@@ -239,7 +244,7 @@ resource_type: group
 id: 01a13912-d377-73d1-a3e4-a5877421ca85
 name: NSW Admins
 description: NSW admin members group
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 ---
 # File: Traders.yaml
 resource_type: group
@@ -254,6 +259,18 @@ id: 01a13912-d1d8-7926-b674-4acac460492f
 handle: private-sector
 name: Private Sector
 description: Organization unit for private sector entities
+parent: null
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: TNSW.yaml
+resource_type: organization_unit
+id: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
+handle: tnsw
+name: TNSW
+description: Organization unit for the TNSW platform's own API, clients, roles and administrators
 parent: null
 isRegistrationFlowEnabled: false
 isRecoveryFlowEnabled: false
@@ -279,7 +296,7 @@ name: NSW API
 description: NSW API resource server
 identifier: https://api.nsw-srilanka.local
 type: API
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 delimiter: ":"
 resources:
   - name: CHA
@@ -373,7 +390,7 @@ resource_type: role
 id: 01a13912-d7ca-706d-86fa-7864e2f48493
 name: SLCE Webhook
 description: Role for SLCE webhook clients
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
@@ -387,7 +404,7 @@ resource_type: role
 id: 01a13912-d7fe-751e-84f8-7d6ba9fa59e7
 name: Payment Webhook
 description: Role for Payment webhook clients
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
@@ -402,7 +419,7 @@ resource_type: role
 id: 01a13912-d740-7109-9f73-3cb0db9d15b6
 name: Trader
 description: Role for trader operations
-ouId: 01a13912-d1d8-7926-b674-4acac460492f
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
@@ -425,7 +442,7 @@ resource_type: role
 id: 01a13912-d768-7a5f-91e0-a458987b2898
 name: CHA
 description: Role for CHA operations
-ouId: 01a13912-d1d8-7926-b674-4acac460492f
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
@@ -447,7 +464,7 @@ resource_type: role
 id: 01a13912-d4ca-70cf-a8d3-1fc84c894ee8
 name: NSW Admin
 description: Role for NSW admin operations
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
@@ -468,7 +485,7 @@ resource_type: user_type
 id: 01a13912-d329-7a97-a629-72ffbaaa94f7
 category: user
 name: Admin_User
-ouId: 01900000-0000-7000-8000-000000000001
+ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 systemAttributes:
   display: username
 schema: {"username":{"type":"string","required":true,"unique":true},"password":{"type":"string","required":false,"credential":true},"email":{"type":"string","required":true,"unique":true,"regex":"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"},"phone_number":{"type":"string","required":false,"regex":"^\\+?[1-9]\\d{1,14}$"},"given_name":{"type":"string","required":false},"family_name":{"type":"string","required":false}}

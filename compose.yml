@@ -124,8 +124,8 @@ services:
     restart: "no"
 
   # Stage B: generate key material, then import the declarative bootstrap resources:
-  # the image's own, then every document in idp/bootstrap/ (admin-cli, the NSW
-  # platform, the agencies and the sample data). See idp/README.md.
+  # the image's own, then every document in idp/bootstrap/ (the NSW platform, the
+  # agencies and the sample data). See idp/README.md.
   thunderid-setup:
     image: ghcr.io/thunder-id/thunderid:1.1.0
     container_name: thunderid-setup

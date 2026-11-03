@@ -49,7 +49,8 @@ flowchart LR
   equals it (`internal/tasks/authzgate`, `internal/profile/handler.go`). If no company has
   that handle, the user can sign in but owns nothing.
 - **What a user may do comes from the groups.** `Traders` grants the `Trader` role and
-  `CHA` grants the `CHA` role (`idp/bootstrap/10-nsw-platform.yaml`). Each role grants
+  `CHA` grants the `CHA` role (`idp/bootstrap/10-nsw-platform.yaml`; the groups are in
+  the Private Sector OU and the roles, which sit beside the NSW API, in TNSW's). Each role grants
   scopes on the NSW API: both get `consignment:flow:write` to start a flow on a
   consignment, and only `Trader` gets `consignment:write` to create one. The `catalog`
   section of `config.yaml` maps the role names the backend expects (`trader`, `cha`) to
