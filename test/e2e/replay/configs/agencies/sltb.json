@@ -4,10 +4,10 @@
     "clientID": "SLTB_TO_NSW",
     "roles": ["AgencyM2M"],
     "scopes": [
-      "nsw:task:write",
-      "nsw:consignment:read",
-      "nsw:storage:read",
-      "nsw:storage:write"
+      "task:write",
+      "consignment:read",
+      "storage:read",
+      "storage:write"
     ]
   },
   "inbound": {
