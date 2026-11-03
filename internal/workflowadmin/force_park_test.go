@@ -257,7 +257,7 @@ func TestRouter_HandleForcePark_MapsResults(t *testing.T) {
 			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
 				svc, mockWM, calls := forceParkFixture(t, route, nil)
 				client, _ := nswaudit.NewWithCapture()
-				r := NewHandler(svc, client)
+				r := NewHandler(svc, nil, client)
 				mockWM.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(tt.instance, tt.statusErr)
 				expectPark(mockWM, calls, tt.parkErr)
 
@@ -289,7 +289,7 @@ func TestRouter_HandleForcePark_RejectsInvalidRequest(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
 				client, _ := nswaudit.NewWithCapture()
-				r := NewHandler(newTestService(nil), client)
+				r := NewHandler(newTestService(nil), nil, client)
 				req := newForceParkRequest(tt.body)
 				req.SetPathValue("stepId", tt.stepID)
 

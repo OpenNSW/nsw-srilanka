@@ -24,6 +24,8 @@ const (
 	errInvalidRequestBody = "invalid request body"
 	errInvalidAdminAction = "action must be one of RETRY, COMPLETE, ABORT"
 	errReasonRequired     = "reason is required"
+	errCaseIDRequired     = "case ID is required"
+	errCaseNotFound       = "case not found"
 )
 
 // validAdminActions maps the wire-format action string onto the core/workflow constant, and
@@ -34,15 +36,48 @@ var validAdminActions = map[string]workflow.AdminResolutionAction{
 	string(workflow.AdminActionAbort):    workflow.AdminActionAbort,
 }
 
-// Handler serves the admin routes on svc, auditing every read and override.
+// Handler serves the admin routes on svc and cases, auditing every read and override.
 type Handler struct {
 	svc   *Service
+	cases *CaseService
 	audit nswaudit.Auditor
 }
 
 // NewHandler creates a Handler. A nil auditor records nothing.
-func NewHandler(svc *Service, auditor nswaudit.Auditor) *Handler {
-	return &Handler{svc: svc, audit: auditor}
+func NewHandler(svc *Service, cases *CaseService, auditor nswaudit.Auditor) *Handler {
+	return &Handler{svc: svc, cases: cases, audit: auditor}
+}
+
+// HandleGetCase handles GET /api/v1/admin/cases/{id}: any case, with no ownership
+// check — a consignment's or an agency case's, addressed by the one ID space they share.
+// Every task on it is listed whatever its read roles, and its flows by workflow ID, which
+// an admin opens on the routes above.
+//
+// Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go), the same scope
+// as the engine-status routes.
+func (h *Handler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if _, ok := authn.FromContext(ctx); !ok {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errCaseIDRequired)
+		return
+	}
+
+	detail, err := h.cases.GetCaseDetail(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrCaseNotFound) {
+			httputil.Error(w, r, http.StatusNotFound, errCaseNotFound)
+			return
+		}
+		httputil.InternalServerError(w, r, "failed to retrieve case", err)
+		return
+	}
+	h.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, id, false, map[string]any{"view": "admin-case"}))
+	httputil.JSON(w, http.StatusOK, detail)
 }
 
 // HandleGetWorkflowEngineStatus handles GET /api/v1/admin/workflows/{id}/engine-status.

@@ -59,7 +59,7 @@ func newResolveRouter(t *testing.T, route resolveRoute, mockWM *MockWM) *Handler
 	t.Helper()
 	svc := newTestService(nil)
 	require.NoError(t, route.own(svc, mockWM))
-	return NewHandler(svc, nil)
+	return NewHandler(svc, nil, nil)
 }
 
 // parkedInstance is a workflow with one node of nodeType parked in AWAITING_ADMIN under
@@ -116,7 +116,7 @@ func TestHandler_HandleResolveAdminIntervention_UsesOnlyItsOwnManager(t *testing
 			svc := newTestService(nil)
 			require.NoError(t, route.own(svc, ownWM))
 			require.NoError(t, route.other(svc, otherWM))
-			r := NewHandler(svc, nil)
+			r := NewHandler(svc, nil, nil)
 			ownWM.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(parkedInstance(workflow.NodeTypeTask), nil)
 			ownWM.On("ResolveAdminIntervention", mock.Anything, resolveTestWorkflowID, "", mock.Anything).Return(nil)
 
@@ -140,7 +140,7 @@ func TestHandler_HandleResolveAdminIntervention_DoesNotFallBackToTheOtherManager
 			otherWM.Test(t) // an unexpected call fails this test cleanly instead of panicking
 			svc := newTestService(nil)
 			require.NoError(t, route.other(svc, otherWM))
-			r := NewHandler(svc, nil)
+			r := NewHandler(svc, nil, nil)
 
 			w := httptest.NewRecorder()
 			route.handler(r)(w, newResolveRequest(`{"action":"RETRY","reason":"retry"}`))
@@ -245,7 +245,7 @@ func TestHandler_HandleResolveAdminIntervention_RejectsInvalidRequest(t *testing
 	for _, route := range resolveRoutes {
 		for _, tt := range tests {
 			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
-				r := NewHandler(newTestService(nil), nil)
+				r := NewHandler(newTestService(nil), nil, nil)
 
 				w := httptest.NewRecorder()
 				route.handler(r)(w, newResolveRequest(tt.body))
@@ -261,7 +261,7 @@ func TestHandler_HandleResolveAdminIntervention_RejectsInvalidRequest(t *testing
 func TestHandler_HandleResolveAdminIntervention_RequiresStepID(t *testing.T) {
 	for _, route := range resolveRoutes {
 		t.Run(route.name, func(t *testing.T) {
-			r := NewHandler(newTestService(nil), nil)
+			r := NewHandler(newTestService(nil), nil, nil)
 			req := newResolveRequest(`{"action":"RETRY","reason":"retry"}`)
 			req.SetPathValue("stepId", "")
 

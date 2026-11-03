@@ -33,8 +33,6 @@ type CaseRepository interface {
 	ListCases(ctx context.Context, owner Owner, offset, limit int) ([]Case, int64, error)
 	// GetCase returns case id if owner owns it, else ErrCaseNotFound.
 	GetCase(ctx context.Context, owner Owner, id string) (*Case, error)
-	// GetAnyCase returns case id whoever owns it, else ErrCaseNotFound: for the admin view.
-	GetAnyCase(ctx context.Context, id string) (*Case, error)
 }
 
 type repository struct {
@@ -82,19 +80,6 @@ func (r *repository) GetCase(ctx context.Context, owner Owner, id string) (*Case
 	q := `SELECT id, name, state, created_at, updated_at FROM cases WHERE id = ? AND ` + owned
 	var c Case
 	result := r.db.WithContext(ctx).Raw(q, id, owner.OUHandle, owner.Roles).Scan(&c)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	if result.RowsAffected == 0 {
-		return nil, ErrCaseNotFound
-	}
-	return &c, nil
-}
-
-func (r *repository) GetAnyCase(ctx context.Context, id string) (*Case, error) {
-	const q = `SELECT id, name, state, created_at, updated_at FROM cases WHERE id = ?`
-	var c Case
-	result := r.db.WithContext(ctx).Raw(q, id).Scan(&c)
 	if result.Error != nil {
 		return nil, result.Error
 	}

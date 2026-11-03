@@ -73,25 +73,3 @@ func TestGetCaseNotOwned(t *testing.T) {
 		t.Fatalf("err = %v, want ErrCaseNotFound", err)
 	}
 }
-
-// The admin view reads a case whoever owns it.
-func TestGetAnyCase(t *testing.T) {
-	repo, mock := newMockRepo(t)
-	mock.ExpectQuery(`SELECT id, name, state, created_at, updated_at FROM cases WHERE id = \$1$`).
-		WithArgs("C1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "state", "created_at", "updated_at"}).
-			AddRow("C1", nil, "IN_PROGRESS", time.Now(), time.Now()))
-	mock.ExpectQuery(`FROM cases WHERE id = \$1$`).
-		WithArgs("nope").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "state", "created_at", "updated_at"}))
-
-	if c, err := repo.GetAnyCase(context.Background(), "C1"); err != nil || c.ID != "C1" {
-		t.Fatalf("case = %+v, err = %v", c, err)
-	}
-	if _, err := repo.GetAnyCase(context.Background(), "nope"); !errors.Is(err, ErrCaseNotFound) {
-		t.Fatalf("err = %v, want ErrCaseNotFound", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}

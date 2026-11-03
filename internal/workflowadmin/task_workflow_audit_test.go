@@ -44,7 +44,7 @@ func TestTaskWorkflowEngineStatus_AuditTarget(t *testing.T) {
 				ID: workflowID, WorkflowVariables: map[string]any{workflow.VarCaseID: workflowID},
 			}, nil).Once()
 			client, capture := nswaudit.NewWithCapture()
-			router := NewHandler(svc, client)
+			router := NewHandler(svc, nil, client)
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.SetPathValue("id", workflowID)
 			req = req.WithContext(withAuthContext(req.Context(), "admin-1"))
@@ -103,7 +103,7 @@ func TestTaskWorkflowActions_AuditTarget(t *testing.T) {
 					}
 				}
 				client, capture := nswaudit.NewWithCapture()
-				router := NewHandler(svc, client)
+				router := NewHandler(svc, nil, client)
 				body := `{"action":"RETRY","reason":"repair"}`
 				if forcePark {
 					body = `{"reason":"repair"}`
@@ -144,7 +144,7 @@ func TestWorkflowEngineStatus_AuditTargetUnchanged(t *testing.T) {
 	require.NoError(t, svc.RegisterWorkflowManager(wm))
 	wm.On("GetStatus", mock.Anything, "flow-1").Return(&workflow.WorkflowInstance{ID: "flow-1", WorkflowVariables: map[string]any{workflow.VarCaseID: "flow-1"}}, nil).Once()
 	client, capture := nswaudit.NewWithCapture()
-	router := NewHandler(svc, client)
+	router := NewHandler(svc, nil, client)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.SetPathValue("id", "flow-1")
 	req = req.WithContext(withAuthContext(req.Context(), "admin-1"))
