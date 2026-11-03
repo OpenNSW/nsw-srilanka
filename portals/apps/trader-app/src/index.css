@@ -266,20 +266,13 @@ label.rt-Text {
 }
 
 /* Primary buttons get a subtle gradient + tinted shadow instead of a flat
- * fill — scoped to whichever accent color the active color scheme uses as
- * its default (see ColorSchemeContext), so semantic color overrides
- * (danger/success buttons) are untouched regardless of which scheme is
- * selected. */
-.rt-BaseButton.rt-variant-solid[data-accent-color='iris'],
-.rt-BaseButton.rt-variant-solid[data-accent-color='blue'],
-.rt-BaseButton.rt-variant-solid[data-accent-color='ruby'],
-.rt-BaseButton.rt-variant-solid[data-accent-color='jade'] {
+ * fill — only those in the theme's accent, which Radix marks with an empty
+ * data-accent-color, so semantic color overrides (danger/success buttons)
+ * are untouched. */
+.rt-BaseButton.rt-variant-solid[data-accent-color=''] {
   background-image: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover)) !important;
   box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-primary) 55%, transparent) !important;
 }
-.rt-BaseButton.rt-variant-solid[data-accent-color='iris']:hover,
-.rt-BaseButton.rt-variant-solid[data-accent-color='blue']:hover,
-.rt-BaseButton.rt-variant-solid[data-accent-color='ruby']:hover,
-.rt-BaseButton.rt-variant-solid[data-accent-color='jade']:hover {
+.rt-BaseButton.rt-variant-solid[data-accent-color='']:hover {
   background-image: linear-gradient(135deg, var(--color-primary-hover), var(--color-primary)) !important;
 }

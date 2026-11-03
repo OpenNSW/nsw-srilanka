@@ -2,8 +2,6 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useMatch } from 'react-router-dom'
 import { appConfig } from '@/config'
 import { ROUTES } from '@/constants'
-import { showColorSchemeSwitcher } from '@/services/colorSchemeContextCore'
-import { ColorSchemeSwitcher } from './ColorSchemeSwitcher'
 
 // Deliberately tiny — a thin white bar, not a full government footer. Fixed
 // full-width across the bottom of the viewport (z-30, below TopBar's z-50 —
@@ -77,15 +75,6 @@ export function Footer() {
           />
         </span>
         {version && <span>{version}</span>}
-        {/* Demo-only control, shown only when the deployment opts in with
-            SHOW_COLOR_SCHEME_SWITCHER, and hidden below sm: the footer's
-            mobile layout is a fixed-height stack (see the height contract
-            above) with no room for a fourth row. */}
-        {showColorSchemeSwitcher() && (
-          <div className="hidden sm:block">
-            <ColorSchemeSwitcher />
-          </div>
-        )}
       </div>
       {/* Last in DOM order so it's bottom-most when the footer stacks on narrow screens; at sm+
           it's taken out of the row's flow and centered independently of the two groups above. */}

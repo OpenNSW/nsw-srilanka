@@ -337,7 +337,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
         </FormStepsProvider>
       </div>
       {actions && !stepper && (
-        <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-[0_-8px_20px_-8px_rgba(0,0,0,0.08)]">
+        <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-up">
           <div className="px-6 py-4 flex items-center gap-3">{actions}</div>
         </div>
       )}
@@ -369,7 +369,7 @@ function FormActions({
   return (
     <>
       {onAutoFill && (
-        <Button type="button" variant="soft" color="purple" size="3" onClick={onAutoFill} disabled={submitting}>
+        <Button type="button" variant="soft" color="gray" size="3" onClick={onAutoFill} disabled={submitting}>
           Demo - Auto Fill
         </Button>
       )}

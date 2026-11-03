@@ -302,7 +302,6 @@ const si: Locale = {
       },
     },
     common: {
-      colorScheme: 'වර්ණ සැලැස්ම',
       breadcrumb: 'සංචාලන මාර්ගය',
       copied: 'පිටපත් කරන ලදී',
       copyNamed: 'පිටපත් කරන්න {{name}}',

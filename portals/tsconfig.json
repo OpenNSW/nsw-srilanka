@@ -5,6 +5,9 @@
       "path": "./apps/trader-app"
     },
     {
+      "path": "./packages/theme"
+    },
+    {
       "path": "./packages/ui"
     }
   ]

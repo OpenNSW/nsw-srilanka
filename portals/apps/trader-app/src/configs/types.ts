@@ -1,4 +1,14 @@
 import { z } from 'zod'
+import { ACCENT_SCALES, GRAY_SCALES } from '@portals/theme'
+
+// The Radix scales a palette names, and any CSS variables it sets by name
+// ('accent-9': '#1e3a8a'). The values aren't checked: they go to the
+// browser as given (see @portals/theme).
+const PaletteSchema = z.object({
+  accent: z.enum(ACCENT_SCALES).optional(),
+  gray: z.enum(GRAY_SCALES).optional(),
+  colors: z.record(z.string(), z.string()).optional(),
+})
 
 export const UIConfigSchema = z.object({
   branding: z.object({
@@ -35,6 +45,9 @@ export const UIConfigSchema = z.object({
     // screens). Free text — this app doesn't assume a country or legal
     // entity, so the exact wording is a per-deployment choice.
     copyrightNotice: z.string().optional(),
+    // Optional. The deployment's colors; without it, the portal's default
+    // (Maritime navy). `dark` is for the dark appearance.
+    theme: PaletteSchema.extend({ dark: PaletteSchema.optional() }).optional(),
   }),
   theme: z
     .object({
