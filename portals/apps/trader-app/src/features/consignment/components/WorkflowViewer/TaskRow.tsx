@@ -7,25 +7,24 @@ import type { WorkflowNode } from '@/features/consignment/types'
 import { WORKFLOW_STATUS_I18N_KEYS, WORKFLOW_STATUS_TONES } from '@/features/consignment/workflowStatus'
 import { formatDateTime } from '@/features/consignment/utils'
 import { ROUTES } from '@/constants'
+import { useCan } from '@/hooks/useCan'
+import { APP_ROUTES } from '@/navigation/routes'
 
 // One task of a consignment, as a card that opens it.
 export function TaskRow({
   step,
   consignmentId,
   needsAction = false,
-  canOpen,
-  canAct,
 }: {
   step: WorkflowNode
   consignmentId: string
   needsAction?: boolean
-  // Whether the user may open a task. Without it the row has no link.
-  canOpen: boolean
-  // Whether the user may act on a task. Without it a task that needs action
-  // offers View, not Continue.
-  canAct: boolean
 }) {
   const { t } = useTranslation()
+  // A user who may not open the task gets no link, and one who may not act on
+  // it is offered View, not Continue, on a task that needs action.
+  const canOpen = useCan(APP_ROUTES.task.ability)
+  const canAct = useCan('task.act')
   const name = step.workflowNodeTemplate.name || t('workflow.untitledTask')
   const href = ROUTES.TASK_FORM(consignmentId, step.id)
   const status = (

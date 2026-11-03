@@ -17,6 +17,7 @@ import {
 import { ResolveAdminInterventionView } from '@/features/admin/components/resolve/ResolveAdminInterventionView'
 import { GlobalVariablesButton } from '@/features/admin/components/variables/GlobalVariablesButton'
 import { WorkflowVariablesDialog } from '@/features/admin/components/variables/WorkflowVariablesDialog'
+import { useCan } from '@/hooks/useCan'
 
 const WORKFLOW_STATUS_TONE: Record<EngineWorkflowStatus, StatusTone> = {
   RUNNING: 'info',
@@ -29,13 +30,10 @@ const WORKFLOW_STATUS_TONE: Record<EngineWorkflowStatus, StatusTone> = {
 export function EngineStatusView({
   workflowId,
   title,
-  canIntervene,
   onRefresh,
 }: {
   workflowId: string
   title: string
-  // Whether the admin may resolve or force-park nodes (see NodeRow).
-  canIntervene: boolean
   onRefresh: () => void
 }) {
   const [status, setStatus] = useState<EngineStatus | null>(null)
@@ -44,6 +42,7 @@ export function EngineStatusView({
   const [error, setError] = useState<FetchError>(null)
   const [variablesTarget, setVariablesTarget] = useState<WorkflowVariablesTarget | null>(null)
   const [resolveTarget, setResolveTarget] = useState<AdminResolutionTarget | null>(null)
+  const canIntervene = useCan('admin.intervene')
   // Applies at every nesting level (root, child branches, task workflows) — see
   // NOISY_NODE_TYPES.
   const [showAllNodes, setShowAllNodes] = useState(false)
@@ -189,7 +188,6 @@ export function EngineStatusView({
                 expandSignal={expandSignal}
                 onOpenVariables={setVariablesTarget}
                 onOpenResolve={setResolveTarget}
-                canIntervene={canIntervene}
                 onRefresh={() => void refresh()}
               />
             ))

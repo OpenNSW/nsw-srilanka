@@ -2,11 +2,12 @@ import { DashboardIcon } from '@radix-ui/react-icons'
 import type { ReactNode } from 'react'
 import type { ParseKeys } from 'i18next'
 import { isAgencyMode } from '@/features/case/mode'
+import type { Ability } from '@/hooks/useCan'
 import { APP_ROUTES, type AppRoute } from '@/navigation/routes'
 
 export interface NavItem {
   labelKey: ParseKeys
-  // Where it leads, and the scope that lists it: the one the route's screen needs.
+  // Where it leads, and the ability that lists it: the one the route's screen needs.
   route: AppRoute
   icon: ReactNode
 }
@@ -34,20 +35,20 @@ export const NAV_STRUCTURE: NavItemOrGroup[] = [
   },
 ]
 
-// The destinations in structure that a user with these scopes may open. A
-// group left with no items is dropped.
-export function permittedNav(structure: NavItemOrGroup[], hasScope: (scope: string) => boolean): NavItemOrGroup[] {
+// The destinations in structure that a user who can do these abilities may
+// open. A group left with no items is dropped.
+export function permittedNav(structure: NavItemOrGroup[], can: (ability: Ability) => boolean): NavItemOrGroup[] {
   return structure.flatMap((item): NavItemOrGroup[] => {
-    if (!isNavGroup(item)) return hasScope(item.route.scope) ? [item] : []
-    const items = item.items.filter((child) => hasScope(child.route.scope))
+    if (!isNavGroup(item)) return can(item.route.ability) ? [item] : []
+    const items = item.items.filter((child) => can(child.route.ability))
     return items.length > 0 ? [{ ...item, items }] : []
   })
 }
 
-// The path of the first destination in nav order that a user with these scopes
-// may open, or null when there is none.
-export function firstPermittedPath(structure: NavItemOrGroup[], hasScope: (scope: string) => boolean): string | null {
-  const first = permittedNav(structure, hasScope)[0]
+// The path of the first destination in nav order that a user who can do these
+// abilities may open, or null when there is none.
+export function firstPermittedPath(structure: NavItemOrGroup[], can: (ability: Ability) => boolean): string | null {
+  const first = permittedNav(structure, can)[0]
   if (!first) return null
   return isNavGroup(first) ? first.items[0].route.path : first.route.path
 }

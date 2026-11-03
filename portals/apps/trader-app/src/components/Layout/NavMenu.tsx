@@ -3,10 +3,10 @@ import { ChevronDownIcon, HamburgerMenuIcon } from '@radix-ui/react-icons'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DropdownMenu } from '@radix-ui/themes'
-import { useScopes } from '@/hooks/useScopes'
+import { useAbilities } from '@/hooks/useCan'
 import { NAV_STRUCTURE, isNavGroup, permittedNav, type NavItem } from '@/navigation/navItems'
 
-// The app's nav destinations the user's scopes reach, surfaced as a menu in
+// The app's nav destinations the user may open, surfaced as a menu in
 // the TopBar rather than a permanent side rail. onNavigate fires when the
 // person picks a destination, so a menu holding this one (the TopBar's
 // small-screen menu) can close.
@@ -14,9 +14,9 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
-  const { hasScope } = useScopes()
+  const { can } = useAbilities()
 
-  const navStructure = useMemo(() => permittedNav(NAV_STRUCTURE, hasScope), [hasScope])
+  const navStructure = useMemo(() => permittedNav(NAV_STRUCTURE, can), [can])
 
   const isItemActive = (item: NavItem) =>
     location.pathname === item.route.path || location.pathname.startsWith(`${item.route.path}/`)

@@ -10,8 +10,7 @@ import { humanizeStatus } from '@/utils/formatStatus'
 import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
 import { Banner, Breadcrumb, type BreadcrumbItem, PageState, RefreshButton, Surface } from '@portals/ui'
-import { ACCESS_SCOPES } from '@/constants/scopes'
-import { useScopes } from '@/hooks/useScopes'
+import { useCan } from '@/hooks/useCan'
 
 export function TaskDetailScreen() {
   const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()
@@ -24,9 +23,9 @@ export function TaskDetailScreen() {
     void navigate(-1)
   }
   const { t } = useTranslation()
-  // Submitting, saving a draft and changing the claim take the task actions scope;
-  // without it the task is read-only.
-  const canAct = useScopes().hasScope(ACCESS_SCOPES.TASKS_ACTIONS)
+  // Submitting, saving a draft and changing the claim are acting on the task;
+  // a user who may not act sees it read-only.
+  const canAct = useCan('task.act')
   const {
     zoneView,
     consignment,

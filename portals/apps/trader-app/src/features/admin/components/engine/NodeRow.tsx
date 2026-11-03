@@ -16,6 +16,7 @@ import {
   type AdminResolutionTarget,
 } from '@/features/admin/components/engine/shared'
 import { useExpandableWorkflow } from '@/features/admin/components/engine/useExpandableWorkflow'
+import { useCan } from '@/hooks/useCan'
 
 // Running is info, as an in-progress task is on the trader screens; waiting on an admin is warning.
 const NODE_STATUS_TONE: Record<EngineNodeStatus, StatusTone> = {
@@ -42,7 +43,6 @@ export function NodeRow({
   expandSignal,
   onOpenVariables,
   onOpenResolve,
-  canIntervene,
   onRefresh,
 }: {
   node: EngineNode
@@ -64,15 +64,14 @@ export function NodeRow({
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
   onOpenResolve: (target: AdminResolutionTarget) => void
-  // Whether the admin may resolve or force-park nodes. Without it the row, and every
-  // row below it, only reports.
-  canIntervene: boolean
   // Refreshes this node's own workflow instance (not its children) after an admin resolves it.
   onRefresh: () => void
 }) {
   const childIds = node.child_workflow_ids ?? []
   const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task', expandSignal)
   const [forceParkOpen, setForceParkOpen] = useState(false)
+  // Resolving and force-parking intervene in the flow; for an admin who may not, the row only reports.
+  const canIntervene = useCan('admin.intervene')
   // Only a TASK node that is waiting can be force-parked: on a consignment workflow that closes its
   // task, in a task workflow it parks just that step (see forceParkNode).
   const canForcePark = canIntervene && node.type === 'TASK' && node.status === 'RUNNING' && !!node.step_id
@@ -174,7 +173,6 @@ export function NodeRow({
           expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
           onOpenResolve={onOpenResolve}
-          canIntervene={canIntervene}
         />
       ))}
       {node.task_workflow_id && taskBranch.expanded && (
@@ -188,7 +186,6 @@ export function NodeRow({
           expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
           onOpenResolve={onOpenResolve}
-          canIntervene={canIntervene}
           onRefresh={taskBranch.refetch}
         />
       )}

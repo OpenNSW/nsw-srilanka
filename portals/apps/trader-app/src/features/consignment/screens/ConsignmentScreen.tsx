@@ -14,8 +14,7 @@ import { ROUTES } from '@/constants'
 import { LinkRow, LoadingOverlay, PageHeader, PageState, PaginationControl, RowLink, Surface, Table } from '@portals/ui'
 import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
 import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
-import { ACCESS_SCOPES } from '@/constants/scopes'
-import { RequireScope } from '@/components/RequireScope'
+import { Can } from '@/components/Can'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -73,7 +72,7 @@ export function ConsignmentScreen() {
         title={t('consignments.list.title')}
         count={totalCount}
         actions={
-          <RequireScope scope={ACCESS_SCOPES.CONSIGNMENTS_CREATE}>
+          <Can I="consignment.create">
             <div className="flex flex-col items-end gap-2">
               <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
                 <PlusIcon />
@@ -85,7 +84,7 @@ export function ConsignmentScreen() {
                 </Text>
               )}
             </div>
-          </RequireScope>
+          </Can>
         }
       />
 

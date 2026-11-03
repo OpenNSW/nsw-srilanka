@@ -1,20 +1,20 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { RequireScope } from '@/components/RequireScope'
+import { Can } from '@/components/Can'
 
 const auth = vi.hoisted(() => ({ scope: '' }))
 vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { scope: auth.scope } }) }))
 
 function NewConsignment() {
   return (
-    <RequireScope scope="consignment:write" fallback={<p>Restricted</p>}>
+    <Can I="consignment.create" fallback={<p>Restricted</p>}>
       <button>New consignment</button>
-    </RequireScope>
+    </Can>
   )
 }
 
-describe('RequireScope', () => {
-  it('renders its children for a user granted the scope', () => {
+describe('Can', () => {
+  it('renders its children for a user granted the ability', () => {
     auth.scope = 'openid consignment:read consignment:write'
     render(<NewConsignment />)
 
@@ -22,7 +22,7 @@ describe('RequireScope', () => {
     expect(screen.queryByText('Restricted')).toBeNull()
   })
 
-  it('renders the fallback for a user without the scope', () => {
+  it('renders the fallback for a user without the ability', () => {
     auth.scope = 'openid consignment:read consignment:flow:write'
     render(<NewConsignment />)
 
@@ -33,9 +33,9 @@ describe('RequireScope', () => {
   it('renders nothing without a fallback', () => {
     auth.scope = ''
     const { container } = render(
-      <RequireScope scope="consignment:write">
+      <Can I="consignment.create">
         <button>New consignment</button>
-      </RequireScope>,
+      </Can>,
     )
 
     expect(container.innerHTML).toBe('')

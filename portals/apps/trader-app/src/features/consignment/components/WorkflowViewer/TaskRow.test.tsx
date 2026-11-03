@@ -11,6 +11,9 @@ vi.hoisted(() => {
   window.__APP_CONFIG__ = { API_BASE_URL: 'http://api.test' }
 })
 
+const auth = vi.hoisted(() => ({ scope: '' }))
+vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { scope: auth.scope } }) }))
+
 const step: WorkflowNode = {
   id: 'task-1',
   createdAt: '2026-01-01T00:00:00Z',
@@ -20,12 +23,13 @@ const step: WorkflowNode = {
   depends_on: [],
 }
 
-function renderRow(props: { canOpen: boolean; canAct: boolean }) {
+function renderRow(scope: string) {
+  auth.scope = scope
   render(
     <Theme>
       <MemoryRouter>
         <ul>
-          <TaskRow step={step} consignmentId="c-1" needsAction {...props} />
+          <TaskRow step={step} consignmentId="c-1" needsAction />
         </ul>
       </MemoryRouter>
     </Theme>,
@@ -34,20 +38,20 @@ function renderRow(props: { canOpen: boolean; canAct: boolean }) {
 
 describe('TaskRow', () => {
   it('offers Continue on a task that needs action to a user who may act on it', () => {
-    renderRow({ canOpen: true, canAct: true })
+    renderRow('openid task:read task:write')
 
     expect(screen.getByRole('link', { name: 'Continue Pay the fee' })).toBeTruthy()
   })
 
   it('offers View, not Continue, to a user who may only open it', () => {
-    renderRow({ canOpen: true, canAct: false })
+    renderRow('openid task:read')
 
     expect(screen.getByRole('link', { name: 'View Pay the fee' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Continue Pay the fee' })).toBeNull()
   })
 
   it('links nowhere for a user who may not open it', () => {
-    renderRow({ canOpen: false, canAct: true })
+    renderRow('openid task:write')
 
     expect(screen.queryByRole('link')).toBeNull()
   })

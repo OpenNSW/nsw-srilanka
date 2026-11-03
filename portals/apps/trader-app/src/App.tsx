@@ -19,10 +19,10 @@ import { searchServices } from './services/searchService'
 import { useAuthContext } from './hooks/useAuthContext'
 import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
 import { AccessRestrictedScreen } from '@/screens/AccessRestrictedScreen'
-import { RequireScope } from '@/components/RequireScope'
+import { Can } from '@/components/Can'
 import { NAV_STRUCTURE, firstPermittedPath } from '@/navigation/navItems'
 import { APP_ROUTES, type AppRoute } from '@/navigation/routes'
-import { useScopes } from '@/hooks/useScopes'
+import { useAbilities } from '@/hooks/useCan'
 import { appConfig, displayName } from './config'
 import { useEffect } from 'react'
 
@@ -43,7 +43,7 @@ function ProtectedLayout() {
   if (!isSignedIn) return <Navigate to="/login" replace />
 
   // Every signed-in user gets the layout; each route shows its screen only to a
-  // user granted the scope that screen needs (see restrictTo).
+  // user who may open it (see restrictTo).
   return (
     <ProfileProvider>
       <UploadWrapper>
@@ -53,19 +53,19 @@ function ProtectedLayout() {
   )
 }
 
-// A route's screen, shown only to a user granted the scope the route needs.
+// A route's screen, shown only to a user who has the route's ability.
 function restrictTo(route: AppRoute, screen: ReactNode) {
   return (
-    <RequireScope scope={route.scope} fallback={<AccessRestrictedScreen />}>
+    <Can I={route.ability} fallback={<AccessRestrictedScreen />}>
       {screen}
-    </RequireScope>
+    </Can>
   )
 }
 
-// Sends / to the first nav destination the user's scopes reach.
+// Sends / to the first nav destination the user may open.
 function HomeRedirect() {
-  const { hasScope } = useScopes()
-  const path = firstPermittedPath(NAV_STRUCTURE, hasScope)
+  const { can } = useAbilities()
+  const path = firstPermittedPath(NAV_STRUCTURE, can)
   return path ? <Navigate to={path} replace /> : <AccessRestrictedScreen />
 }
 
