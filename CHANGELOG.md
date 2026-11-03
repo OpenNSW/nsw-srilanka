@@ -8,13 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.14.0] - 2026-11-03
 
-This release drops the `nsw:` prefix from every API scope, so the IdP, TNSW, each agency, the portals, and Customs and GovPay change names together. It also changes four settings that the new build refuses in their old form: the flows a user may start move into a `flows` section, refid date segments take a format and a timezone, email is set up through PingMailer or SMTP, and starting a flow needs its own scope. No migrations run. The image version, the config and the artifacts pin must change in the same deployment. It also lets each task template decide whether a task can be claimed, audits SLC Edge callbacks, and separates the system log stream from security alerts.
+This release drops the `nsw:` prefix from every API scope, so the IdP, TNSW, each agency, the portals, and Customs and GovPay change names together. It also changes four settings that the new build refuses in their old form: the flows a user may start move into a `flows` section, refid date segments take a format and a timezone, email is set up through PingMailer or SMTP, and starting a flow needs its own scope. No migrations run. The image version, the config and the artifacts pin must change in the same deployment. It also lets each task template decide whether a task can be claimed, audits SLC Edge callbacks, separates the system log stream from security alerts, and adds the Customs steps for raising and cancelling a Cargo Dispatch Note and for running one CusDec flow per tea consignment.
 
 ### Upgrade notes
 
 #### Change the image version, the config and the artifacts pin together ([#993](https://github.com/OpenNSW/nsw-srilanka/pull/993), [#1015](https://github.com/OpenNSW/nsw-srilanka/pull/1015), [#1017](https://github.com/OpenNSW/nsw-srilanka/pull/1017), [#1040](https://github.com/OpenNSW/nsw-srilanka/pull/1040), [#962](https://github.com/OpenNSW/nsw-srilanka/pull/962))
 
-- Move the image or chart version, the config changes below and `artifactLoader.github.ref` in one deployment, for TNSW and for each agency. The new build stops at startup on a config in the old form (a refid `layout:`, an old `email` block), the old build refuses the new one, and an agency needs the pinned artifacts to keep its claim controls. There are no database migrations.
+- Move the image or chart version, the config changes below and `artifactLoader.github.ref` in one deployment, for TNSW and for each agency. The new build stops at startup on a config in the old form (a refid `layout:`, an old `email` block), the old build refuses the new one, and an agency needs the pinned artifacts to keep its claim controls. The pinned artifacts also need this build: they use the `CUSTOMS_CASE_DECLARATION` and `CUSTOMS_CDN_CANCEL` step types, which 0.13.0 doesn't have, and a `replaces` rule that 0.13.0 ignores, so a tea consignment would start both the tea flow and `customs-workflow`. There are no database migrations.
 
 #### Rename the API scopes: the IdP first, then everything else together ([#1040](https://github.com/OpenNSW/nsw-srilanka/pull/1040), [#1034](https://github.com/OpenNSW/nsw-srilanka/pull/1034))
 
@@ -24,13 +24,14 @@ Every scope loses its `nsw:` prefix (`nsw:task:write` becomes `task:write`), so 
    - On the NSW API: `consignment`, `task`, `storage`, `profile`, `hscode`, `company`, `cha`, `slce-webhooks` and `payment-webhooks`. Under `consignment`, add a `flow` resource ("Auxiliary flows within consignment") with a `write` action.
    - On each agency API: `consignment`, `task`, `profile`, `storage` and `workflow`.
    - Grant the new permissions to the roles that hold the old ones, and add them to the apps' requestable scopes. `Trader` and `CHA` get `consignment:flow:write`; only `Trader` gets `consignment:write`. Every role listed under `flows.users` must hold `consignment:flow:write`.
+   - Give `NSW Admin` `profile:read` on the NSW API too ([#1047](https://github.com/OpenNSW/nsw-srilanka/pull/1047)). The role held only the admin consignment scopes, so `GET /api/v1/users/me` refused an admin. Admins sign in again so that their token carries it.
 2. **TNSW and each agency, together.** Deploy the 0.14.0 image with the pinned artifacts and the config changes below. In `services[].auth.oauth2.scopes` of TNSW's and each agency's `config.yaml`, rename `nsw:workflow:inject` to `workflow:inject`, `nsw:task:write` to `task:write` and `nsw:storage:*` to `storage:*`. In each portal's `IDP_SCOPES` (Helm: `frontend.config`; locally: `config.js`), drop the prefix from every scope, and add `consignment:flow:write` to the Trader Portal's. ThunderID drops a requested scope it doesn't define, so a missed one shows up as a 403.
 3. **Customs and GovPay, at the same time as step 2.** They request scopes by name, so the rename changes the token contract with each of them. SLC Edge (`SLCE_TO_NSW`) requests `slce-webhooks:write` in place of `nsw:slce-webhooks:write`. GovPay (`GOVPAY_TO_NSW`) requests `payment-webhooks:validate payment-webhooks:process` in place of `nsw:payment-webhooks:validate nsw:payment-webhooks:process`. A client still sending the old names after the cutover gets a token without the scope, and the webhook answers 403. Agree the date with both. Any other app that calls TNSW with `client_credentials` sends the renamed scopes too.
 4. **The old `nsw` tree, last.** Delete it from the IdP once every client has switched. Tokens issued before the switch keep the old scopes until they expire or refresh, which takes up to an hour for a user, and the new backend answers 403 to them meanwhile.
 
 For a local IdP, recreate its volumes: see [`idp/README.md`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.14.0/idp/README.md), "Changing resources".
 
-#### Move the flows a user may start into `flows.users` ([#1017](https://github.com/OpenNSW/nsw-srilanka/pull/1017))
+#### Move the flows a user may start into `flows.users` ([#1017](https://github.com/OpenNSW/nsw-srilanka/pull/1017), [#981](https://github.com/OpenNSW/nsw-srilanka/pull/981))
 
 - **TNSW:** replace `consignment.flows` in `config.yaml` (Helm: `backend.config`) with `flows.users`. Each `templateId` becomes `id`, each flow keeps its `label` and gains `roles` (`[trader, cha]` keeps today's behavior), and the list needs `enabled: true`:
 
@@ -44,7 +45,8 @@ For a local IdP, recreate its volumes: see [`idp/README.md`](https://github.com/
           roles: [trader, cha]
   ```
 
-- A config that keeps `consignment.flows` starts with no flows to start, because unknown keys are ignored: the consignment page offers none. Startup fails if a listed `id` is not a workflow in the current artifact manifest, so the list and the pin must agree.
+- Also list `customs-additional-cdn` (`label: Add a Cargo Dispatch Note`, `roles: [trader, cha]`), which the pinned artifacts hold. Without it, a consignment with a container that has no dispatch note stays at its check, with no way to add one.
+- A config that keeps `consignment.flows` starts with no flows to start, because unknown keys are ignored: the consignment page offers none. Startup fails if a listed `id` is not a workflow in the current artifact manifest, so the list and the pin must agree: list `customs-additional-cdn` only with a pin that holds [one-trade-artifacts#295](https://github.com/OpenNSW/one-trade-artifacts/pull/295).
 - **Agencies:** nothing to do.
 
 #### Give refid date segments a format and a timezone ([#993](https://github.com/OpenNSW/nsw-srilanka/pull/993))
@@ -83,16 +85,18 @@ For a local IdP, recreate its volumes: see [`idp/README.md`](https://github.com/
 
 #### Workflow artifacts
 
-- Pin `artifactLoader.github.ref` to one-trade-artifacts [`7c600ab`](https://github.com/OpenNSW/one-trade-artifacts/commit/7c600abd440039efe16ac6ba740d3fbaa1481625) (2 November 2026), for TNSW and for each agency. It holds the artifact changes this release depends on and the ones that came with it:
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`0b8e9ab`](https://github.com/OpenNSW/one-trade-artifacts/commit/0b8e9ab5a6c5a8f93c1eb85bcac5fafe6dac2193) (3 November 2026), for TNSW and for each agency. It holds the artifact changes this release depends on and the ones that came with it:
   - [one-trade-artifacts#309](https://github.com/OpenNSW/one-trade-artifacts/pull/309): every agency officer task template says `"claimable": true`, which this build reads ([#1015](https://github.com/OpenNSW/nsw-srilanka/pull/1015)). Without it, officers lose their claim controls;
   - [one-trade-artifacts#304](https://github.com/OpenNSW/one-trade-artifacts/pull/304): a trader can upload a payment receipt, or the officer can confirm the payment;
   - [one-trade-artifacts#321](https://github.com/OpenNSW/one-trade-artifacts/pull/321) and [#318](https://github.com/OpenNSW/one-trade-artifacts/pull/318): the SLTB blend sheet flow is reworked around the tasting and the lab, and the downloaded blend sheet XML has the shape SLTB expects;
   - [one-trade-artifacts#290](https://github.com/OpenNSW/one-trade-artifacts/pull/290), [#319](https://github.com/OpenNSW/one-trade-artifacts/pull/319) and [#320](https://github.com/OpenNSW/one-trade-artifacts/pull/320): NPQS issues the non-ePhyto certificate on the pre-printed form, a replacement ePhyto certificate names the certificate it replaces, and a treatment-only path needs no lab or visual inspection;
   - [one-trade-artifacts#310](https://github.com/OpenNSW/one-trade-artifacts/pull/310): SLPA raises a new service order after it rejects one;
   - [one-trade-artifacts#312](https://github.com/OpenNSW/one-trade-artifacts/pull/312), [#314](https://github.com/OpenNSW/one-trade-artifacts/pull/314) and [#322](https://github.com/OpenNSW/one-trade-artifacts/pull/322): Customs scanned documents use Customs' new code table, the CusDec invoice amount is read from one XML field, and each CDN is filled in from the declaration as ASYCUDA holds it;
-  - [one-trade-artifacts#315](https://github.com/OpenNSW/one-trade-artifacts/pull/315): FCAU picks the lab test and the proposed lab on the application review.
+  - [one-trade-artifacts#315](https://github.com/OpenNSW/one-trade-artifacts/pull/315): FCAU picks the lab test and the proposed lab on the application review;
+  - [one-trade-artifacts#295](https://github.com/OpenNSW/one-trade-artifacts/pull/295): before the boat note opens, the Customs flow checks that every container has a Cargo Dispatch Note, and offers the `customs-additional-cdn` flow when one is missing. It needs [#981](https://github.com/OpenNSW/nsw-srilanka/pull/981) and the flow listed under `flows.users`, as above;
+  - [one-trade-artifacts#302](https://github.com/OpenNSW/one-trade-artifacts/pull/302): the trader can cancel a container's Cargo Dispatch Note. It needs [#988](https://github.com/OpenNSW/nsw-srilanka/pull/988);
+  - [one-trade-artifacts#323](https://github.com/OpenNSW/one-trade-artifacts/pull/323): the SLTB tea flow submits the CusDec SLTB approved to Customs, and takes the place of `customs-workflow` for the whole consignment through a `replaces` rule. It needs [#1042](https://github.com/OpenNSW/nsw-srilanka/pull/1042).
 - NPQS cases already parked at `route_split` need to be recovered or restarted ([one-trade-artifacts#320](https://github.com/OpenNSW/one-trade-artifacts/pull/320)).
-- Don't move the pin past this commit yet: the next artifacts change, [one-trade-artifacts#295](https://github.com/OpenNSW/one-trade-artifacts/pull/295), needs [#981](https://github.com/OpenNSW/nsw-srilanka/pull/981), which this release doesn't hold.
 
 #### Local Docker Compose ([#1040](https://github.com/OpenNSW/nsw-srilanka/pull/1040), [#1017](https://github.com/OpenNSW/nsw-srilanka/pull/1017), [#993](https://github.com/OpenNSW/nsw-srilanka/pull/993), [#962](https://github.com/OpenNSW/nsw-srilanka/pull/962))
 
@@ -102,6 +106,9 @@ For a local IdP, recreate its volumes: see [`idp/README.md`](https://github.com/
 
 ### Added
 
+- **Raising a missing Cargo Dispatch Note.** Customs can cancel a dispatch note even after it acknowledged it, which leaves its container without one. The Customs flow in the pinned artifacts now checks, before the boat note opens, that every container of the declaration has an active note, and a new step finds the declaration of a consignment for a flow started from its page. The trader or CHA then raises the missing note with the `customs-additional-cdn` flow ("Add a Cargo Dispatch Note"), which you list under `flows.users`. ([#981](https://github.com/OpenNSW/nsw-srilanka/pull/981))
+- **Cancelling a container's dispatch note.** A trader can cancel the branch of a container's Cargo Dispatch Note, either on its form before it is sent or after ASYCUDA registered it while it waits for Customs to acknowledge it. NSW has no call to cancel a registered note in ASYCUDA World, so the note stays registered there and is marked cancelled in TNSW, and an acknowledgment or cancellation that Customs still sends for it is acknowledged without action. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
+- **One CusDec flow per consignment.** A workflow in the HS code split can name the workflows it takes the place of, with `replaces` in `transform.json`. The tea flow, which submits the CusDec SLTB approved, takes the place of `customs-workflow` for the whole consignment, including when tea is mixed with other goods. ([#1042](https://github.com/OpenNSW/nsw-srilanka/pull/1042))
 - **Email through SMTP or PingMailer.** `notification.providers.smtp` sends straight to an SMTP server over `starttls`, `tls` or no TLS, and `email` now sends through PingMailer's API with OAuth2. Each provider is optional. ([#962](https://github.com/OpenNSW/nsw-srilanka/pull/962))
 - **Audit of SLC Edge callbacks.** With `otel` export on, an authenticated callback emits a `CUSTOMS_EVENT` record that targets its declaration (`CUSTOMS_DECLARATION`) or its dispatch note (`CARGO_DISPATCH_NOTE`), and a rejection that can't be classified targets `CUSTOMS_CALLBACK`. Each recognized callback with a usable identifier adds one repository read, and a failed lookup doesn't change the response. ([#1014](https://github.com/OpenNSW/nsw-srilanka/pull/1014))
 
@@ -114,6 +121,7 @@ For a local IdP, recreate its volumes: see [`idp/README.md`](https://github.com/
 
 ### Fixed
 
+- The `NSW Admin` role holds `profile:read`, so `GET /api/v1/users/me` no longer refuses an admin. A live IdP needs the grant by hand: see the upgrade notes. ([#1047](https://github.com/OpenNSW/nsw-srilanka/pull/1047))
 - A `GET` or `HEAD` of `/health` no longer exports a server span, including when the check fails. HTTP metrics and response statuses remain available for monitoring. ([#1020](https://github.com/OpenNSW/nsw-srilanka/pull/1020))
 
 ### Security
@@ -131,6 +139,7 @@ For a local IdP, recreate its volumes: see [`idp/README.md`](https://github.com/
 - The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
 - A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
 - A temporary development aid can copy every SLC Edge callback to another deployment. It is off unless `services` lists an entry with the id `slce-debug-forward`, and it logs a warning at startup when it is on. Never define one in production: the aid will be removed before production use. ([#870](https://github.com/OpenNSW/nsw-srilanka/pull/870))
+- Cancelling a Cargo Dispatch Note in TNSW does not cancel it in ASYCUDA World, which NSW has no call for: the note stays registered there. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
 
 ## [0.13.0] - 2026-10-31
 
