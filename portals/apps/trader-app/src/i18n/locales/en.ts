@@ -101,8 +101,11 @@ const en = {
           dateCreated: 'Date Created',
         },
         flows: {
+          title: 'Other services',
+          description:
+            'Start a related service on this consignment, such as an SLPA sundry payment or another Cargo Dispatch Note.',
           confirmTitle: 'Start {{label}}?',
-          confirmDescription: 'This starts {{label}} on the consignment. Its steps appear in the list below.',
+          confirmDescription: 'This starts {{label}} on the consignment. Its steps appear in the list above.',
           cancel: 'Cancel',
           start: 'Start',
           failed: 'Could not start {{label}}. Please try again.',

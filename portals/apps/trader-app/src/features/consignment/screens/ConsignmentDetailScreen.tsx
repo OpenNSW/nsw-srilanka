@@ -132,11 +132,6 @@ export function ConsignmentDetailScreen({
             </span>
           </p>
         </div>
-        {canStartFlows && (
-          <Can I="consignment.startFlow">
-            <StartFlowButtons flows={consignment.startableFlows ?? []} onStart={startFlow} />
-          </Can>
-        )}
       </div>
 
       <Surface className="relative">
@@ -159,6 +154,12 @@ export function ConsignmentDetailScreen({
           )}
         </div>
       </Surface>
+
+      {canStartFlows && (
+        <Can I="consignment.startFlow">
+          <StartFlowButtons flows={consignment.startableFlows ?? []} onStart={startFlow} />
+        </Can>
+      )}
     </div>
   )
 }
