@@ -37,6 +37,8 @@ func newArtifacts() *artifact.Set {
 // memRepo is an in-memory Repository with Record's first-sight semantics.
 type memRepo struct {
 	flows     map[string]*Flow
+	owners    []string // "case/role/ou", recorded with a new flow
+	recordErr error
 	completed []string
 }
 
@@ -51,10 +53,16 @@ func newMemRepo(rows ...Flow) *memRepo {
 
 func (r *memRepo) EnsureCase(context.Context, string) error { return nil }
 
-func (r *memRepo) Record(_ context.Context, f Flow) error {
+func (r *memRepo) Record(_ context.Context, f Flow, owner *Owner) error {
+	if r.recordErr != nil {
+		return r.recordErr
+	}
 	if _, ok := r.flows[f.WorkflowID]; !ok {
 		f.Status = StatusStarting
 		r.flows[f.WorkflowID] = &f
+		if owner != nil {
+			r.owners = append(r.owners, f.CaseID+"/"+owner.Role+"/"+owner.OUHandle)
+		}
 	}
 	return nil
 }

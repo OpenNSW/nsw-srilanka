@@ -47,8 +47,44 @@ func TestRecord(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectCommit()
 
-		if err := repo.Record(context.Background(), f); err != nil {
+		if err := repo.Record(context.Background(), f, nil); err != nil {
 			t.Fatal(err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("new flow records its owner with it", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectBegin()
+		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`INSERT INTO case_flows`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`UPDATE cases SET state`).WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec(`INSERT INTO case_parties .* ON CONFLICT \(case_id, role\) DO UPDATE`).
+			WithArgs("C1", "officer", "ou", "cda").
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+
+		if err := repo.Record(context.Background(), f, &Owner{Role: "officer", OUHandle: "cda"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("a failed owner insert rolls back the flow", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectBegin()
+		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`INSERT INTO case_flows`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`UPDATE cases SET state`).WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec(`INSERT INTO case_parties`).WillReturnError(sql.ErrConnDone)
+		mock.ExpectRollback()
+
+		if err := repo.Record(context.Background(), f, &Owner{Role: "officer", OUHandle: "cda"}); err == nil {
+			t.Fatal("want the insert's error")
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Fatal(err)
@@ -65,7 +101,7 @@ func TestRecord(t *testing.T) {
 		mock.ExpectExec(`UPDATE cases SET state`).WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectCommit()
 
-		if err := repo.Record(context.Background(), Flow{WorkflowID: "C1:export:u2", CaseID: "C1", TemplateID: "export"}); err != nil {
+		if err := repo.Record(context.Background(), Flow{WorkflowID: "C1:export:u2", CaseID: "C1", TemplateID: "export"}, nil); err != nil {
 			t.Fatal(err)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
@@ -81,7 +117,7 @@ func TestRecord(t *testing.T) {
 		mock.ExpectExec(`DELETE FROM cases`).WithArgs("C1").WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectCommit()
 
-		if err := repo.Record(context.Background(), f); err != nil {
+		if err := repo.Record(context.Background(), f, nil); err != nil {
 			t.Fatal(err)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
@@ -89,14 +125,15 @@ func TestRecord(t *testing.T) {
 		}
 	})
 
-	t.Run("repeat workflow ID keeps a case that already existed", func(t *testing.T) {
+	// The owner was recorded with the flow that won the insert.
+	t.Run("repeat workflow ID keeps a case that already existed, and records no owner", func(t *testing.T) {
 		repo, mock := newMockRepo(t)
 		mock.ExpectBegin()
 		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec(`INSERT INTO case_flows`).WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectCommit()
 
-		if err := repo.Record(context.Background(), f); err != nil {
+		if err := repo.Record(context.Background(), f, &Owner{Role: "officer", OUHandle: "cda"}); err != nil {
 			t.Fatal(err)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
@@ -111,7 +148,7 @@ func TestRecord(t *testing.T) {
 		mock.ExpectExec(`INSERT INTO case_flows`).WillReturnError(sql.ErrConnDone)
 		mock.ExpectRollback()
 
-		if err := repo.Record(context.Background(), f); err == nil {
+		if err := repo.Record(context.Background(), f, nil); err == nil {
 			t.Fatal("want the insert's error")
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
