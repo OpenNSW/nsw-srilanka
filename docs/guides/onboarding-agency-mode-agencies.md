@@ -484,6 +484,12 @@ And this, or officers are signed in but their calls get `403`:
 | ------------------------- | --------------------------------- |
 | the `catalog.roles` value | the officer role's name (Step 2f) |
 
+And this, or officers see no cases and get `403` on every task:
+
+| This                     | must equal                |
+| ------------------------ | ------------------------- |
+| `flows.clients.ouHandle` | the OU's handle (Step 2a) |
+
 ### 4c. Install
 
 ```sh
@@ -652,6 +658,8 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | An M2M token request fails with `invalid_scope`         | The application lacks the scope (Step 2e), or no role grants it the permission (Step 2f)                                                                                                                                          |
 | Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                               |
+| Backend exits at startup naming `flows`                 | `flows.clients` is off or empty, a listed workflow isn't in the manifest at `artifactLoader`'s `ref`, an `owner` or client isn't in the catalog, or `ouHandle` is missing                                                         |
+| Officer sees no cases, or gets `403` on every task      | `flows.clients.ouHandle` isn't the OU handle in the officer's token, or the officer doesn't hold the flow's `owner` role                                                                                                          |
 | Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                      |
 | Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                               |
 | Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                         |
