@@ -94,6 +94,40 @@ catalog:
   clients:
     tnsw: NSW_TO_NPQS
 
+# The workflows TNSW may start on a case here, one per officer task
+# (POST /api/v1/internal/cases/{caseId}/flows). Starting one creates the case
+# if it is new and records this agency's OU (ouHandle) as its owner in the
+# flow's owner role, which decides which officers see the case and its tasks.
+flows:
+  clients:
+    enabled: true
+    ouHandle: npqs
+    workflows:
+      - { id: npqs_application_review, clients: [tnsw], owner: officer }
+      - { id: npqs_sample_draw, clients: [tnsw], owner: officer }
+      - { id: npqs_visual_sample_draw, clients: [tnsw], owner: officer }
+      - { id: npqs_sample_receive, clients: [tnsw], owner: officer }
+      - { id: npqs_lab_testing, clients: [tnsw], owner: officer }
+      - { id: npqs_visual_sample_receive, clients: [tnsw], owner: officer }
+      - { id: npqs_visual_sample, clients: [tnsw], owner: officer }
+      - { id: npqs_consignment_inspection, clients: [tnsw], owner: officer }
+      - { id: npqs_visual_system, clients: [tnsw], owner: officer }
+      - { id: npqs_visual2_decision, clients: [tnsw], owner: officer }
+      - { id: npqs_visual2_inspection, clients: [tnsw], owner: officer }
+      - { id: npqs_treatment_request_review, clients: [tnsw], owner: officer }
+      - { id: npqs_treatment_final_review, clients: [tnsw], owner: officer }
+      - { id: npqs_treatment_issue, clients: [tnsw], owner: officer }
+      - { id: npqs_treatment_issue_supervised, clients: [tnsw], owner: officer }
+      - { id: npqs_docs_review, clients: [tnsw], owner: officer }
+      - { id: npqs_certificate_issue, clients: [tnsw], owner: officer }
+      - { id: npqs_certificate_issue_non_ephyto, clients: [tnsw], owner: officer }
+      - { id: npqs_certificate_signed_upload, clients: [tnsw], owner: officer }
+      - { id: npqs_ephyto_transmit, clients: [tnsw], owner: officer }
+      - { id: npqs_certificate_withdrawal, clients: [tnsw], owner: officer }
+      - { id: npqs_certificate_replacement, clients: [tnsw], owner: officer }
+      - { id: npqs_payment_review_receipt, clients: [tnsw], owner: officer }
+      - { id: npqs_payment_confirm, clients: [tnsw], owner: officer }
+
 # The npqs folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
 # npqs dir to use that one.

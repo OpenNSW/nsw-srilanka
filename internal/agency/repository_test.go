@@ -2,7 +2,9 @@ package agency
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"gorm.io/driver/postgres"
@@ -10,7 +12,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func newMockRepo(t *testing.T) (Repository, sqlmock.Sqlmock) {
+func newMockRepo(t *testing.T) (CaseRepository, sqlmock.Sqlmock) {
 	t.Helper()
 	mockDB, mock, err := sqlmock.New()
 	if err != nil {
@@ -21,58 +23,53 @@ func newMockRepo(t *testing.T) (Repository, sqlmock.Sqlmock) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewRepository(db), mock
+	return NewCaseRepository(db), mock
 }
 
-func TestRecord(t *testing.T) {
-	w := Workflow{TaskID: "task-1", TaskCode: "code", CaseID: "C1", ManifestVersion: 3, CallbackToken: "tok-1"}
+var officers = Owner{OUHandle: "cda", Roles: []string{"officer"}}
 
-	t.Run("new workflow reopens its case", func(t *testing.T) {
-		repo, mock := newMockRepo(t)
-		mock.ExpectBegin()
-		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
-		mock.ExpectExec(`INSERT INTO agency_workflow`).
-			WithArgs("task-1", "code", "C1", 3, StatusStarting, "tok-1").
-			WillReturnResult(sqlmock.NewResult(0, 1))
-		mock.ExpectExec(`UPDATE cases SET state`).WillReturnResult(sqlmock.NewResult(0, 0))
-		mock.ExpectCommit()
+func TestListCasesIsTheOwners(t *testing.T) {
+	repo, mock := newMockRepo(t)
+	mock.ExpectQuery(`SELECT count\(\*\) FROM cases WHERE EXISTS .*party_type = 'ou'.*party_id = \$1 AND case_parties.role IN \(\$2\)`).
+		WithArgs("cda", "officer").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery(`SELECT id, name, state, created_at, updated_at\s+FROM cases\s+WHERE EXISTS .* ORDER BY created_at DESC`).
+		WithArgs("cda", "officer", 0, 20).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "state", "created_at", "updated_at"}).
+			AddRow("C1", nil, "IN_PROGRESS", time.Now(), time.Now()))
 
-		if err := repo.Record(context.Background(), w); err != nil {
-			t.Fatal(err)
-		}
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Fatal(err)
-		}
-	})
+	cases, total, err := repo.ListCases(context.Background(), officers, 0, 20)
+	if err != nil || total != 1 || len(cases) != 1 || cases[0].ID != "C1" {
+		t.Fatalf("cases = %+v, total = %d, err = %v", cases, total, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
 
-	t.Run("repeat taskId removes the case it just created", func(t *testing.T) {
-		repo, mock := newMockRepo(t)
-		mock.ExpectBegin()
-		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
-		mock.ExpectExec(`INSERT INTO agency_workflow`).WillReturnResult(sqlmock.NewResult(0, 0))
-		mock.ExpectExec(`DELETE FROM cases`).WithArgs("C1").WillReturnResult(sqlmock.NewResult(0, 1))
-		mock.ExpectCommit()
+// An owner with no OU or no role owns nothing, without a query.
+func TestCasesOfNoOwner(t *testing.T) {
+	repo, mock := newMockRepo(t)
+	for _, o := range []Owner{{Roles: []string{"officer"}}, {OUHandle: "cda"}} {
+		if cases, total, err := repo.ListCases(context.Background(), o, 0, 20); err != nil || total != 0 || len(cases) != 0 {
+			t.Errorf("%+v: cases = %v, total = %d, err = %v", o, cases, total, err)
+		}
+		if _, err := repo.GetCase(context.Background(), o, "C1"); !errors.Is(err, ErrCaseNotFound) {
+			t.Errorf("%+v: err = %v, want ErrCaseNotFound", o, err)
+		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
 
-		if err := repo.Record(context.Background(), w); err != nil {
-			t.Fatal(err)
-		}
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Fatal(err)
-		}
-	})
+func TestGetCaseNotOwned(t *testing.T) {
+	repo, mock := newMockRepo(t)
+	mock.ExpectQuery(`FROM cases WHERE id = \$1 AND EXISTS`).
+		WithArgs("C1", "cda", "officer").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "state", "created_at", "updated_at"}))
 
-	t.Run("repeat taskId keeps a case that already existed", func(t *testing.T) {
-		repo, mock := newMockRepo(t)
-		mock.ExpectBegin()
-		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 0))
-		mock.ExpectExec(`INSERT INTO agency_workflow`).WillReturnResult(sqlmock.NewResult(0, 0))
-		mock.ExpectCommit()
-
-		if err := repo.Record(context.Background(), w); err != nil {
-			t.Fatal(err)
-		}
-		if err := mock.ExpectationsWereMet(); err != nil {
-			t.Fatal(err)
-		}
-	})
+	if _, err := repo.GetCase(context.Background(), officers, "C1"); !errors.Is(err, ErrCaseNotFound) {
+		t.Fatalf("err = %v, want ErrCaseNotFound", err)
+	}
 }

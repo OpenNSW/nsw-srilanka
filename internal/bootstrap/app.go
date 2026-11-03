@@ -317,19 +317,25 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
-	// The mode decides what starts parent workflows: consignments in TNSW, injects in
-	// an agency (see agency.go). An agency builds none of the consignment stack, whose
-	// constructors require the trader and CHA roles an agency catalog does not map.
+	// Every parent workflow is a flow on a case: caseflow starts it and, as the
+	// completion callback, keeps the case's state in step with its flows. In TNSW the
+	// consignments start them; in an agency, the systems flows.clients lists (see
+	// agency.go). An agency builds none of the consignment stack, whose constructors
+	// require the trader and CHA roles an agency catalog does not map.
 	agencyMode := cfg.Mode == config.ModeAgency
+	sqlDB, err := db.DB()
+	if err != nil {
+		_ = stopTask()
+		temporalClient.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
+	}
+	flowService := caseflow.NewService(caseflow.NewRepository(sqlDB), artifacts)
 	var (
 		consignmentService *consignment.Service
 		consignmentRouter  *consignment.Router
-		flowService        *caseflow.Service
-		upstream           parentUpstreamService
 	)
-	if agencyMode {
-		upstream = agencyCompletion(db)
-	} else {
+	if !agencyMode {
 		consignmentService, err = consignment.NewService(db, artifacts, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Flows.Users)
 		if err != nil {
 			_ = stopTask()
@@ -344,26 +350,16 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to build consignment router: %w", err)
 		}
-		// A consignment is a case: caseflow starts its flows and, as the completion
-		// callback, keeps its state in step with them.
-		sqlDB, err := db.DB()
-		if err != nil {
-			_ = stopTask()
-			temporalClient.Close()
-			_ = database.Close(db)
-			return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
-		}
-		flowService = caseflow.NewService(caseflow.NewRepository(sqlDB), artifacts)
+		// A consignment is a case, its flows started through caseflow.
 		if err := consignmentService.RegisterCaseFlows(flowService); err != nil {
 			_ = stopTask()
 			temporalClient.Close()
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to register case flows with consignment service: %w", err)
 		}
-		upstream = flowService
 	}
 
-	pr, stopParentRunner, err := wireParentRunner(temporalClient, cfg.Temporal.Namespace, tm, upstream)
+	pr, stopParentRunner, err := wireParentRunner(temporalClient, cfg.Temporal.Namespace, tm, flowService)
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -373,14 +369,14 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	pr.RegisterDefinitionHandler(workflowDefinitionLoader(artifacts))
 	parentRunner = pr
 
+	if err := flowService.RegisterWorkflowManager(parentRunner); err != nil {
+		_ = stopParentRunner()
+		_ = stopTask()
+		temporalClient.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to register workflow manager with flow service: %w", err)
+	}
 	if !agencyMode {
-		if err := flowService.RegisterWorkflowManager(parentRunner); err != nil {
-			_ = stopParentRunner()
-			_ = stopTask()
-			temporalClient.Close()
-			_ = database.Close(db)
-			return nil, fmt.Errorf("failed to register workflow manager with flow service: %w", err)
-		}
 		if err := consignmentService.RegisterWorkflowManager(parentRunner); err != nil {
 			_ = stopParentRunner()
 			_ = stopTask()
@@ -595,7 +591,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
-		mountAgency(mux, db, artifacts, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
+		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,
@@ -688,8 +684,7 @@ type parentTaskActivator interface {
 }
 
 // parentUpstreamService is the narrow surface wireParentRunner needs to notify
-// a downstream domain when a parent workflow completes: *caseflow.Service in TNSW,
-// agency.CompletionHandler in an agency.
+// a downstream domain when a parent workflow completes: *caseflow.Service.
 type parentUpstreamService interface {
 	CompletionHandler(workflowID string, finalContext map[string]any) error
 }

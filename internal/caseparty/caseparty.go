@@ -99,3 +99,9 @@ func (r *Repository) RolesOf(ctx context.Context, caseID string, parties ...Ref)
 	}
 	return roles, nil
 }
+
+// AssignOU makes the OU with this handle the holder of role on caseID, replacing any
+// earlier holder.
+func (r *Repository) AssignOU(ctx context.Context, caseID, role, ouHandle string) error {
+	return Assign(ctx, r.db, Party{CaseID: caseID, Role: role, Type: TypeOU, ID: ouHandle})
+}
