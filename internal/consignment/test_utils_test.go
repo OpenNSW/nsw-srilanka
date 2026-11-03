@@ -26,10 +26,14 @@ type MockTaskStore struct {
 	mock.Mock
 }
 
-func (m *MockTaskStore) GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord {
+// GetTasks returns the tasks the expectation was set up with, and its error when it was given one.
+func (m *MockTaskStore) GetTasks(ctx context.Context, filter store.TaskFilter) ([]store.TaskRecord, error) {
 	args := m.Called(ctx, filter)
 	tasks, _ := args.Get(0).([]store.TaskRecord)
-	return tasks
+	if len(args) > 1 {
+		return tasks, args.Error(1)
+	}
+	return tasks, nil
 }
 
 type MockUserService struct {

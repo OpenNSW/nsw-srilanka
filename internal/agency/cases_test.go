@@ -3,6 +3,7 @@ package agency
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -50,11 +51,16 @@ func (f fakeCaseRepo) GetCase(_ context.Context, o Owner, id string) (*Case, err
 type fakeTasks struct {
 	tasks   []store.TaskRecord
 	filters *[]store.TaskFilter
+	// err, when set, is a failed read.
+	err error
 }
 
-func (f fakeTasks) GetTasks(_ context.Context, filter store.TaskFilter) []store.TaskRecord {
+func (f fakeTasks) GetTasks(_ context.Context, filter store.TaskFilter) ([]store.TaskRecord, error) {
 	if f.filters != nil {
 		*f.filters = append(*f.filters, filter)
+	}
+	if f.err != nil {
+		return nil, f.err
 	}
 	var out []store.TaskRecord
 	for _, t := range f.tasks {
@@ -62,7 +68,7 @@ func (f fakeTasks) GetTasks(_ context.Context, filter store.TaskFilter) []store.
 			out = append(out, t)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // officer is a CDA user holding roles.
@@ -182,6 +188,18 @@ func TestCaseHandlerDetailListsTheReadableTasks(t *testing.T) {
 	want := []store.TaskFilter{{CaseID: "C1", Roles: []string{"officer", "reviewer"}}}
 	if !reflect.DeepEqual(*filters, want) {
 		t.Errorf("filters = %+v, want %+v", *filters, want)
+	}
+}
+
+// Tasks that could not be read are a server error, not a case with no tasks.
+func TestCaseHandlerDetailFailsWhenTheTasksCannotBeRead(t *testing.T) {
+	h, _ := newCaseFixture(t)
+	h.tasks = fakeTasks{err: errors.New("db down")}
+
+	rec := httptest.NewRecorder()
+	h.HandleGetCase(rec, requestBy(officer("Officer"), "/api/v1/cases/C1", "C1"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
 	}
 }
 

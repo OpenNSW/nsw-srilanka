@@ -139,6 +139,24 @@ func TestCaseService_GetCaseDetail_FlowsError(t *testing.T) {
 	}
 }
 
+// Tasks that could not be read fail the detail rather than show a case with none.
+func TestCaseService_GetCaseDetail_TasksError(t *testing.T) {
+	db, sqlMock := newMockDB(t)
+	now := time.Now()
+	sqlMock.ExpectQuery(caseRowQuery()).
+		WithArgs("C1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "state", "created_at", "updated_at"}).
+			AddRow("C1", nil, "IN_PROGRESS", now, now))
+
+	taskStore := &MockTaskStore{}
+	taskStore.On("GetTasks", context.Background(), store.TaskFilter{CaseID: "C1"}).Return(nil, errors.New("db down"))
+	svc := NewCaseService(db, taskStore, fakeFlows{}, emptyArtifactSet(t))
+
+	if _, err := svc.GetCaseDetail(context.Background(), "C1"); err == nil || err.Error() != "list tasks of case C1: db down" {
+		t.Errorf("err = %v, want the task store error", err)
+	}
+}
+
 func adminCaseRequest(p *authn.Principal, id string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/admin/cases/"+id, nil)
 	r.SetPathValue("id", id)

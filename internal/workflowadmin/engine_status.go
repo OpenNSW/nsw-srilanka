@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -214,8 +215,13 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 		return
 	}
 
+	tasks, err := s.taskStore.GetTasks(ctx, store.TaskFilter{CaseID: caseID})
+	if err != nil {
+		slog.WarnContext(ctx, "workflowadmin: task workflow ids unavailable for engine status", "caseId", caseID, "error", err)
+		return
+	}
 	byTaskID := make(map[string]string, len(nodes))
-	for _, rec := range s.taskStore.GetTasks(ctx, store.TaskFilter{CaseID: caseID}) {
+	for _, rec := range tasks {
 		if rec.TaskWorkflowID != "" {
 			byTaskID[rec.TaskID] = rec.TaskWorkflowID
 		}
