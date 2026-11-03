@@ -32,12 +32,10 @@ func (m *MockTaskStore) GetTaskByWorkflowID(ctx context.Context, workflowID stri
 	return args.Get(0).(store.TaskRecord), args.Bool(1)
 }
 
-func (m *MockTaskStore) GetAllTasks(ctx context.Context, parentWorkflowID string) []store.TaskRecord {
-	args := m.Called(ctx, parentWorkflowID)
-	if args.Get(0) == nil {
-		return nil
-	}
-	return args.Get(0).([]store.TaskRecord)
+func (m *MockTaskStore) TasksOfCase(ctx context.Context, caseID string) ([]store.TaskRecord, error) {
+	args := m.Called(ctx, caseID)
+	tasks, _ := args.Get(0).([]store.TaskRecord)
+	return tasks, args.Error(1)
 }
 
 // MockWM implements workflow.Manager for testing.

@@ -18,9 +18,9 @@ type fakeCaseTasks struct {
 	caseID string
 }
 
-func (f *fakeCaseTasks) GetAllTasks(_ context.Context, caseID string) []store.TaskRecord {
+func (f *fakeCaseTasks) TasksOfCase(_ context.Context, caseID string) ([]store.TaskRecord, error) {
 	f.caseID = caseID
-	return f.tasks
+	return f.tasks, nil
 }
 
 const caseContainersConfig = `{

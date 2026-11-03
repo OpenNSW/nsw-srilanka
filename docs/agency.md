@@ -163,7 +163,7 @@ hint, not a lock: submitting a step never checks it.
 Any officer who can open the task may claim it; both routes need `task:write`.
 Claims, takeovers and releases are recorded in the audit trail as task updates. Claims
 are on in agency mode and off in TNSW, where the routes answer 404 and the task view
-has no `claim`. The claim is stored on the task row (`task_records_v2.claimed_by` and
+has no `claim`. The claim is stored on the task row (`taskflow_tasks.claimed_by` and
 `claimed_at`, migration `000028`) and lasts across every step of the task. The full
 contract is in `api/tasks.openapi.yaml`.
 

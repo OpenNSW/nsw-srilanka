@@ -45,7 +45,7 @@ func newOrderEvents(t *testing.T) (*OrderEvents, sqlmock.Sqlmock, *orderComplete
 
 // expectParked answers the lookup for the task waiting on this order.
 func expectParked(mock sqlmock.Sqlmock, taskID string) {
-	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).
 		WithArgs(slug, ApprovalWaitTemplateID, stateQueuedExternally, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow(taskID, "step-"+taskID))
 }
@@ -128,9 +128,9 @@ func TestOrderEvents_ProgressGoesThroughTheTaskManagerToo(t *testing.T) {
 func TestOrderEvents_RedeliveryIsAnswered(t *testing.T) {
 	service, mock, tasks := newOrderEvents(t)
 
-	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).
 		WillReturnError(gorm.ErrRecordNotFound)
-	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT "state" FROM "taskflow_tasks"`).
 		WillReturnRows(sqlmock.NewRows([]string{"state"}).AddRow("COMPLETED"))
 
 	require.NoError(t, service.Handle(context.Background(), orderEvent(EventApprovedByAccountant)))
@@ -143,11 +143,11 @@ func TestOrderEvents_RedeliveryIsAnswered(t *testing.T) {
 func TestOrderEvents_UnknownOrder(t *testing.T) {
 	service, mock, _ := newOrderEvents(t)
 
-	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).
 		WillReturnError(gorm.ErrRecordNotFound)
-	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT "state" FROM "taskflow_tasks"`).
 		WillReturnRows(sqlmock.NewRows([]string{"state"}))
-	mock.ExpectQuery(`SELECT count\(\*\) FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "taskflow_tasks"`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	assert.ErrorIs(t, service.Handle(context.Background(), orderEvent(EventApprovedByAccountant)), ErrOrderNotFound)
@@ -158,11 +158,11 @@ func TestOrderEvents_UnknownOrder(t *testing.T) {
 func TestOrderEvents_BeforeTheWaitOpens(t *testing.T) {
 	service, mock, tasks := newOrderEvents(t)
 
-	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).
 		WillReturnError(gorm.ErrRecordNotFound)
-	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT "state" FROM "taskflow_tasks"`).
 		WillReturnRows(sqlmock.NewRows([]string{"state"}))
-	mock.ExpectQuery(`SELECT count\(\*\) FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "taskflow_tasks"`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	assert.ErrorIs(t, service.Handle(context.Background(), orderEvent(EventApprovedByAccountant)), ErrNotWaitingYet)
@@ -176,11 +176,11 @@ func TestOrderEvents_BeforeTheWaitOpens(t *testing.T) {
 func TestOrderEvents_RedeliveryIsAnsweredWhileTheInvoiceTaskRuns(t *testing.T) {
 	service, mock, tasks := newOrderEvents(t)
 
-	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).
 		WillReturnError(gorm.ErrRecordNotFound)
 	// Scoped to the approval wait: the invoice task's QUEUED_EXTERNALLY row
 	// carries the same slug and must not be consulted here.
-	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT "state" FROM "taskflow_tasks"`).
 		WithArgs(slug, ApprovalWaitTemplateID).
 		WillReturnRows(sqlmock.NewRows([]string{"state"}).AddRow("COMPLETED"))
 
@@ -195,9 +195,9 @@ func TestOrderEvents_RedeliveryIsAnsweredWhileTheInvoiceTaskRuns(t *testing.T) {
 func TestOrderEvents_BetweenStepsAsksForARetry(t *testing.T) {
 	service, mock, tasks := newOrderEvents(t)
 
-	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).
 		WillReturnError(gorm.ErrRecordNotFound)
-	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT "state" FROM "taskflow_tasks"`).
 		WillReturnRows(sqlmock.NewRows([]string{"state"}).AddRow("STARTING"))
 
 	assert.ErrorIs(t, service.Handle(context.Background(), orderEvent(EventApprovedByAccountant)), ErrNotWaitingYet)

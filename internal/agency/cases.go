@@ -27,9 +27,11 @@ const (
 	errInvalidPaging = "invalid pagination parameters"
 )
 
-// TaskLister is the narrow surface CaseHandler needs from the task store.
+// TaskLister is the narrow surface CaseHandler needs from the task store: every task
+// of a case, whatever its read roles, since the handler has already admitted the officer.
+// *casetasks.Store satisfies it.
 type TaskLister interface {
-	GetAllTasks(ctx context.Context, caseID string) []store.TaskRecord
+	TasksOfCase(ctx context.Context, caseID string) ([]store.TaskRecord, error)
 }
 
 // CaseHandler serves the officer-facing case list and detail. Responses reuse the
@@ -142,7 +144,12 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 	nodes := make([]WorkflowNode, 0)
 	for _, wf := range workflows {
 		meta := h.meta(r, wf)
-		for _, t := range h.tasks.GetAllTasks(ctx, wf.TaskID) {
+		tasks, err := h.tasks.TasksOfCase(ctx, wf.TaskID)
+		if err != nil {
+			httputil.InternalServerError(w, r, "failed to list case tasks", err, "caseId", id)
+			return
+		}
+		for _, t := range tasks {
 			if t.TaskType == "SYSTEM" {
 				continue
 			}

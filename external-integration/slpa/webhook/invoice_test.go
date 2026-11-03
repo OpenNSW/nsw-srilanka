@@ -42,7 +42,7 @@ func newInvoiceEvents(t *testing.T) (*InvoiceEvents, sqlmock.Sqlmock, *invoiceCo
 }
 
 func expectParkedInvoice(mock sqlmock.Sqlmock, taskID string) {
-	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+	mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).
 		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow(taskID, "step-"+taskID))
 }
 
@@ -194,8 +194,8 @@ func TestInvoiceEvents_RefusesWhatItCannotActOn(t *testing.T) {
 func TestInvoiceEvents_RedeliveryAndUnknownOrder(t *testing.T) {
 	t.Run("redelivery", func(t *testing.T) {
 		service, mock, tasks := newInvoiceEvents(t)
-		mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).WillReturnError(gorm.ErrRecordNotFound)
-		mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).WillReturnRows(sqlmock.NewRows([]string{"state"}).AddRow("COMPLETED"))
+		mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).WillReturnError(gorm.ErrRecordNotFound)
+		mock.ExpectQuery(`SELECT "state" FROM "taskflow_tasks"`).WillReturnRows(sqlmock.NewRows([]string{"state"}).AddRow("COMPLETED"))
 
 		require.NoError(t, service.Handle(context.Background(), invoiceEvent(t, paid)))
 		assert.False(t, tasks.called)
@@ -203,9 +203,9 @@ func TestInvoiceEvents_RedeliveryAndUnknownOrder(t *testing.T) {
 
 	t.Run("an order this deployment never raised", func(t *testing.T) {
 		service, mock, _ := newInvoiceEvents(t)
-		mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).WillReturnError(gorm.ErrRecordNotFound)
-		mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).WillReturnRows(sqlmock.NewRows([]string{"state"}))
-		mock.ExpectQuery(`SELECT count\(\*\) FROM "task_records_v2"`).
+		mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).WillReturnError(gorm.ErrRecordNotFound)
+		mock.ExpectQuery(`SELECT "state" FROM "taskflow_tasks"`).WillReturnRows(sqlmock.NewRows([]string{"state"}))
+		mock.ExpectQuery(`SELECT count\(\*\) FROM "taskflow_tasks"`).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 		assert.ErrorIs(t, service.Handle(context.Background(), invoiceEvent(t, paid)), ErrOrderNotFound)
@@ -215,8 +215,8 @@ func TestInvoiceEvents_RedeliveryAndUnknownOrder(t *testing.T) {
 	// after the flow finished must be judged by the invoice wait alone.
 	t.Run("a redelivery once the invoice wait has finished", func(t *testing.T) {
 		service, mock, tasks := newInvoiceEvents(t)
-		mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).WillReturnError(gorm.ErrRecordNotFound)
-		mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+		mock.ExpectQuery(`SELECT .*FROM "taskflow_tasks"`).WillReturnError(gorm.ErrRecordNotFound)
+		mock.ExpectQuery(`SELECT "state" FROM "taskflow_tasks"`).
 			WithArgs(slug, slug, PaymentWaitTemplateID).
 			WillReturnRows(sqlmock.NewRows([]string{"state"}).AddRow("COMPLETED"))
 

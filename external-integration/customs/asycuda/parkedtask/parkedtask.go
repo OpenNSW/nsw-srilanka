@@ -29,8 +29,9 @@ type Tasks interface {
 
 // Store loads tasks from the task table through core's task model.
 //
-// core's task store has GetAllTasks, but it logs a failed query and answers
-// with no tasks, which is the one case Tasks has to tell apart.
+// core's task store lists tasks only by the caller's read roles (GetTasks), and
+// logs a failed query and answers with no tasks, which is the one case Tasks has
+// to tell apart.
 type Store struct {
 	db *gorm.DB
 }

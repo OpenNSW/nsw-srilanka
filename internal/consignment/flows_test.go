@@ -227,7 +227,7 @@ func TestDetailListsStartableFlows(t *testing.T) {
 			svc.taskStore = taskStore
 			id := uuid.NewString()
 			expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
-			taskStore.On("GetAllTasks", mock.Anything, id).Return(nil)
+			taskStore.On("TasksOfCase", mock.Anything, id).Return(nil, nil)
 
 			got, err := svc.GetConsignmentByID(context.Background(), id, "co-trader", []string{"Trader"})
 			require.NoError(t, err)

@@ -28,7 +28,6 @@ import (
 	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
-	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
 	"github.com/OpenNSW/core/temporal"
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/core/uiprojector"
@@ -61,6 +60,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/systemlog"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/casetasks"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
@@ -785,7 +785,7 @@ func wireParentRunner(c client.Client, namespace string, activator parentTaskAct
 type taskStack struct {
 	Manager   *orchestrator.TaskManager
 	Runner    workflow.TemporalManager
-	Store     *gormstore.TaskStore
+	Store     *casetasks.Store
 	Assembler *zoneview.ZoneViewAssembler
 }
 
@@ -1076,7 +1076,7 @@ func initTask(
 	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
-	taskStore := gormstore.New(db)
+	taskStore := casetasks.New(db)
 
 	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, taskStore, remoteManager); err != nil {
 		return nil, nil, err
