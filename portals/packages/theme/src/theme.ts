@@ -85,7 +85,11 @@ export function themeVariables(config: ThemeConfig, appearance: Appearance): Rec
     ['accent', palette.accent],
     ['gray', palette.gray],
   ] as const) {
-    if (!scale) continue
+    // Radix's own --gray-N already are the gray scale; pointing them at
+    // themselves would be a cycle, which the browser treats as invalid. For
+    // a Theme root to keep them, it must be given grayColor="gray", which
+    // Radix doesn't remap.
+    if (!scale || (role === 'gray' && scale === 'gray')) continue
     for (const step of STEPS) vars[`${role}-${step}`] = `var(--${scale}-${step})`
   }
   return { ...vars, ...palette.colors }

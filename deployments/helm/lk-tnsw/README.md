@@ -252,7 +252,9 @@ nothing is generated, so for a custom brand supply each step you want
 changed: the
 [Radix custom palette tool](https://www.radix-ui.com/colors/custom) gives
 all of them from one color. `dark` holds the same fields for the dark
-appearance; light `colors` don't carry over to it.
+appearance; light `colors` don't carry over to it. The portal renders in
+light mode only for now, so `dark` takes effect once it supports dark mode
+([#1081](https://github.com/OpenNSW/nsw-srilanka/issues/1081)).
 
 ```yaml
 frontend:

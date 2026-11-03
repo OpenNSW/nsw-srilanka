@@ -21,6 +21,13 @@ describe('themeVariables', () => {
     expect(vars['gray-track']).toBe('var(--sand-track)')
   })
 
+  it('leaves the gray role to Radix when the gray scale is gray', () => {
+    const vars = themeVariables({ accent: 'gray', gray: 'gray', colors: { 'gray-11': '#555555' } }, 'light')
+
+    expect(Object.keys(vars).filter((name) => name.startsWith('gray-'))).toEqual(['gray-11'])
+    expect(vars['accent-9']).toBe('var(--gray-9)')
+  })
+
   it('lets colors replace single steps of a named scale', () => {
     const vars = themeVariables({ accent: 'blue', colors: { 'accent-9': '#1e3a8a' } }, 'light')
 
