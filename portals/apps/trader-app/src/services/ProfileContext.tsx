@@ -1,48 +1,19 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { useQuery } from '@/hooks/useQuery'
 import { ProfileContext } from './profileContextCore'
-import { getProfile, type UserProfile } from './profile'
+import { getProfile } from './profile'
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-  const requestIdRef = useRef(0)
+  const { data, error, isFetching, refetch } = useQuery('profile', getProfile)
 
-  useEffect(() => {
-    async function fetchProfile() {
-      const requestId = ++requestIdRef.current
-      setIsLoading(true)
-      try {
-        const data = await getProfile()
-        if (requestId !== requestIdRef.current) return
-        setProfile(data)
-        setError(null)
-      } catch (err) {
-        if (requestId !== requestIdRef.current) return
-        setError(err instanceof Error ? err : new Error(String(err)))
-      } finally {
-        if (requestId === requestIdRef.current) setIsLoading(false)
-      }
-    }
-
-    void fetchProfile()
-  }, [])
-
-  const refetch = async () => {
-    const requestId = ++requestIdRef.current
-    setIsLoading(true)
-    try {
-      const data = await getProfile()
-      if (requestId !== requestIdRef.current) return
-      setProfile(data)
-      setError(null)
-    } catch (err) {
-      if (requestId !== requestIdRef.current) return
-      setError(err instanceof Error ? err : new Error(String(err)))
-    } finally {
-      if (requestId === requestIdRef.current) setIsLoading(false)
-    }
+  const value = {
+    profile: data ?? null,
+    isLoading: isFetching,
+    error,
+    refetch: async () => {
+      await refetch()
+    },
   }
 
-  return <ProfileContext.Provider value={{ profile, isLoading, error, refetch }}>{children}</ProfileContext.Provider>
+  return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>
 }

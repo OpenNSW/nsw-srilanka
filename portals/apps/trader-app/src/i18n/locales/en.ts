@@ -90,7 +90,6 @@ const en = {
           settingUp: 'Setting up your consignment...',
         },
         backToList: 'Back to Consignments',
-        tryAgain: 'Try Again',
         refresh: 'Refresh',
         refreshing: 'Refreshing...',
         title: 'Consignment View',
@@ -116,22 +115,6 @@ const en = {
           loadFailedDescription: 'There was a problem loading the consignment details. Please try again.',
           notFoundDescription: "The consignment you're looking for doesn't exist or you don't have access to it.",
         },
-      },
-    },
-
-    preconsignment: {
-      title: 'Verified Documents',
-      error: {
-        loadFailed: 'Failed to load pre-consignments list.',
-        noReadyTask: 'No ready task found in pre-consignment.',
-        startFailed: 'Failed to start registration process.',
-        noTask: 'No task found in pre-consignment.',
-        loadDetailFailed: 'An error occurred while loading the process details.',
-      },
-      action: {
-        start: 'Start',
-        view: 'View',
-        continue: 'Continue',
       },
     },
 

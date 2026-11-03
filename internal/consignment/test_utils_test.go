@@ -15,6 +15,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -24,6 +25,11 @@ import (
 // MockTaskStore implements consignment.TaskStore for testing.
 type MockTaskStore struct {
 	mock.Mock
+}
+
+func (m *MockTaskStore) GetTaskByWorkflowID(ctx context.Context, workflowID string) (store.TaskRecord, bool) {
+	args := m.Called(ctx, workflowID)
+	return args.Get(0).(store.TaskRecord), args.Bool(1)
 }
 
 func (m *MockTaskStore) GetAllTasks(ctx context.Context, parentWorkflowID string) []store.TaskRecord {
@@ -106,7 +112,7 @@ func (m *MockUserService) Health(ctx context.Context) error {
 // immediately if construction errors.
 func mustNewService(t *testing.T, db *gorm.DB, artifactRegistry *artifact.Set, chaService cha.Service, companyService company.Service, userService user.Service, taskStore TaskStore) *Service {
 	t.Helper()
-	svc, err := NewService(db, artifactRegistry, chaService, companyService, userService, taskStore, testCatalogRoles, nil)
+	svc, err := NewService(db, artifactRegistry, chaService, companyService, userService, taskStore, testCatalogRoles, caseflow.UserFlows{})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

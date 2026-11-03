@@ -6,7 +6,7 @@
 # architecture-independent and one native build serves every target. This stage
 # therefore runs once however many platforms are requested — only the nginx stage
 # below is per-platform. Requires BuildKit.
-FROM --platform=$BUILDPLATFORM node:22-alpine3.24 AS builder
+FROM --platform=$BUILDPLATFORM node:24-alpine3.24 AS builder
 
 WORKDIR /workspace
 
@@ -14,6 +14,7 @@ RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY apps/trader-app/package.json apps/trader-app/package.json
+COPY packages/ui/package.json packages/ui/package.json
 
 RUN pnpm install --frozen-lockfile
 
@@ -28,7 +29,7 @@ RUN pnpm --filter trader-app build
 # ngx_http_perl_module and a perl interpreter would only widen the CVE surface.
 # envsubst templating and /docker-entrypoint.d — which default.conf.template
 # relies on — live in the base layer, not this variant.
-FROM nginxinc/nginx-unprivileged:stable-alpine3.24
+FROM nginxinc/nginx-unprivileged:stable-alpine3.24 AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
 LABEL org.opencontainers.image.description="NSW Trader Portal Frontend"
@@ -40,8 +41,12 @@ COPY --chown=101:0 --from=builder /workspace/apps/trader-app/dist /usr/share/ngi
 # docker-compose, or mounted from a ConfigMap by Helm (see
 # deployments/helm/lk-tnsw/templates/frontend/configmap.yaml).
 
-# OpenShift Compliance: Fix permissions for random UID (Group 0)
+# Alpine security fixes published after the base image was built; CI scans this
+# image and fails on a fixable CRITICAL CVE.
 USER root
+RUN apk upgrade --no-cache
+
+# OpenShift Compliance: Fix permissions for random UID (Group 0)
 RUN chmod -R g+w /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html
 USER 101
 EXPOSE 8080

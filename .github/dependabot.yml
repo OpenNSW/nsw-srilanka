@@ -96,7 +96,7 @@ updates:
 
   # Docker base images
   #   /                        -> golang:1.27-alpine3.24, alpine:3.24
-  #   /portals/apps/trader-app -> node:22-alpine3.24, nginxinc/nginx-unprivileged
+  #   /portals/apps/trader-app -> node:24-alpine3.24, nginxinc/nginx-unprivileged
   - package-ecosystem: docker
     directories:
       - /

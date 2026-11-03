@@ -18,7 +18,7 @@ export function ColorSchemeProvider({ children }: { children: ReactNode }) {
   })
 
   // The scheme's CSS variable overrides live under `[data-theme="<id>"]` in
-  // index.css; this is the one place that attribute gets set, so every
+  // @portals/ui's theme.css; this is the one place that attribute gets set, so every
   // Tailwind utility reading --color-primary etc. picks it up automatically.
   useEffect(() => {
     document.documentElement.dataset.theme = scheme.id

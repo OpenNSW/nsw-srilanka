@@ -11,6 +11,7 @@ export function AdminConsignmentDetailScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   return (
     <ConsignmentDetailScreen
+      scope="admin"
       fetcher={getConsignmentForAdmin}
       parent={{ label: 'Engine status', to: `/admin/consignments/${consignmentId}` }}
       canStartFlows={false}

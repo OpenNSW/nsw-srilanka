@@ -17,6 +17,8 @@
 //     task, posting {command, payload} back into NSW.
 //   - pay:      drive a mock payment gateway to confirm a parked payment task via
 //     a gateway webhook.
+//   - upload:   upload a file as an actor, as a portal does, and capture its file
+//     reference for a form's file field.
 //
 // Strings in paths and request bodies may reference variables as {{name}}.
 package replay
@@ -56,13 +58,14 @@ type Flow struct {
 	Steps []Step `json:"steps"`
 }
 
-// Step is exactly one of request, wait, callback, or pay.
+// Step is exactly one of request, wait, callback, pay, or upload.
 type Step struct {
 	Name     string    `json:"name"`
 	Request  *Request  `json:"request,omitempty"`
 	Wait     *Wait     `json:"wait,omitempty"`
 	Callback *Callback `json:"callback,omitempty"`
 	Pay      *Pay      `json:"pay,omitempty"`
+	Upload   *Upload   `json:"upload,omitempty"`
 }
 
 // Request issues an HTTP call as a given actor.
@@ -124,6 +127,17 @@ type PaymentGateway interface {
 	Pay(ctx context.Context, taskID, method, status string, timeout time.Duration) error
 }
 
+// Upload uploads a file as Actor: it reserves the upload (POST /api/v1/storage),
+// PUTs Content to the upload URL that returns, and stores the file's reference in
+// the variable Into, to send as the value of a form's file field.
+type Upload struct {
+	Actor    string `json:"actor"`
+	Filename string `json:"filename"`
+	MimeType string `json:"mimeType"`
+	Content  string `json:"content"` // the file's bytes
+	Into     string `json:"into"`
+}
+
 // LoadFlow reads and parses a JSON flow file.
 func LoadFlow(path string) (*Flow, error) {
 	raw, err := os.ReadFile(path)
@@ -177,8 +191,10 @@ func (r *Runner) Run(ctx context.Context, flow *Flow) error {
 			err = r.doCallback(ctx, step.Callback)
 		case step.Pay != nil:
 			err = r.doPay(ctx, step.Pay)
+		case step.Upload != nil:
+			err = r.doUpload(ctx, step.Upload)
 		default:
-			err = fmt.Errorf("step has no request/wait/callback/pay")
+			err = fmt.Errorf("step has no request/wait/callback/pay/upload")
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", label, err)
@@ -339,6 +355,81 @@ func (r *Runner) doPay(ctx context.Context, p *Pay) error {
 		status = "paid"
 	}
 	return r.PaymentGateway.Pay(ctx, taskID, p.Method, status, timeout)
+}
+
+func (r *Runner) doUpload(ctx context.Context, u *Upload) error {
+	if u.Into == "" {
+		return fmt.Errorf("upload: into is required")
+	}
+	if u.Content == "" {
+		return fmt.Errorf("upload: content is required")
+	}
+
+	reservation, err := json.Marshal(map[string]any{
+		"filename":  u.Filename,
+		"mime_type": u.MimeType,
+		"size":      len(u.Content),
+	})
+	if err != nil {
+		return fmt.Errorf("upload: marshal reservation: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.BaseURL+"/api/v1/storage", bytes.NewReader(reservation))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if u.Actor != "" {
+		req.Header.Set(AuthActorHeader, u.Actor)
+	}
+	body, err := r.send(req, http.StatusOK)
+	if err != nil {
+		return fmt.Errorf("upload: reserve: %w", err)
+	}
+	var reserved struct {
+		Key       string `json:"key"`
+		UploadURL string `json:"upload_url"`
+	}
+	if err := json.Unmarshal(body, &reserved); err != nil {
+		return fmt.Errorf("upload: decode reservation: %w (body=%s)", err, truncate(body))
+	}
+	if reserved.Key == "" || reserved.UploadURL == "" {
+		return fmt.Errorf("upload: reservation has no key or upload_url: %s", truncate(body))
+	}
+
+	// The upload URL is presigned, so the PUT carries no actor.
+	put, err := http.NewRequestWithContext(ctx, http.MethodPut, reserved.UploadURL, strings.NewReader(u.Content))
+	if err != nil {
+		return err
+	}
+	put.Header.Set("Content-Type", u.MimeType)
+	if _, err := r.send(put, 0); err != nil {
+		return fmt.Errorf("upload: put content: %w", err)
+	}
+
+	r.Vars[u.Into] = reserved.Key
+	return nil
+}
+
+// send issues req and returns its response body. It fails unless the status is
+// want, or any 2xx when want is 0.
+func (r *Runner) send(req *http.Request, want int) ([]byte, error) {
+	resp, err := r.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+	ok := resp.StatusCode == want
+	if want == 0 {
+		ok = resp.StatusCode >= 200 && resp.StatusCode < 300
+	}
+	if !ok {
+		return nil, fmt.Errorf("%s %s: status %d: %s", req.Method, req.URL.Path, resp.StatusCode, truncate(body))
+	}
+	return body, nil
 }
 
 // ── consignment detail polling ──────────────────────────────────────────────

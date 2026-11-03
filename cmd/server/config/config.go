@@ -18,8 +18,8 @@ import (
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
-	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
@@ -69,9 +69,10 @@ type Config struct {
 	Notification NotificationConfig  `yaml:"notification"`
 	Integrations integrations.Config `yaml:"integrations"`
 
-	// Consignment configures TNSW's consignments: the flows a trader or CHA may start on
-	// one. Optional; an agency ignores it.
-	Consignment consignment.Config `yaml:"consignment"`
+	// Flows lists the workflows a person (users) or another system (clients) may start
+	// on a case. Optional: with none, nothing outside this deployment's own code starts a
+	// flow.
+	Flows caseflow.Config `yaml:"flows"`
 
 	Otel telemetry.Config `yaml:"otel"`
 }
@@ -96,6 +97,12 @@ type ArtifactsConfig struct {
 	// publish a manifest before turning it on. Flows already running keep the version
 	// they started on either way.
 	ManifestVersion int `yaml:"manifestVersion"`
+
+	// FileCacheBytes is how many bytes of artifact files the server keeps in memory once
+	// loaded, evicting the least recently used. 0, the default, keeps core's default (64
+	// MiB); a negative value turns the cache off. Only versioned manifests are cached: a
+	// source with only manifest.json is a working copy, so its files are fetched every time.
+	FileCacheBytes int `yaml:"fileCacheBytes"`
 }
 
 // Validate checks the artifacts configuration.
@@ -172,17 +179,13 @@ func loadFile(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// validateTNSW checks TNSW's trade integrations and consignments; an agency builds none of
-// them.
+// validateTNSW checks TNSW's trade integrations; an agency builds none of them.
 func (c *Config) validateTNSW() error {
 	if c.Mode == ModeAgency {
 		return nil
 	}
 	if err := c.Integrations.Validate(); err != nil {
 		return fmt.Errorf("invalid external integration configuration: %w", err)
-	}
-	if err := c.Consignment.Validate(); err != nil {
-		return fmt.Errorf("invalid consignment configuration: %w", err)
 	}
 	return nil
 }
@@ -246,6 +249,9 @@ func (c *Config) validateAuxiliary() error {
 	}
 	if err := c.Artifacts.Validate(); err != nil {
 		return fmt.Errorf("invalid artifacts configuration: %w", err)
+	}
+	if err := c.Flows.Validate(&c.Catalog); err != nil {
+		return fmt.Errorf("invalid flows configuration: %w", err)
 	}
 	return nil
 }

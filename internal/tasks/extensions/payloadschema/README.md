@@ -79,10 +79,11 @@ submission.
 The schema is followed through `properties`, `allOf`, `$ref`, `additionalProperties`,
 `patternProperties` and list `items`. A `readOnly` under a part whose application depends
 on the data or a row's position (`if`/`then`/`else`, `oneOf`, `anyOf`, `not`,
-`dependencies`, `dependentSchemas`, `contains`, `propertyNames`, tuple `items`,
-`prefixItems`, `additionalItems`, `unevaluated*`, `$dynamicRef`, `$recursiveRef`), or, in a
-form with read-only values, a `readOnly` or `default` beside a draft-07 `$ref`, which the
-library drops, makes the form misconfigured.
+`dependencies` in its schema form, `dependentSchemas`, `contains`, `propertyNames`, tuple
+`items`, `prefixItems`, `additionalItems`, `unevaluated*`, `$dynamicRef`, `$recursiveRef`)
+makes the form misconfigured. So does, in a form with read-only values, a `default` or a
+keyword holding a `readOnly` (such as `properties` or `allOf`) beside a draft-07 `$ref`,
+which the library drops; a `readOnly` beside a `$ref` is kept.
 
 ### File fields (`x-file`)
 

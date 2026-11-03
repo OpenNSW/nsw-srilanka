@@ -36,8 +36,9 @@ mode: tnsw
 
 server:
   port: 8080
-  # debug | info | warn | error. Audit records (category=audit) are written
-  # at info, so warn or error drops them. Startup logs that at this level.
+  # debug | info | warn | error. Filters the system stream (category=system)
+  # and security lines on that stream. Audit (category=audit) is OTLP-only and
+  # is not filtered by this level; with export off, startup warns once.
   logLevel: info
   # The browser-facing URL: the host port compose publishes (BACKEND_PORT).
   serviceURL: http://localhost:8080
@@ -90,10 +91,6 @@ storage:
     # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
     # a known malware vector.
     - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-    # XML is data to download, not to display: it is not in inlineTypes, so a
-    # download saves it instead of opening it.
-    - text/xml
-    - application/xml
   # What machine clients may upload on POST /api/v1/internal/storage beyond
   # allowedUploadTypes, by the client's name in catalog.clients. That
   # route is for the files a deployment generates itself, such as the documents
@@ -101,7 +98,7 @@ storage:
   # proxy. Unlike allowedUploadTypes it may list a type a browser opens as a
   # document: inlineTypes lists text/html, so an agency that generates HTML
   # needs it granted: NPQS does. Only the clients named here, holding the
-  # nsw:storage:internalwrite scope, can store such a type.
+  # storage:internalwrite scope, can store such a type.
   allowedInternalUploadTypes:
     npqs:
       - text/html
@@ -118,8 +115,6 @@ storage:
     image/gif: [.gif]
     image/webp: [.webp]
     application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: [.xlsx]
-    text/xml: [.xml]
-    application/xml: [.xml]
     text/html: [.html]
   # What a download opens in the browser; every other file is saved. MIME
   # types, compared exactly with the stored type. Not read when type is proxy:
@@ -169,9 +164,9 @@ storage:
   # (services), which supplies its URL and authentication. All of the settings
   # below are required in proxy mode; the paths are that service's usual storage
   # routes, and {key} may appear anywhere in the download/delete paths. Users'
-  # uploads go to uploadPath (scope nsw:storage:write). The files this
+  # uploads go to uploadPath (scope storage:write). The files this
   # deployment generates go to internalUploadPath (scope
-  # nsw:storage:internalwrite), which accepts what the owning service grants
+  # storage:internalwrite), which accepts what the owning service grants
   # this deployment's client.
   # proxy:
   #   service: ""
@@ -271,6 +266,9 @@ artifacts:
   # Pin the version new flows start on, e.g. to roll back. 0 takes the highest
   # published one.
   manifestVersion: 0
+  # Bytes of artifact files kept in memory once loaded (versioned manifests
+  # only). 0 keeps the default, 64 MiB; a negative value turns the cache off.
+  fileCacheBytes: 0
 
 # Agency portals are listed too: they call the storage service directly.
 cors:
@@ -299,8 +297,8 @@ services:
         clientID: NSW_TO_NPQS
         clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.npqs.nsw-agency.local
   - id: fcau
@@ -313,8 +311,8 @@ services:
         clientID: NSW_TO_FCAU
         clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.fcau.nsw-agency.local
   - id: cda
@@ -327,8 +325,8 @@ services:
         clientID: NSW_TO_CDA
         clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.cda.nsw-agency.local
   - id: slpa
@@ -350,8 +348,8 @@ services:
         clientID: NSW_TO_EFC
         clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.efc.nsw-agency.local
   - id: customs-asycuda
@@ -381,8 +379,8 @@ services:
         clientID: NSW_TO_SLTB
         clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
         scopes:
-          - nsw:workflow:inject
-          - nsw:task:write
+          - workflow:inject
+          - task:write
         endpointParams:
           resource: https://api.sltb.nsw-agency.local
 
@@ -493,9 +491,10 @@ refid:
         # when the trader submits the application: the year, then a sequence
         # that restarts every year. Produces: 2026/00001
         - idType: blend_sheet_no
+          timezone: Asia/Colombo
           segments:
             - type: date
-              layout: "2006"
+              format: "yyyy"
             - type: literal
               value: "/"
             - type: sequence
@@ -530,18 +529,19 @@ refid:
     - issuer: NPQS
       formats:
         # NPQS payment reference shared by certificate and treatment fees.
-        # The UTC month and monthly sequence scope are shared across both fees. Produces:
+        # The month (in Colombo time) and monthly sequence scope are shared across both fees. Produces:
         # NPQS-2026-09-00001
         - idType: npqs_payment_ref
+          timezone: Asia/Colombo
           segments:
             - type: literal
               value: "NPQS-"
             - type: date
-              layout: "2006"
+              format: "yyyy"
             - type: literal
               value: "-"
             - type: date
-              layout: "01"
+              format: "MM"
             - type: literal
               value: "-"
             - type: sequence
@@ -550,17 +550,38 @@ refid:
                 padding: 5
 
 # One settings block per channel, in the schema of
-# github.com/OpenNSW/core/notification. At least one is required.
-notification:
-  providers:
-    email:
-      baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
-    sms:
-      baseURL: https://smsservice.lk
-      userName: replace-with-actual-username
-      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-      sidCode: sidCode
+# github.com/OpenNSW/core/notification. Optional, and off for local
+# development: left out, the server sends no email or SMS.
+# notification:
+#   providers:
+#     # Email: set email (through PingMailer's API) or smtp (straight to an
+#     # SMTP server), not both. The schemas are in
+#     # github.com/OpenNSW/core/notification.
+#     email:
+#       baseURL: https://api-server.mail.svc.cluster.local:8000 # PingMailer API server
+#       # path: /notify # optional, this is the default
+#       # allowInsecureHTTP: true # only if baseURL is plain http (in-cluster)
+#       auth:
+#         type: oauth2
+#         oauth2:
+#           tokenURL: https://idp.example.com/oauth2/token
+#           clientID: replace-with-pingmailer-client-id
+#           clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+#       smtpHost: smtp.example.com # SMTP server PingMailer relays to
+#       smtpPort: 587
+#       sender: no-reply@example.com
+#     smtp:
+#       host: smtp.example.com
+#       # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+#       # tlsMode: starttls # starttls (default), tls or none
+#       username: no-reply@example.com
+#       password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
+#       sender: no-reply@example.com
+#     sms:
+#       baseURL: https://smsservice.lk
+#       userName: replace-with-actual-username
+#       password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+#       sidCode: sidCode
 
 integrations:
   # Shared with SLPA out of band. Their Cargo Management System signs each
@@ -571,18 +592,30 @@ integrations:
   # never hear the answer to.
   slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
 
-# Flows a trader or CHA may start on a consignment from its page
-# (POST /api/v1/consignments/{id}/flows), besides the export flow that creating
-# it starts. Each names a workflow template in the artifacts; label is the
-# text of its button. Empty: no such flow can be started.
-consignment:
-  flows: []
-  # flows:
-  #   - templateId: <a workflow template in your artifacts>
-  #     label: <the text of its button>
-  # e.g. the SLPA sundry (add-on) order and its payment:
-  #   - templateId: slpa-sundry-payment
-  #     label: SLPA sundry payment
+# Workflows a person or another system may start on a case, besides those this
+# deployment's own code starts (e.g. the export flow a new consignment runs).
+# Each id is a workflow in the artifacts; the server refuses to start if the
+# current manifest lacks one. Each list is off unless enabled: true.
+flows:
+  # A trader or CHA, on a consignment they own, from its page
+  # (POST /api/v1/consignments/{id}/flows). roles are catalog roles; the
+  # caller must own the consignment in one. label is the text of its button.
+  users:
+    enabled: false
+    workflows: []
+    # workflows:
+    #   - id: <a workflow in your artifacts>
+    #     label: <the text of its button>
+    #     roles: [trader, cha]
+    # e.g. the SLPA sundry (add-on) order and its payment:
+    #   - id: slpa-sundry-payment
+    #     label: SLPA sundry payment
+    #     roles: [trader, cha]
+    # the Customs dispatch note for a container whose note Customs cancelled
+    # (the boat note waits until every container has one):
+    #   - id: customs-additional-cdn
+    #     label: Add a Cargo Dispatch Note
+    #     roles: [trader, cha]
 
 # Optional OTLP/HTTP export of metrics, logs and traces. Empty endpoint (or omit
 # the section) leaves export off. Point endpoint at an OpenObserve (or other

@@ -36,7 +36,7 @@ setup:
 		corepack enable pnpm; \
 		echo "✅ pnpm available via corepack"; \
 	else \
-		echo "❌ pnpm and corepack not found — install Node.js 22.18.0+ or pnpm 11.1.2"; \
+		echo "❌ pnpm and corepack not found — install Node.js 24.15.0+ or pnpm 12.16.1"; \
 		exit 1; \
 	fi
 	@pnpm --version
@@ -54,6 +54,7 @@ clean:
 	@echo "🧹 Cleaning workspace..."
 	@rm -rf node_modules
 	@rm -rf apps/*/node_modules
+	@rm -rf packages/*/node_modules
 	@rm -rf apps/*/dist
 	@rm -rf apps/*/.turbo
 	@echo "✅ Cleaned!"

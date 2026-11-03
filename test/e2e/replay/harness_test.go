@@ -34,6 +34,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
 
@@ -41,7 +42,7 @@ import (
 
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw-srilanka/internal/bootstrap"
-	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 )
 
 // TestMain changes the working directory to the repo root so bootstrap.Build's
@@ -109,9 +110,17 @@ func newHarness(t *testing.T) *harness {
 	// private keys.
 	setPaymentKeys(t, &cfg.Payment, payments, paymentKeys)
 	cfg.Storage.Local.BaseDir = t.TempDir() // keep blob storage out of the repo tree
+	// Every flow builds the app, which reads every artifact. GitHub's API allows 60
+	// requests an hour without a token, fewer than one run makes, so read the public
+	// artifacts from the raw-content host, which has no such limit.
+	if cfg.ArtifactLoader.Type == loaders.TypeGitHub {
+		cfg.ArtifactLoader.GitHub.UseRawHost = true
+	}
 	// consignment_flows.json starts a flow on a consignment. The artifacts hold no other
 	// consignment-level workflow, so the export workflow stands in for one.
-	cfg.Consignment.Flows = []consignment.FlowOption{{TemplateID: "trade-export", Label: "Another export flow"}}
+	cfg.Flows.Users = caseflow.UserFlows{Enabled: true, Workflows: []caseflow.UserFlow{
+		{ID: "trade-export", Label: "Another export flow", Roles: []string{"trader", "cha"}},
+	}}
 
 	// A controllable mock agency stands in for all external OGA services; all
 	// known agency service ids are pointed at it so EXTERNAL_REVIEW injects land
@@ -150,14 +159,20 @@ func newHarness(t *testing.T) *harness {
 	signed := newSignedAuth(t, cfg.Authn.Issuer, cfg.Authn.Audience, memberUserIDs, members, agencies, payments)
 	cfg.Authn.JWKSURL = signed.jwks.URL
 
+	// The server's address is known before the app is built, so the upload URLs the
+	// app presigns point at it.
+	srv := httptest.NewUnstartedServer(nil)
+	t.Cleanup(srv.Close)
+	cfg.Storage.Local.PublicURL = "http://" + srv.Listener.Addr().String()
+
 	app, err := bootstrap.Build(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("bootstrap.Build: %v", err)
 	}
 	t.Cleanup(func() { _ = app.Close() })
 
-	srv := httptest.NewServer(app.Server.Handler)
-	t.Cleanup(srv.Close)
+	srv.Config.Handler = app.Server.Handler
+	srv.Start()
 
 	// Now that the app is listening, wire per-agency and per-gateway bearers.
 	agency.callbackBase = srv.URL

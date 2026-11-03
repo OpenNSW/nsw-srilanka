@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -161,7 +162,7 @@ refid:
 // defaults, each has to set every required setting itself. Their placeholders
 // resolve from the env vars .env.example sets.
 func TestLoadFile_ExamplesLoad(t *testing.T) {
-	for _, k := range []string{"DB_PASSWORD", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET"} {
+	for _, k := range []string{"DB_PASSWORD", "SLPA_WEBHOOK_SECRET", "STORAGE_LOCAL_PUT_SECRET"} {
 		t.Setenv(k, "example-"+k)
 	}
 	for _, agency := range []string{"NPQS", "FCAU", "CDA", "SLPA", "EFC", "SLTB", "ASYCUDA"} {
@@ -181,8 +182,10 @@ func TestLoadFile_ExamplesLoad(t *testing.T) {
 			if cfg.Database.Postgres.Password != "example-DB_PASSWORD" {
 				t.Errorf("db.postgres.password = %q, want it resolved from DB_PASSWORD", cfg.Database.Postgres.Password)
 			}
-			if got := cfg.Notification.Providers.SMS.Password; got != "example-NOTIFICATION_SMS_PASSWORD" {
-				t.Errorf("notification.providers.sms.password = %q, want it resolved from NOTIFICATION_SMS_PASSWORD", got)
+			// Notifications are off in the dev templates, so no one needs
+			// gateway credentials to run the stack.
+			if p := cfg.Notification.Providers; p.Email != nil || p.SMS != nil {
+				t.Errorf("configs/%s sets notification.providers, want it commented out", name)
 			}
 			if err := cfg.Validate(); err != nil {
 				t.Errorf("configs/%s does not validate: %v", name, err)
@@ -238,5 +241,17 @@ func TestLoad_AgencyModeNeedsNoSLPASecret(t *testing.T) {
 
 	if _, err := loadYAML(t, configYAML(t, "mode: tnsw\n", secret)); err == nil || !containsString(err.Error(), "slpa webhook") {
 		t.Fatalf("tnsw: expected the SLPA secret to be required, got: %v", err)
+	}
+}
+
+// The flows section is checked against the catalog, in every mode: a role the catalog
+// does not define would let nobody start the flow.
+func TestLoad_FlowsAreCheckedAgainstTheCatalog(t *testing.T) {
+	const flows = "flows:\n  users:\n    enabled: true\n    workflows:\n      - id: port-fee\n        label: Pay port fee\n        roles: [%s]\n"
+	if _, err := loadYAML(t, configYAML(t, fmt.Sprintf(flows, "trader"))); err != nil {
+		t.Fatalf("a role the catalog defines: Load() unexpected error: %v", err)
+	}
+	if _, err := loadYAML(t, configYAML(t, fmt.Sprintf(flows, "officer"))); err == nil || !containsString(err.Error(), "invalid flows configuration") {
+		t.Fatalf("a role the catalog does not define: expected a flows error, got: %v", err)
 	}
 }

@@ -48,8 +48,8 @@ flowchart LR
     subgraph idp["ThunderID"]
         rs["Agency API (resource server)"]
         officer["Officers' group → officer role"]
-        n2a["TNSW-to-agency client → its role<br/>nsw:workflow:inject, nsw:task:write"]
-        a2n["Agency-to-TNSW client → its role<br/>nsw:task:write, nsw:storage:*"]
+        n2a["TNSW-to-agency client → its role<br/>workflow:inject, task:write"]
+        a2n["Agency-to-TNSW client → its role<br/>task:write, storage:*"]
     end
 
     tflow -- "as the TNSW-to-agency client" --> inject
@@ -63,7 +63,7 @@ flowchart LR
 
 - **The agency's API is a resource server of its own.** Officers' and TNSW's tokens for it
   carry its identifier as `aud`, which the agency checks as `authn.audience`. Its scopes
-  keep the `nsw:` names (`nsw:task:write`, `nsw:workflow:inject`, ...) because the backend
+  reuse the NSW API's names (`task:write`, `workflow:inject`, ...) because the backend
   checks those names in both modes.
 - **The task code picks the workflow.** TNSW's artifact names a `task_code`; the agency
   looks it up in its manifest as a `task_config`, which names the workflow to start. An
@@ -73,7 +73,7 @@ flowchart LR
   catalog maps those names to IdP roles, such as `officer` to the officer role.
 - **TNSW can reply on a parked step.** Where the artifacts are wired for it, a request for
   more information goes back and forth by reply tokens instead of a new inject, which is
-  why the TNSW-to-agency client also needs `nsw:task:write`. See
+  why the TNSW-to-agency client also needs `task:write`. See
   [docs/agency.md, Asking for more information](../agency.md#asking-for-more-information).
 - **The agency keeps no files.** Its storage proxies TNSW's as the agency-to-TNSW client,
   so officers see the documents traders uploaded.
@@ -195,10 +195,10 @@ In **APIs**, use **Add resource server**:
 3. **Permission Delimiter**: **Colon ( : )**. It can't be changed later.
 4. **Organization**: the agency's OU.
 
-Then, under **Resources**, add a resource with handle `nsw`, and under it these
-sub-resources (**Add sub-resource**) and actions (**Add Action**):
+Then, under **Resources**, add these resources at the top level, with no parent, and
+their actions (**Add Action**):
 
-| Sub-resource  | Actions         |
+| Resource      | Actions         |
 | ------------- | --------------- |
 | `consignment` | `read`          |
 | `task`        | `read`, `write` |
@@ -206,8 +206,8 @@ sub-resources (**Add sub-resource**) and actions (**Add Action**):
 | `storage`     | `read`, `write` |
 | `workflow`    | `inject`        |
 
-Unlike the names, these handles are fixed: they make the permissions `nsw:task:write`,
-`nsw:workflow:inject` and so on, which the backend checks in both modes.
+Unlike the names, these handles are fixed: they make the permissions `task:write`,
+`workflow:inject` and so on, which the backend checks in both modes.
 
 ### 2c. The officers' group
 
@@ -225,9 +225,9 @@ as the sign-in approach. Then, in its tabs:
 - **Access**: under **Allowed User Types**, only the officers' user type
   (`Government_User` in the platform setup). Registration off.
 - **Token**, under **Scopes & User Attribute Mappings**: activate `openid`, `profile`,
-  `email`, `group`, `role` and `ou`, and add the custom scopes `nsw:consignment:read`,
-  `nsw:task:read`, `nsw:task:write`, `nsw:profile:read`, `nsw:storage:read` and
-  `nsw:storage:write`. Map `group` to `groups`, `role` to `roles`, and `ou` to `ouId` and
+  `email`, `group`, `role` and `ou`, and add the custom scopes `consignment:read`,
+  `task:read`, `task:write`, `profile:read`, `storage:read` and
+  `storage:write`. Map `group` to `groups`, `role` to `roles`, and `ou` to `ouId` and
   `ouHandle`.
 - **Token**, under **Token Attributes & Response**: add `email`, `phone_number`,
   `given_name`, `family_name`, `username`, `groups`, `roles`, `ouId`, `ouHandle` and
@@ -247,10 +247,16 @@ local-dev equivalent, and shows every setting of the three applications.
 Create two more applications in the agency's OU, each a **Backend Service** (client
 credentials, client secret sent as HTTP Basic):
 
-| Application           | Example name     | Custom scopes                                                                                                  |
-| --------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
-| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:storage:internalwrite` |
-| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`                                                                        |
+| Application           | Example name     | Custom scopes                                                     |
+| --------------------- | ---------------- | ----------------------------------------------------------------- |
+| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `task:write`, `consignment:read`, `storage:read`, `storage:write` |
+| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `workflow:inject`, `task:write`                                   |
+
+If the agency's workflows generate documents (an `HTML_DOCUMENT_GENERATOR` step), the
+agency-to-TNSW client also needs `storage:internalwrite`, the scope of TNSW's internal
+upload route, where the agency stores them. Add it here, to the client's role (Step 2f) and
+to its `scopes` (Step 4b), and grant the documents' types in TNSW (Step 6b). Leave it out
+otherwise.
 
 For each, note the client ID from **Credentials**, and copy the client secret straight
 into its cluster Secret: the agency-to-TNSW client's into the agency's Secret (Step 4a),
@@ -264,11 +270,11 @@ The scopes an application asks for are granted only through a role. In **Roles**
 **Permissions** step, then add the assignee on the role's **Assignments** tab (**Add
 Assignment**):
 
-| Role                         | Example name  | Permissions                                                                                                                               | Assigned to               |
-| ---------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Officer role                 | `DEA Officer` | On the agency API: `nsw:consignment:read`, `nsw:profile:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:read`, `nsw:task:write` | The officers' group       |
-| TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `nsw:workflow:inject`, `nsw:task:write`                                                                                | The TNSW-to-agency client |
-| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:storage:internalwrite`, `nsw:task:write`            | The agency-to-TNSW client |
+| Role                         | Example name  | Permissions                                                                                                       | Assigned to               |
+| ---------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Officer role                 | `DEA Officer` | On the agency API: `consignment:read`, `profile:read`, `storage:read`, `storage:write`, `task:read`, `task:write` | The officers' group       |
+| TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `workflow:inject`, `task:write`                                                                | The TNSW-to-agency client |
+| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `consignment:read`, `storage:read`, `storage:write`, `task:write`                                 | The agency-to-TNSW client |
 
 The officer role's name is repeated in the agency's configuration in Step 4, and must
 match there exactly. If the agency's tasks name more roles than `officer`, create one
@@ -383,7 +389,8 @@ backend:
             tokenURL: https://idp.example.com/oauth2/token
             clientID: "<agency-to-TNSW client ID>"
             clientSecret: "{{env:M2M_DEA_TO_NSW_SECRET}}"
-            scopes: ["nsw:task:write", "nsw:storage:read", "nsw:storage:write", "nsw:storage:internalwrite"]
+            # Add "storage:internalwrite" if the agency generates documents (Step 2e).
+            scopes: ["task:write", "storage:read", "storage:write"]
             endpointParams:
               resource: https://api.nsw-srilanka.local
     db:
@@ -402,9 +409,9 @@ backend:
       allowCredentials: true
       maxAge: 3600
     # Documents live in TNSW; officers reach them through it as the agency-to-TNSW client.
-    # Officers' uploads go to TNSW's upload route (nsw:storage:write), so TNSW checks them like
+    # Officers' uploads go to TNSW's upload route (storage:write), so TNSW checks them like
     # a trader's. The files the agency generates itself (a generated document, say) go to its
-    # internal upload route (nsw:storage:internalwrite).
+    # internal upload route, which needs storage:internalwrite (Step 2e).
     storage:
       type: proxy
       tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
@@ -456,7 +463,7 @@ frontend:
     IDP_BASE_URL: "https://idp.example.com"
     IDP_CLIENT_ID: "<portal client ID>"
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.dea.nsw-agency.local"
-    IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:storage:read,nsw:storage:write,nsw:profile:read"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read"
     SHOW_AUTOFILL_BUTTON: "false"
   branding:
     systemName: "DEA"
@@ -501,7 +508,7 @@ IdP's JWKS.
    read -rs -p 'TNSW-to-agency client secret: ' SECRET; echo
    curl -s -u "<TNSW-to-agency client ID>:$SECRET" \
      --data-urlencode grant_type=client_credentials \
-     --data-urlencode 'scope=nsw:workflow:inject nsw:task:write' \
+     --data-urlencode 'scope=workflow:inject task:write' \
      --data-urlencode resource=https://api.dea.nsw-agency.local \
      https://idp.example.com/oauth2/token \
      | jq -r .access_token \
@@ -510,8 +517,8 @@ IdP's JWKS.
    unset SECRET
    ```
 
-   Check `aud` is the API identifier and `scope` has `nsw:workflow:inject` and
-   `nsw:task:write`.
+   Check `aud` is the API identifier and `scope` has `workflow:inject` and
+   `task:write`.
 
 Injecting by hand would leave a case no one can finish, so the first real inject comes
 from TNSW in Step 6.
@@ -557,7 +564,7 @@ services:
         tokenURL: https://idp.example.com/oauth2/token
         clientID: "<TNSW-to-agency client ID>"
         clientSecret: "{{env:M2M_NSW_TO_DEA_SECRET}}"
-        scopes: ["nsw:workflow:inject", "nsw:task:write"]
+        scopes: ["workflow:inject", "task:write"]
         endpointParams:
           resource: https://api.dea.nsw-agency.local
 ```
@@ -569,6 +576,17 @@ In TNSW's catalog, in the same file, map the handle to the agency-to-TNSW client
 catalog:
   clients:
     dea: "<agency-to-TNSW client ID>"
+```
+
+If the agency generates documents, grant their types to it under
+`storage.allowedInternalUploadTypes`, by the same handle. TNSW accepts them only on its
+internal upload route, from the agency-to-TNSW client. Each type needs an entry in
+`storage.uploadTypeExtensions`, as `text/html` has in the example config:
+
+```yaml
+storage:
+  allowedInternalUploadTypes:
+    dea: [text/html]
 ```
 
 Then roll out:
@@ -631,20 +649,20 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 
 ## Troubleshooting
 
-| Symptom                                                 | Likely cause                                                                                                                                                                                                                          |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An M2M token request fails with `invalid_scope`         | The application lacks the scope (Step 2e), or no role grants it the permission (Step 2f)                                                                                                                                              |
-| Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                                   |
-| Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                          |
-| Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                                   |
-| Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                             |
-| Inject `401`                                            | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                  |
-| Reply `403` `client … is not permitted`                 | The agency's catalog doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                        |
-| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                                                                    |
-| Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                          |
-| Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                                  |
-| Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                               |
-| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `nsw:task:write` or isn't the agency's client in TNSW's catalog (6b) |
+| Symptom                                                 | Likely cause                                                                                                                                                                                                                      |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An M2M token request fails with `invalid_scope`         | The application lacks the scope (Step 2e), or no role grants it the permission (Step 2f)                                                                                                                                          |
+| Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                               |
+| Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                      |
+| Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                               |
+| Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                         |
+| Inject `401`                                            | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                              |
+| Reply `403` `client … is not permitted`                 | The agency's catalog doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                    |
+| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `workflow:inject` and `task:write`                                                                                        |
+| Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                      |
+| Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                              |
+| Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                           |
+| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `task:write` or isn't the agency's client in TNSW's catalog (6b) |
 
 ## Local development
 

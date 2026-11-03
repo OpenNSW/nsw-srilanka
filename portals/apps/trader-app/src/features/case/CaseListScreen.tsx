@@ -1,84 +1,41 @@
-import { useEffect, useRef, useState } from 'react'
-import { Badge, Spinner, Text } from '@radix-ui/themes'
+import { useState } from 'react'
+import { Badge, Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
-import { PaginationControl } from '@/components/common/PaginationControl.tsx'
-import { LoadError } from '@/components/common/LoadError.tsx'
-import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
 import { ROUTES } from '@/constants'
+import { useQuery } from '@/hooks/useQuery'
+import { LinkRow, LoadingOverlay, PageHeader, PaginationControl, RowLink, Surface, PageState } from '@portals/ui'
 
 // The officer's list of cases. A trimmed ConsignmentScreen: no create button, no
 // trade-flow filter, no role switch — an officer sees every case.
 export function CaseListScreen() {
   const { t } = useTranslation()
-  const [cases, setCases] = useState<CaseSummary[]>([])
-  const [totalCount, setTotalCount] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [failed, setFailed] = useState(false)
   const [page, setPage] = useState(0)
-  const [retryCount, setRetryCount] = useState(0)
   const limit = 50
-  const requestIdRef = useRef(0)
-
-  useEffect(() => {
-    async function fetchCases() {
-      const requestId = ++requestIdRef.current
-      setLoading(true)
-      try {
-        const data = await getCases(page * limit, limit)
-        if (requestId !== requestIdRef.current) return
-        setCases(data.items || [])
-        setTotalCount(data.total || 0)
-        setFailed(false)
-      } catch (error) {
-        if (requestId !== requestIdRef.current) return
-        console.error('Failed to fetch cases:', error)
-        // Show the failure rather than an empty list or the previous page's rows.
-        setCases([])
-        setFailed(true)
-      } finally {
-        if (requestId === requestIdRef.current) setLoading(false)
-      }
-    }
-
-    void fetchCases()
-  }, [page, retryCount])
+  const { data, error, isFetching, refetch } = useQuery(
+    ['cases', page],
+    (signal) => getCases(page * limit, limit, signal),
+    { keepPreviousData: true },
+  )
+  // Show the failure rather than an empty list or the previous page's rows.
+  const cases: CaseSummary[] = error ? [] : (data?.items ?? [])
+  const totalCount = data?.total ?? 0
 
   const th = 'px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider'
 
   return (
     <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('cases.list.title')}</h1>
-        {totalCount > 0 && (
-          <span className="inline-flex items-center rounded-full bg-primary-subtle px-2.5 py-0.5 text-sm font-medium text-primary">
-            {totalCount}
-          </span>
-        )}
-      </div>
+      <PageHeader title={t('cases.list.title')} count={totalCount} />
 
-      <div className="rounded-2xl bg-app-surface shadow-md overflow-hidden">
+      <Surface className="overflow-hidden">
         <div className="relative min-h-[400px]">
-          {loading && (
-            <div className="absolute inset-0 bg-app-surface/60 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-2">
-              <Spinner size="3" />
-              <Text size="2" color="gray">
-                {t('cases.list.loading')}
-              </Text>
-            </div>
-          )}
-          {failed ? (
-            <div className="p-16">
-              <LoadError message={t('cases.list.error')} onRetry={() => setRetryCount((n) => n + 1)} />
-            </div>
+          {isFetching && <LoadingOverlay message={t('cases.list.loading')} />}
+          {error ? (
+            <PageState variant="error" title={t('cases.list.error')} onRetry={() => void refetch()} />
           ) : cases.length === 0 ? (
-            <div className="p-16 text-center">
-              <Text size="3" color="gray">
-                {t('cases.list.empty')}
-              </Text>
-            </div>
+            <PageState variant="empty" title={t('cases.list.empty')} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -137,7 +94,7 @@ export function CaseListScreen() {
             totalCount={totalCount}
           />
         </div>
-      </div>
+      </Surface>
     </div>
   )
 }

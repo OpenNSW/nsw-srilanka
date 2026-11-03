@@ -44,9 +44,11 @@ func sampleUserform() map[string]any {
 				"quantity_net_weight_unit":   "KGM",
 				"quantity_gross_weight":      float64(550),
 				"quantity_gross_weight_unit": "KGM",
-				"packages_count":             float64(25),
-				"packages_description":       "Cardboard boxes",
-				"origin_country":             "Sri Lanka",
+				"package_arrangement":        "package",
+				"packages": []any{
+					map[string]any{"count": float64(25), "type": "CT"},
+				},
+				"origin_country": "Sri Lanka",
 			},
 		},
 	}
@@ -91,8 +93,8 @@ func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // e
 	if tl.NetWeight == nil || tl.NetWeight.Value != "500" || tl.NetWeight.Unit != "KGM" {
 		t.Errorf("net weight = %+v, want 500 KGM", tl.NetWeight)
 	}
-	if len(tl.Packages) != 1 || tl.Packages[0].Quantity != "25" {
-		t.Errorf("packages = %+v, want quantity 25", tl.Packages)
+	if len(tl.Packages) != 1 || tl.Packages[0].Quantity != "25" || tl.Packages[0].TypeCode != "CT" {
+		t.Errorf("packages = %+v, want quantity 25 type CT", tl.Packages)
 	}
 	if tl.OriginCountries[0] != "LK" {
 		t.Errorf("origin = %v, want LK", tl.OriginCountries)
@@ -128,8 +130,11 @@ func twoItemUserform() map[string]any {
 		"commodity_botanical_name": "Cinnamomum verum",
 		"quantity_net_weight":      float64(100),
 		"quantity_net_weight_unit": "KGM",
-		"packages_count":           float64(10),
-		"origin_country":           "Sri Lanka",
+		"package_arrangement":      "package",
+		"packages": []any{
+			map[string]any{"count": float64(10), "type": "CT"},
+		},
+		"origin_country": "Sri Lanka",
 	})
 	return uf
 }
@@ -223,6 +228,62 @@ func TestBuildCertXML_EmitsTheTransportMovement(t *testing.T) {
 	}
 }
 
+// A commodity may list several package count+type rows. Each row becomes its
+// own PackageInput, using the IPPC type code from the dropdown.
+func TestBuildInput_MapsPackagesList(t *testing.T) {
+	uf := sampleUserform()
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	com["packages"] = []any{
+		map[string]any{"count": float64(50), "type": map[string]any{"value": "CT", "label": "CT"}},
+		map[string]any{"count": float64(20), "type": map[string]any{"value": "1D", "label": "Drum, plywood"}},
+	}
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
+	tl := in.Certificate.Consignment.Items[0].TradeLines[0]
+	if len(tl.Packages) != 2 {
+		t.Fatalf("packages = %+v, want 2 rows", tl.Packages)
+	}
+	if tl.Packages[0].Quantity != "50" || tl.Packages[0].TypeCode != "CT" {
+		t.Errorf("first package = %+v, want quantity 50 type CT", tl.Packages[0])
+	}
+	if tl.Packages[1].Quantity != "20" || tl.Packages[1].TypeCode != "1D" {
+		t.Errorf("second package = %+v, want quantity 20 type 1D", tl.Packages[1])
+	}
+	if tl.PackageDescription != "" {
+		t.Errorf("PackageDescription = %q, want empty when packages[] is set", tl.PackageDescription)
+	}
+}
+
+func TestBuildInput_MapsPackagesFreeTextArrangement(t *testing.T) {
+	uf := sampleUserform()
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	delete(com, "packages")
+	com["package_arrangement"] = "free_text"
+	com["packages_free_text"] = "mixed cartons and crates"
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
+	tl := in.Certificate.Consignment.Items[0].TradeLines[0]
+	if tl.PackageDescription != "mixed cartons and crates" {
+		t.Errorf("PackageDescription = %q", tl.PackageDescription)
+	}
+	if len(tl.Packages) != 0 {
+		t.Errorf("Packages = %+v, want none for free_text", tl.Packages)
+	}
+}
+
+func TestBuildInput_MapsPackagesBulkArrangement(t *testing.T) {
+	uf := sampleUserform()
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	delete(com, "packages")
+	com["package_arrangement"] = "bulk"
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
+	tl := in.Certificate.Consignment.Items[0].TradeLines[0]
+	if tl.PackageDescription != "In bulk" {
+		t.Errorf("PackageDescription = %q, want In bulk", tl.PackageDescription)
+	}
+}
+
 // The apply form's dropdowns store { value, label }. The certificate carries
 // the code, as it did when they stored the bare code.
 func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {
@@ -230,13 +291,14 @@ func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {
 	uf["nppo_office_location"] = map[string]any{"value": "SEA-CMB", "label": "Plant Quarantine Station - Seaport, Colombo"}
 	uf["transport_mode"] = map[string]any{"value": "1", "label": "Air transport"}
 	com := uf["commodities"].([]any)[0].(map[string]any)
-	delete(com, "packages_count")
 	com["commodity_plant_part"] = map[string]any{"value": "18", "label": "Leaves"}
 	com["commodity_condition"] = map[string]any{"value": "13", "label": "Fresh"}
 	com["commodity_intended_use"] = map[string]any{"value": "3", "label": "Decoration"}
 	com["quantity_net_weight_unit"] = map[string]any{"value": "TNE", "label": "ton (t)"}
 	com["quantity_gross_weight_unit"] = map[string]any{"value": "MTQ", "label": "cubic metre (m³)"}
-	com["packages_description"] = map[string]any{"value": "CT", "label": "Carton"}
+	com["packages"] = []any{
+		map[string]any{"count": float64(25), "type": map[string]any{"value": "CT", "label": "Carton"}},
+	}
 	com["origin_country"] = map[string]any{"value": "IN", "label": "India"}
 
 	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
@@ -249,13 +311,53 @@ func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {
 		"vegetable part":    {tl.VegetablePart, "18"},
 		"condition":         {tl.Condition, "13"},
 		"intended use":      {tl.IntendedUse, "3"},
-		"package":           {tl.PackageDescription, "CT"},
+		"package type":      {tl.Packages[0].TypeCode, "CT"},
 		"origin":            {tl.OriginCountries[0], "IN"},
 		"net weight unit":   {tl.NetWeight.Unit, "TNE"},
 		"gross weight unit": {tl.GrossWeight.Unit, "MTQ"},
 	} {
 		if got[0] != got[1] {
 			t.Errorf("%s = %q, want %q", field, got[0], got[1])
+		}
+	}
+}
+
+// The commodity name is a searchable dropdown storing { value, label }. With
+// no description given, the trade line's mandatory description falls back to
+// the name the trader picked, and the name is also sent as its common name.
+func TestBuildInput_DescribesACommodityByItsDropdownName(t *testing.T) {
+	uf := sampleUserform()
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	delete(com, "commodity_description")
+	com["commodity_common_name"] = map[string]any{"value": "CN-042", "label": "Monstera leaves"}
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
+
+	tl := in.Certificate.Consignment.Items[0].TradeLines[0]
+	if tl.Description != "Monstera leaves" {
+		t.Errorf("description = %q, want the dropdown label", tl.Description)
+	}
+	if len(tl.CommonNames) != 1 || tl.CommonNames[0] != "Monstera leaves" {
+		t.Errorf("common names = %v, want [Monstera leaves]", tl.CommonNames)
+	}
+	if _, err := BuildCertXML(in); err != nil {
+		t.Fatalf("BuildCertXML: %v", err)
+	}
+}
+
+func TestAnswerLabel(t *testing.T) {
+	for _, c := range []struct {
+		in   any
+		want string
+	}{
+		{map[string]any{"value": "CN-042", "label": "Monstera leaves"}, "Monstera leaves"},
+		{map[string]any{"value": "CN-042"}, "CN-042"},
+		{map[string]any{"value": "CN-042", "label": "  "}, "CN-042"},
+		{" Cinnamon Quills ", "Cinnamon Quills"},
+		{nil, ""},
+	} {
+		if got := answerLabel(c.in); got != c.want {
+			t.Errorf("answerLabel(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

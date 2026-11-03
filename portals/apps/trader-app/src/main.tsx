@@ -5,7 +5,10 @@ import './i18n'
 import App from './App.tsx'
 import '@radix-ui/themes/styles.css'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { ErrorBoundary } from '@portals/ui'
+import { ErrorFallback } from './components/ErrorFallback'
+import { TranslatedUiLabels } from './components/TranslatedUiLabels'
+import { logger } from './utils/logger'
 import { AuthProvider } from 'react-oidc-context'
 import { userManager } from './oidcUserManager'
 import { initAppConfig } from './config'
@@ -19,7 +22,10 @@ initAppConfig()
     const router = createBrowserRouter([{ path: '*', element: <App /> }])
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
-        <ErrorBoundary>
+        <ErrorBoundary
+          fallback={(error, reset) => <ErrorFallback error={error} onReset={reset} />}
+          onError={(error, errorInfo) => logger.error('Error boundary caught an error:', error, errorInfo)}
+        >
           <AuthProvider
             userManager={userManager}
             onSigninCallback={() => {
@@ -28,7 +34,9 @@ initAppConfig()
           >
             <ColorSchemeProvider>
               <ThemedShell>
-                <RouterProvider router={router} />
+                <TranslatedUiLabels>
+                  <RouterProvider router={router} />
+                </TranslatedUiLabels>
               </ThemedShell>
             </ColorSchemeProvider>
           </AuthProvider>

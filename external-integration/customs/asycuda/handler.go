@@ -14,6 +14,8 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/edgetrace"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 const (
@@ -33,6 +35,9 @@ const (
 type Handler struct {
 	cusdecService cusdec.WebhookService
 	cdnService    cdn.CDNWebhookService
+	auditor       nswaudit.Auditor
+	declarations  cusdec.DeclarationRepository
+	dispatchNotes cdn.DispatchNoteRepository
 
 	// DebugForward is TEMPORARY debugging code: see debug_forward.go, which says
 	// how to remove it. When set, every callback is also sent to the
@@ -57,6 +62,14 @@ type payloadEnvelope struct {
 // execution to the appropriate domain service handler using a switch statement.
 func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
+	var body []byte
+	// The route authenticates before entering this handler. Audit one delivery outcome,
+	// including boundary rejections, without changing the existing response or retry policy.
+	if _, known := authn.FromContext(r.Context()); known && h.auditor != nil {
+		response := &callbackResponse{ResponseWriter: w}
+		w = response
+		defer func() { h.auditCallback(r.Context(), body, response.status) }()
+	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.WarnContext(r.Context(), "slce: failed to read request body", "error", err)

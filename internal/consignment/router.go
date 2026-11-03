@@ -386,7 +386,7 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 }
 
 // HandleGetConsignmentAgency handles GET /api/v1/consignments/{id}/agency.
-// Authenticated M2M (or user) callers with nsw:consignment:read may fetch the
+// Authenticated M2M (or user) callers with consignment:read may fetch the
 // allowlisted display names. Knowing the unguessable UUID is sufficient; there
 // is no trader/CHA company ownership check. Access is audit-logged.
 func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Request) {
@@ -429,7 +429,7 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 // trader-facing GetConsignmentByID, which reflects task-store/business state instead.
 //
 // Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go), not on the
-// trader/CHA nsw:consignment:read scope — this performs no per-consignment ownership
+// trader/CHA consignment:read scope — this performs no per-consignment ownership
 // check, so any caller holding the admin scope can view any workflow's engine state
 // by design.
 func (c *Router) HandleGetWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
@@ -476,17 +476,12 @@ func (c *Router) handleEngineStatus(
 		return
 	}
 
-	// TODO(#477): for HandleGetTaskWorkflowEngineStatus, id is a Temporal task-workflow ID
-	// (e.g. "task-wf-n1_apply:..."), not a consignment ID — this mislabels TargetID under
-	// TargetConsignment. Fixing it needs a TaskStore lookup (task-workflow ID ->
-	// TaskRecord.CaseID) that doesn't exist yet; see the issue for why the obvious
-	// GlobalVariables[VarCaseID] shortcut doesn't work here.
 	event := nswaudit.ConsignmentEvent(nswaudit.ActionRead, id, false, map[string]any{"view": view})
 	if flowAudit {
 		caseID, _ := status.GlobalVariables[workflow.VarCaseID].(string)
 		c.auditFlowEventWithCaseID(ctx, event, caseID)
 	} else {
-		c.auditEvent(ctx, event)
+		c.auditTaskWorkflowEvent(ctx, event)
 	}
 	httputil.JSON(w, http.StatusOK, status)
 }
@@ -523,7 +518,7 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 // flow/child-workflow IDs HandleResolveAdminIntervention takes, the same split as the two
 // engine-status routes. Otherwise identical, and gated on the same scope.
 func (c *Router) HandleResolveTaskWorkflowAdminIntervention(w http.ResponseWriter, r *http.Request) {
-	c.handleResolveAdminIntervention(w, r, "task-workflow-admin-resolve", c.cs.ResolveTaskWorkflowAdminIntervention, c.auditEvent)
+	c.handleResolveAdminIntervention(w, r, "task-workflow-admin-resolve", c.cs.ResolveTaskWorkflowAdminIntervention, c.auditTaskWorkflowEvent)
 }
 
 // handleResolveAdminIntervention is the request handling the two resolve routes share; they differ
@@ -648,7 +643,7 @@ func (c *Router) HandleForceParkTaskNode(w http.ResponseWriter, r *http.Request)
 // Service.ForceParkTaskWorkflowStep); the task workflow's resolve route applies after. Gated on the
 // same scope as HandleForceParkTaskNode.
 func (c *Router) HandleForceParkTaskWorkflowStep(w http.ResponseWriter, r *http.Request) {
-	c.handleForcePark(w, r, "task-workflow-admin-force-park", c.cs.ForceParkTaskWorkflowStep, c.auditEvent)
+	c.handleForcePark(w, r, "task-workflow-admin-force-park", c.cs.ForceParkTaskWorkflowStep, c.auditTaskWorkflowEvent)
 }
 
 // handleForcePark is the request handling the two force-park routes share; they differ only in
@@ -731,6 +726,22 @@ func (c *Router) handleForcePark(
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// auditTaskWorkflowEvent resolves a task workflow's case from its persisted task record.
+// Task-workflow variables do not reliably carry the case ID. A missing record leaves
+// the target empty while retaining the workflow ID and the operation's original result.
+func (c *Router) auditTaskWorkflowEvent(ctx context.Context, e nswaudit.Event) {
+	if c.audit == nil {
+		return
+	}
+	caseID := ""
+	if c.cs.taskStore != nil {
+		if record, ok := c.cs.taskStore.GetTaskByWorkflowID(ctx, e.TargetID); ok {
+			caseID = record.CaseID
+		}
+	}
+	c.auditFlowEventWithCaseID(ctx, e, caseID)
+}
+
 // auditFlowEvent resolves the case for a flow/child-workflow mutation audit. The extra
 // status read is best-effort: the mutation's result must survive a lookup failure or a
 // workflow that has already closed. Engine-status reads reuse their existing snapshot instead.
@@ -747,7 +758,7 @@ func (c *Router) auditFlowEvent(ctx context.Context, e nswaudit.Event) {
 	c.auditFlowEventWithCaseID(ctx, e, caseID)
 }
 
-// auditFlowEventWithCaseID keeps the workflow address in metadata and targets the case.
+// auditFlowEventWithCaseID keeps a flow or task-workflow address in metadata and targets the case.
 // An unknown case stays empty rather than being mislabeled with a flow/child-workflow ID.
 func (c *Router) auditFlowEventWithCaseID(ctx context.Context, e nswaudit.Event, caseID string) {
 	if c.audit == nil {

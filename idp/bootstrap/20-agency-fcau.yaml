@@ -30,13 +30,9 @@ type: API
 ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
 delimiter: ":"
 resources:
-  - name: FCAU API
-    handle: nsw
-    description: FCAU API resource
   - name: Workflow
     handle: workflow
     description: Workflow resource
-    parent: nsw
     actions:
       - name: Inject
         handle: inject
@@ -44,7 +40,6 @@ resources:
   - name: Consignment
     handle: consignment
     description: Consignment resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -52,7 +47,6 @@ resources:
   - name: Task
     handle: task
     description: Task resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -63,7 +57,6 @@ resources:
   - name: Profile
     handle: profile
     description: Profile resource
-    parent: nsw
     actions:
       - name: Read
         handle: read
@@ -71,7 +64,6 @@ resources:
   - name: Storage
     handle: storage
     description: Storage resource
-    parent: nsw
     actions:
       - name: Write
         handle: write
@@ -89,12 +81,12 @@ ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
 permissions:
   - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
     permissions:
-      - nsw:consignment:read
-      - nsw:profile:read
-      - nsw:storage:read
-      - nsw:storage:write
-      - nsw:task:read
-      - nsw:task:write
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
 assignments:
   - id: 01a13912-d3e2-7e28-bf72-d545885fccc8
     type: group
@@ -108,8 +100,8 @@ ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
 permissions:
   - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
     permissions:
-      - nsw:task:write
-      - nsw:workflow:inject
+      - task:write
+      - workflow:inject
 assignments:
   - id: 01a13912-e3d4-7c05-9503-a25ffb74f8b6
     type: app
@@ -123,11 +115,10 @@ ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
-      - nsw:consignment:read
-      - nsw:storage:read
-      - nsw:storage:write
-      - nsw:storage:internalwrite
-      - nsw:task:write
+      - consignment:read
+      - storage:read
+      - storage:write
+      - task:write
 assignments:
   - id: 01a13912-e345-7d54-8bc2-d72a77458fda
     type: app
@@ -219,12 +210,12 @@ inboundAuthConfig:
         - group
         - role
         - ou
-        - nsw:consignment:read
-        - nsw:task:read
-        - nsw:task:write
-        - nsw:profile:read
-        - nsw:storage:read
-        - nsw:storage:write
+        - consignment:read
+        - task:read
+        - task:write
+        - profile:read
+        - storage:read
+        - storage:write
       userInfo:
         responseType: JSON
         userAttributes:
@@ -288,11 +279,10 @@ inboundAuthConfig:
         refreshToken:
           validityPeriod: 86400
       scopes:
-        - nsw:task:write
-        - nsw:consignment:read
-        - nsw:storage:read
-        - nsw:storage:write
-        - nsw:storage:internalwrite
+        - task:write
+        - consignment:read
+        - storage:read
+        - storage:write
       userInfo:
         responseType: JSON
       scopeClaims:
@@ -344,8 +334,8 @@ inboundAuthConfig:
         refreshToken:
           validityPeriod: 86400
       scopes:
-        - nsw:workflow:inject
-        - nsw:task:write
+        - workflow:inject
+        - task:write
       userInfo:
         responseType: JSON
       scopeClaims:

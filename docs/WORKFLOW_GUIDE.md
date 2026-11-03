@@ -253,6 +253,12 @@ In the same `PENDING_USER` state the CHA gets the form and its submit button, wh
 > [!IMPORTANT]
 > This is presentation-layer scoping and the read gate — it does not authorize _writes_. Who may run a command is a separate, deny-by-default rule in the subtask template's `authz` extension (see [`internal/tasks/extensions/authz/README.md`](../internal/tasks/extensions/authz/README.md)). A section hidden here still needs its command denied there.
 
+### Claiming a task
+
+A user can claim a task, so others see who is working it, when its task template sets `"claimable": true`. A claim is a hint, never a lock: submitting a step does not check it. Any user who can read the task may claim it, release their own claim, or take over another user's. Without `claimable` the task has no claims: the task view carries no `claim`, and `POST /api/v1/tasks/{id}/claim` and `/release` answer `404`. The agency task templates set it, since every officer of an agency can read every injected task; the TNSW ones leave it out.
+
+(This claim, on a task, is unrelated to the `role:<key>` read claims above.)
+
 ### File fields
 
 `files` (top level) lists the values in the task's data that are stored files, such as the value a form's file upload puts in a field. Each entry is a path into the task's data, starting at the top-level key, which is usually a step's output namespace:
@@ -399,7 +405,7 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Single ID:** use one entry, e.g. `{"path": "/reference_id", ...}`. The node maps it on with `"output_mapping": {"refid.reference_id": "reference_id"}`. It reaches the parent workflow only through the parent TASK node's own `output_mapping`.
 - **Order:** entries are filled in the order listed, and elements in index order.
 - **Existing values are kept:** a field that already holds an ID keeps it. A resubmission that loops back through the step numbers only the fields that have none yet, such as a newly added line.
-- **`overwrite`:** use it for an ID that must always come from the system. Every run then takes new numbers, and with `each` every element is renumbered, so don't use it for an ID another system has already seen. `readOnly` is only enforced by the form, so without `overwrite` a value sent straight to the API is kept.
+- **`overwrite`:** use it for an ID that must always come from the system. Every run then takes new numbers, and with `each` every element is renumbered, so don't use it for an ID another system has already seen. Where the form the ID comes back through marks it `readOnly`, the server holds it to what that step stored (see [Adding validation to a form](guides/form-validation.md#a-value-the-server-fills-in)), so a value sent straight to the API can't replace it; where the field is editable, such a value is kept unless `overwrite` is set.
 - **Shape errors fail first:** the step fails before any number is used if:
   - a field to fill holds a non-string value (`null` counts as empty);
   - `each` isn't an array, or an element isn't an object;

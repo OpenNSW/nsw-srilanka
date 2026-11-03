@@ -10,6 +10,7 @@ import (
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/core/trace/logging"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
+	"github.com/OpenNSW/nsw-srilanka/internal/systemlog"
 )
 
 // ConfigureLogging installs the trace-aware slog handler as the process
@@ -17,6 +18,7 @@ import (
 // the correlationId returned in error responses matches the traceId written
 // to server logs. Must be called before any request is served.
 //
+// Plain slog records are stamped category=system (see systemlog.StampCategory).
 // Audit records do not use this default logger. Bootstrap points LogSink at
 // the OTLP handler when telemetry starts (before workers). Call
 // logAuditExportStatus once that path is known.
@@ -24,17 +26,11 @@ func ConfigureLogging(cfg *config.Config) {
 	configureLogging(cfg, os.Stdout)
 }
 
-// logAuditExportStatus reports when audit records will not be retained.
-// Both conditions are reported when both apply: a high logLevel suppresses
-// Info audit lines on the export handler, and a missing OTLP exporter means
-// there is no destination. Messages are logged at least at warn, or at the
-// configured level when that is higher, so the filter they describe lets
-// them through.
+// logAuditExportStatus reports when audit records will not be retained
+// because OTLP export is off. Audit is its own channel and does not honor
+// server.logLevel. Messages are logged at least at warn, or at the configured
+// level when that is higher, so the filter they describe lets them through.
 func logAuditExportStatus(cfg *config.Config, exportEnabled bool) {
-	if cfg.Server.LogLevel > slog.LevelInfo {
-		slog.Log(context.Background(), cfg.Server.LogLevel,
-			"server.logLevel is above info: audit records (category=audit) are not exported")
-	}
 	if !exportEnabled {
 		level := slog.LevelWarn
 		if cfg.Server.LogLevel > level {
@@ -53,7 +49,9 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 		AddSource: cfg.Server.LogLevel <= slog.LevelDebug,
 		Level:     cfg.Server.LogLevel,
 	}
-	handlers := []slog.Handler{logging.NewHandler(slog.NewTextHandler(dest, opts))}
+	handlers := []slog.Handler{
+		systemlog.StampCategory(logging.NewHandler(slog.NewTextHandler(dest, opts))),
+	}
 	for _, h := range extras {
 		if h != nil {
 			// otelslog reports every level as enabled. Without this filter,
@@ -61,8 +59,11 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 			// INFO, so those records are exported and debug-gated payload
 			// logging turns on. logging.NewHandler attaches traceId so an
 			// exported record can be found by the correlationId returned to
-			// the client.
-			handlers = append(handlers, &levelFilter{min: cfg.Server.LogLevel, next: logging.NewHandler(h)})
+			// the client. StampCategory tags plain lines as system.
+			handlers = append(handlers, &levelFilter{
+				min:  cfg.Server.LogLevel,
+				next: systemlog.StampCategory(logging.NewHandler(h)),
+			})
 		}
 	}
 	var logHandler slog.Handler
@@ -75,13 +76,13 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 	httputil.CorrelationIDFunc = trace.GetTraceID
 }
 
-// auditExportHandler wraps the OTLP slog handler so Info audit lines honor
-// server.logLevel the same way the process MultiHandler extras do.
-func auditExportHandler(cfg *config.Config, otlp slog.Handler) slog.Handler {
+// auditExportHandler returns the OTLP slog handler for audit. Audit is its
+// own channel and is not filtered by server.logLevel.
+func auditExportHandler(_ *config.Config, otlp slog.Handler) slog.Handler {
 	if otlp == nil {
 		return nil
 	}
-	return &levelFilter{min: cfg.Server.LogLevel, next: logging.NewHandler(otlp)}
+	return logging.NewHandler(otlp)
 }
 
 // levelFilter drops records below min before they reach next. Enabled must

@@ -51,21 +51,26 @@ func (f *fakeClaimer) ReleaseTask(_ context.Context, taskID, holder string) erro
 	return f.err
 }
 
-// claimHandler is a handler over the pending HS-code task, with claims sent to claimer
-// and audit events to auditor.
+// claimHandler is a handler over fetcher's task, made claimable, with claims sent to
+// claimer and audit events to auditor.
 func claimHandler(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, auditor *nswaudit.CaptureSink) *HTTPHandler {
+	t.Helper()
+	fetcher.claimable = true
+	return claimHandlerAsIs(t, fetcher, claimer, auditor)
+}
+
+// claimHandlerAsIs is claimHandler with fetcher's task as it is, claimable or not.
+func claimHandlerAsIs(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, auditor *nswaudit.CaptureSink) *HTTPHandler {
 	t.Helper()
 	h := getTaskHandler(t, fetcher, &stubTemplates{})
 	h.Claims = claimer
-	h.ClaimsEnabled = true
 	client := nswaudit.New()
 	client.RegisterSink(auditor)
 	h.Audit = client
 	return h
 }
 
-// chaUser is a CHA user who owns the HS-code task's consignment, and so can read it,
-// in a deployment that uses claims.
+// chaUser is a CHA user who owns the HS-code task's consignment, and so can read it.
 func chaUser() *taskauthz.Input {
 	in := ownerInput("CHA", "cha")
 	in.UserID = testUserID
@@ -152,25 +157,36 @@ func TestHandleClaimTask_RefusedBeforeTheManager(t *testing.T) {
 	}
 }
 
-// Where the deployment does not use claims, claim and release are not found, and are
-// answered before the task is read: they cannot be used to probe task ids, and nothing
-// is claimed or audited.
-func TestHandleClaimTask_OffWhereTheDeploymentDoesNotUseClaims(t *testing.T) {
+// Where the task's template doesn't make it claimable, claim and release are not
+// found, and nothing is claimed or audited.
+func TestHandleClaimTask_OffWhereTheTaskIsNotClaimable(t *testing.T) {
 	for _, op := range []string{opClaim, opRelease} {
 		t.Run(op, func(t *testing.T) {
-			fetcher, claimer, auditor := pendingHSCodeTask(), &fakeClaimer{}, &nswaudit.CaptureSink{}
-			h := claimHandler(t, fetcher, claimer, auditor)
-			h.ClaimsEnabled = false
+			claimer, auditor := &fakeClaimer{}, &nswaudit.CaptureSink{}
+			h := claimHandlerAsIs(t, pendingHSCodeTask(), claimer, auditor)
 
 			recorder := sendClaim(h, op, chaUser())
 
 			assert.Equal(t, http.StatusNotFound, recorder.Code, recorder.Body.String())
 			assert.Contains(t, recorder.Body.String(), errClaimsOff)
-			assert.Zero(t, fetcher.calls, "the task must not be read")
 			assert.Empty(t, claimer.calls, "the task manager must not be reached")
 			assert.Empty(t, auditor.Records())
 		})
 	}
+}
+
+// A caller who can't read the task is told it is not found, as for any task, and not
+// whether it can be claimed: that would tell them the task exists.
+func TestHandleClaimTask_ReadIsCheckedBeforeClaimable(t *testing.T) {
+	notOwner := ownerInput("CHA", "trader")
+	notOwner.UserID = testUserID
+	h := claimHandlerAsIs(t, pendingHSCodeTask(), &fakeClaimer{}, &nswaudit.CaptureSink{})
+
+	recorder := sendClaim(h, opClaim, &notOwner)
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), errTaskNotFound)
+	assert.NotContains(t, recorder.Body.String(), errClaimsOff)
 }
 
 // traderOnlyTask is the pending HS-code task with a read policy admitting traders only.
@@ -378,11 +394,11 @@ func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fetcher := claimedHSCodeTask(tt.holder)
+			fetcher.claimable = true
 			if tt.holder != "" {
 				fetcher.record.ClaimedAt = &at
 			}
 			h := getTaskHandler(t, fetcher, &stubTemplates{})
-			h.ClaimsEnabled = true
 			h.Users = names
 
 			got := viewTask(t, h, tt.in).Claim
@@ -405,9 +421,9 @@ func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 func TestHandleGetTask_ClaimIsReportedOnlyUnderClaim(t *testing.T) {
 	at := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
 	fetcher := claimedHSCodeTask("user-secret-2")
+	fetcher.claimable = true
 	fetcher.record.ClaimedAt = &at
 	h := getTaskHandler(t, fetcher, &stubTemplates{})
-	h.ClaimsEnabled = true
 	h.Users = fakeUserService{names: map[string]string{"user-secret-2": "other@example.com"}}
 
 	recorder := getTask(t, h, chaUser())
@@ -429,8 +445,9 @@ func TestHandleGetTask_ClaimHolderNameIsBestEffort(t *testing.T) {
 		"no lookup":    nil,
 	} {
 		t.Run(name, func(t *testing.T) {
-			h := getTaskHandler(t, claimedHSCodeTask("user-2"), &stubTemplates{})
-			h.ClaimsEnabled = true
+			fetcher := claimedHSCodeTask("user-2")
+			fetcher.claimable = true
+			h := getTaskHandler(t, fetcher, &stubTemplates{})
 			h.Users = users
 
 			got := viewTask(t, h, chaUser()).Claim
@@ -441,9 +458,9 @@ func TestHandleGetTask_ClaimHolderNameIsBestEffort(t *testing.T) {
 	}
 }
 
-// Where the deployment does not use claims, the task view carries no claim, not even
-// a stored one, so a client shows no claim controls.
-func TestHandleGetTask_NoClaimWhereClaimsAreOff(t *testing.T) {
+// Where the task's template doesn't make it claimable, the task view carries no claim,
+// not even a stored one, so a client shows no claim controls.
+func TestHandleGetTask_NoClaimWhereTheTaskIsNotClaimable(t *testing.T) {
 	h := getTaskHandler(t, claimedHSCodeTask("user-2"), &stubTemplates{})
 
 	recorder := getTask(t, h, chaUser())

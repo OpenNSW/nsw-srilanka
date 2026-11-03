@@ -3,12 +3,7 @@ import type {
   ConsignmentListResult,
   ConsignmentState,
   CreateConsignmentResponse,
-  CreatePreConsignmentRequest,
-  PreConsignmentInstance,
-  PreConsignmentListApiResponse,
   TradeFlow,
-  TraderPreConsignmentItem,
-  TraderPreConsignmentsResponse,
   Workflow,
   WorkflowQueryParams,
   WorkflowResponse,
@@ -16,14 +11,15 @@ import type {
 } from './types'
 import { http, HttpError } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
-import { sendTaskCommand } from '@/features/task/service'
-import type { TaskCommandRequest, TaskCommandResponse } from '@/features/task/types'
 
 // Workflow functions
-export async function getWorkflowsByHSCode(params: WorkflowQueryParams): Promise<WorkflowResponse> {
+export async function getWorkflowsByHSCode(
+  params: WorkflowQueryParams,
+  signal?: AbortSignal,
+): Promise<WorkflowResponse> {
   const [importWorkflow, exportWorkflow] = await Promise.all([
-    fetchWorkflowByType(params.hs_code, 'IMPORT'),
-    fetchWorkflowByType(params.hs_code, 'EXPORT'),
+    fetchWorkflowByType(params.hs_code, 'IMPORT', signal),
+    fetchWorkflowByType(params.hs_code, 'EXPORT', signal),
   ])
 
   return {
@@ -32,12 +28,17 @@ export async function getWorkflowsByHSCode(params: WorkflowQueryParams): Promise
   }
 }
 
-async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT'): Promise<Workflow | null> {
+async function fetchWorkflowByType(
+  hsCode: string,
+  tradeFlow: 'IMPORT' | 'EXPORT',
+  signal?: AbortSignal,
+): Promise<Workflow | null> {
   try {
     const { data } = await http.request<WorkflowTemplate>({
       url: `${API_BASE_URL}/api/v1/workflows/templates`,
       params: { hsCode, tradeFlow },
       attachToken: true,
+      signal,
     })
 
     return {
@@ -54,21 +55,23 @@ async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT
   }
 }
 
-export async function getWorkflowById(id: string): Promise<Workflow | undefined> {
+export async function getWorkflowById(id: string, signal?: AbortSignal): Promise<Workflow | undefined> {
   const { data } = await http.request<Workflow>({
     url: `${API_BASE_URL}/api/v1/workflows/${id}`,
     attachToken: true,
+    signal,
   })
   return data
 }
 
 // Consignment functions
-export async function createConsignment(): Promise<CreateConsignmentResponse> {
+export async function createConsignment(signal?: AbortSignal): Promise<CreateConsignmentResponse> {
   const { data } = await http.request<CreateConsignmentResponse>({
     url: `${API_BASE_URL}/api/v1/consignments`,
     method: 'POST',
     data: {},
     attachToken: true,
+    signal,
   })
   return data
 }
@@ -76,20 +79,26 @@ export async function createConsignment(): Promise<CreateConsignmentResponse> {
 // Starts one of the consignment's startableFlows as its own workflow on the consignment; its
 // tasks then appear among the consignment's workflow nodes. The request only names the flow:
 // the server sets its variables, and the flow's own tasks collect anything from the user.
-export async function startConsignmentFlow(consignmentId: string, templateId: string): Promise<void> {
+export async function startConsignmentFlow(
+  consignmentId: string,
+  templateId: string,
+  signal?: AbortSignal,
+): Promise<void> {
   await http.request({
     url: `${API_BASE_URL}/api/v1/consignments/${encodeURIComponent(consignmentId)}/flows`,
     method: 'POST',
     data: { templateId },
     attachToken: true,
+    signal,
   })
 }
 
-export async function getConsignment(id: string): Promise<Consignment | null> {
+export async function getConsignment(id: string, signal?: AbortSignal): Promise<Consignment | null> {
   try {
     const { data } = await http.request<Consignment>({
       url: `${API_BASE_URL}/api/v1/consignments/${id}`,
       attachToken: true,
+      signal,
     })
     return data
   } catch (error) {
@@ -106,6 +115,7 @@ export async function getAllConsignments(
   state?: ConsignmentState | 'all',
   flow?: TradeFlow | 'all',
   q?: string,
+  signal?: AbortSignal,
 ): Promise<ConsignmentListResult> {
   const params: Record<string, string | number> = { offset, limit }
   if (state && state !== 'all') params.state = state
@@ -116,65 +126,7 @@ export async function getAllConsignments(
     url: `${API_BASE_URL}/api/v1/consignments`,
     params,
     attachToken: true,
+    signal,
   })
   return data
-}
-
-// PreConsignment functions
-export async function getTraderPreConsignments(
-  offset: number = 0,
-  limit: number = 50,
-): Promise<TraderPreConsignmentsResponse> {
-  const { data } = await http.request<PreConsignmentListApiResponse>({
-    url: `${API_BASE_URL}/api/v1/pre-consignments`,
-    params: { offset, limit },
-    attachToken: true,
-  })
-
-  if (Array.isArray(data)) {
-    const items: TraderPreConsignmentItem[] = data.map((instance) => ({
-      id: instance.preConsignmentTemplate.id,
-      name: instance.preConsignmentTemplate.name,
-      description: instance.preConsignmentTemplate.description,
-      state: instance.state,
-      dependsOn: instance.preConsignmentTemplate.dependsOn,
-      preConsignment: instance,
-      preConsignmentTemplate: instance.preConsignmentTemplate,
-    }))
-
-    return {
-      total: items.length,
-      items,
-      offset: 0,
-      limit: items.length,
-    }
-  }
-  return data
-}
-
-export async function getPreConsignment(id: string): Promise<PreConsignmentInstance> {
-  const { data } = await http.request<PreConsignmentInstance>({
-    url: `${API_BASE_URL}/api/v1/pre-consignments/${id}`,
-    attachToken: true,
-  })
-  return data
-}
-
-export async function createPreConsignment(templateId: string): Promise<PreConsignmentInstance> {
-  const { data } = await http.request<PreConsignmentInstance>({
-    url: `${API_BASE_URL}/api/v1/pre-consignments`,
-    method: 'POST',
-    data: { preConsignmentTemplateId: templateId } satisfies CreatePreConsignmentRequest,
-    attachToken: true,
-  })
-  return data
-}
-
-export async function submitPreConsignmentTask(request: TaskCommandRequest): Promise<TaskCommandResponse> {
-  return sendTaskCommand({
-    command: request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMISSION',
-    taskId: request.taskId,
-    workflowId: request.workflowId,
-    data: request.data || {},
-  })
 }

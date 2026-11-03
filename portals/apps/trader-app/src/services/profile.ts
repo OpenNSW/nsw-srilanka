@@ -17,10 +17,11 @@ export interface UserProfile {
   company?: CompanyProfile
 }
 
-export async function getProfile(): Promise<UserProfile> {
+export async function getProfile(signal?: AbortSignal): Promise<UserProfile> {
   const { data } = await http.request<UserProfile>({
     url: `${API_BASE_URL}/api/v1/users/me`,
     attachToken: true,
+    signal,
   })
   return data
 }

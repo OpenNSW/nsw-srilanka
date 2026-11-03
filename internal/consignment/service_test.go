@@ -273,7 +273,7 @@ func TestNewService_ValidatesRoles(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewService(nil, nil, nil, nil, nil, nil, tc.roles, nil)
+			_, err := NewService(nil, nil, nil, nil, nil, nil, tc.roles, caseflow.UserFlows{})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("NewService(...) err = %v, wantErr %v", err, tc.wantErr)
 			}

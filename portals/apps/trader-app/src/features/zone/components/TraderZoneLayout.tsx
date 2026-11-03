@@ -5,7 +5,7 @@ import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
 import { zoneWidthClass } from '@/features/zone/width'
-import { CopyableId } from '@/components/CopyableId'
+import { CopyableId, Surface } from '@portals/ui'
 
 type Props = {
   task: ZoneView
@@ -119,7 +119,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
   const { t } = useTranslation()
   const sorted = [...entries].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
   return (
-    <details className="group rounded-2xl bg-app-surface shadow-sm overflow-hidden">
+    <Surface as="details" elevation="sm" className="group overflow-hidden">
       <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-app-bg">
         <span className="flex items-center gap-2">
           <svg
@@ -145,7 +145,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
           ))}
         </ol>
       </div>
-    </details>
+    </Surface>
   )
 }
 

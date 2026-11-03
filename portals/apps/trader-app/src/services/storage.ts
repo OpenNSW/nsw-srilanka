@@ -26,7 +26,7 @@ export interface UploadResponse {
   name: string
 }
 
-export async function uploadFile(file: File): Promise<UploadResponse> {
+export async function uploadFile(file: File, signal?: AbortSignal): Promise<UploadResponse> {
   const { data: metadata } = await http.request<UploadMetadataResponse>({
     url: `${API_BASE_URL}/api/v1/storage`,
     method: 'POST',
@@ -36,12 +36,14 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
       size: file.size,
     } satisfies UploadMetadataRequest,
     attachToken: true,
+    signal,
   })
 
   const uploadResponse = await fetch(metadata.upload_url, {
     method: 'PUT',
     headers: { 'Content-Type': file.type || 'application/octet-stream' },
     body: file,
+    signal,
   })
 
   if (!uploadResponse.ok) {
@@ -65,10 +67,11 @@ export interface DownloadUrlResponse {
   disposition?: 'inline' | 'attachment'
 }
 
-export async function getDownloadUrl(key: string): Promise<DownloadUrlResponse> {
+export async function getDownloadUrl(key: string, signal?: AbortSignal): Promise<DownloadUrlResponse> {
   const { data } = await http.request<DownloadMetadataResponse>({
     url: `${API_BASE_URL}/api/v1/storage/${key}`,
     attachToken: true,
+    signal,
   })
 
   const url = data.download_url.startsWith('/')

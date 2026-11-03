@@ -53,7 +53,7 @@ make test-e2e   # stops the api container, then runs E2E=1 GOWORK=off go test ./
 
 `make test-e2e` sources `.env` automatically — ensure `GOWORK` is not set (or set to `off`) in `.env` so the go workspace does not interfere with module resolution.
 
-The harness builds the full app via `bootstrap.Build`, which loads the workflow/form artifacts through the artifact loader (`config.Load()` reads `artifactLoader` from the committed `configs/config.example.yaml`, resolving its secret placeholders from the sourced `.env`). These artifacts are **not** in this repo — they live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/`. That template defaults to the GitHub loader, so `make test-e2e` works with no local clone (network access to GitHub required). To run offline, clone that repo and set `artifactLoader.type: local` / `artifactLoader.local.root: <path>/tnsw` in it (locally, without committing).
+The harness builds the full app via `bootstrap.Build`, which loads the workflow/form artifacts through the artifact loader (`config.Load()` reads `artifactLoader` from the committed `configs/config.example.yaml`, resolving its secret placeholders from the sourced `.env`). These artifacts are **not** in this repo — they live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/`. That template defaults to the GitHub loader, so `make test-e2e` works with no local clone (network access to GitHub required). The harness reads `main` from GitHub's raw-content host, which isn't held to the API's limit of 60 requests an hour without a token. The flows follow `main`: when an artifact changes a form or a step, update the flows that use it. To run offline, clone that repo and set `artifactLoader.type: local` / `artifactLoader.local.root: <path>/tnsw` in it (locally, without committing).
 
 Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task queues.
 
@@ -67,7 +67,7 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
   "identity": {
     "clientID": "TRADER_PORTAL_APP",
     "roles": ["Trader"],
-    "scopes": ["nsw:consignment:read", "nsw:consignment:write", "..."]
+    "scopes": ["consignment:read", "consignment:write", "..."]
   }
 }
 ```
@@ -80,7 +80,7 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
   "identity": {
     "clientID": "FCAU_TO_NSW",
     "roles": ["AgencyM2M"],
-    "scopes": ["nsw:task:write", "nsw:consignment:read", "..."]
+    "scopes": ["task:write", "consignment:read", "..."]
   },
   "inbound": {
     "endpoint": "POST /api/v1/inject",
@@ -121,11 +121,11 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
 { "name": "my_flow", "steps": [ ... ] }
 ```
 
-Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
+Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`, `upload`.
 
 ### Variables
 
-`{{varName}}` in paths and body string values is interpolated from the variable store. Variables are populated by `wait` (via `into`) and `request` (via `extract`).
+`{{varName}}` in paths and body string values is interpolated from the variable store. Variables are populated by `wait` and `upload` (via `into`) and `request` (via `extract`).
 
 ---
 
@@ -264,6 +264,33 @@ The mock agency waits until the app sends the inject for that task id, then post
 
 ---
 
+### `upload` — upload a file for a form's file field
+
+```json
+{
+  "name": "trader uploads the analysis certificate",
+  "upload": {
+    "actor": "trader",
+    "filename": "analysis-cert.pdf",
+    "mimeType": "application/pdf",
+    "content": "%PDF-1.4\n%%EOF\n",
+    "into": "analysisCert"
+  }
+}
+```
+
+| Field      | Notes                                                                                              |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `actor`    | The member the file is issued to; only they can submit it.                                         |
+| `filename` | Its extension must be one `storage.uploadTypeExtensions` lists for `mimeType`.                     |
+| `mimeType` | One of the deployment's `storage.allowedUploadTypes`.                                              |
+| `content`  | The file's bytes, as text.                                                                         |
+| `into`     | Variable to store the file reference in; send it as the file field's value (`"{{analysisCert}}"`). |
+
+Uploads the way the portal does: reserves the file (`POST /api/v1/storage`), then `PUT`s `content` to the presigned URL that returns. A form's file field only takes a reference issued to the submitter, so a file field needs an `upload` step first.
+
+---
+
 ## How to add a new flow
 
 1. **Identify node display names** — the `wait` `node` selector is the root `title` in the task's `render.json`. Artifact configs (workflow/render/mapping JSON) live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/<agency>/<step>/`, not in this repo.
@@ -301,4 +328,4 @@ The mock agency waits until the app sends the inject for that task id, then post
 
 **401 on agency callback** — the mock posts with a real agency bearer. Ensure the agency's token carries the NSW API identifier as `aud`, the `authn.audience` in `configs/config.example.yaml`.
 
-**403 on agency callback** — the token lacks `nsw:task:write`, or its client ID isn't the one the config's `catalog` maps, under `clients`, to the agency the task names.
+**403 on agency callback** — the token lacks `task:write`, or its client ID isn't the one the config's `catalog` maps, under `clients`, to the agency the task names.

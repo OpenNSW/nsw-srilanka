@@ -74,6 +74,16 @@
       }
     },
     {
+      "name": "trader uploads the analysis certificate",
+      "upload": {
+        "actor": "trader",
+        "filename": "analysis-cert.pdf",
+        "mimeType": "application/pdf",
+        "content": "%PDF-1.4\n%%EOF\n",
+        "into": "analysisCert"
+      }
+    },
+    {
       "name": "trader submits the FCAU application",
       "request": {
         "actor": "trader",
@@ -86,17 +96,21 @@
             "exporter_address": "No 18, Galle Road, Colombo 03, Sri Lanka",
             "consignee_name": "Hamburg Fine Foods Import GMBH",
             "consignee_address": "Industriestrasse 104, 20457 Hamburg, Germany",
-            "description_of_food": "Premium Organic Coconut Cream, canned (400ml) - 500 Cartons, 5400 kg",
+            "commodities": [
+              {
+                "id": "item-1",
+                "description_of_food": "Premium Organic Coconut Cream, canned (400ml) - 500 Cartons, 5400 kg",
+                "consignment_storage_address": "ACME Cold Storage, Sector 4, Export Zone, Biyagama",
+                "package_batch_weight_details": "Cans in Corrugated Cartons, Batch CC-2026-94, 5400 kg",
+                "ingredients_details": "Organic Coconut Extract (99.8%), Xanthan Gum (0.2%)",
+                "in_house_quality_monitoring": "Daily microbiological sampling and HACCP CCP verification logs.",
+                "analysis_certificates": "{{analysisCert}}"
+              }
+            ],
             "intended_export_date": "2026-07-01",
             "lc_number": "LC-88392-COL",
             "container_numbers": "MSCU-849201-9, GATU-102938-2",
-            "vessel_name": "CMA CGM MARCO POLO / V092",
-            "consignment_storage_address": "ACME Cold Storage, Sector 4, Export Zone, Biyagama",
-            "package_batch_weight_details": "Cans in Corrugated Cartons, Batch CC-2026-94, 5400 kg",
-            "ingredients_details": "Organic Coconut Extract (99.8%), Xanthan Gum (0.2%)",
-            "in_house_quality_monitoring": "Daily microbiological sampling and HACCP CCP verification logs.",
-            "analysis_certificates": "s3://e2e/analysis-cert.pdf",
-            "other_declarations": "Non-GMO certified; radiation-free consignment."
+            "vessel_name": "CMA CGM MARCO POLO / V092"
           }
         },
         "expectStatus": 204
@@ -109,10 +123,8 @@
         "command": "approve",
         "content": {
           "application_review_outcome": "approve",
-          "reference_number": "REF-FCAU-E2E",
-          "sample_inspection_required": false,
-          "lab_test_required": false,
-          "warehouse_inspection_required": false
+          "reference_number": "034/00481",
+          "commodities": [{ "id": "item-1", "inspection_type": "warehouse" }]
         },
         "timeout": "60s"
       }

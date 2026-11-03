@@ -10,9 +10,9 @@ import type { AdminConsignmentDetail, AdminResolutionRequest, AdminWorkflowKind,
 
 // Every admin lookup here treats a 404 as "not found" (null) rather than an error to throw —
 // the id was well-formed but nothing (yet, or any more) exists for it, not a broken request.
-async function fetchOrNull<T>(url: string): Promise<T | null> {
+async function fetchOrNull<T>(url: string, signal?: AbortSignal): Promise<T | null> {
   try {
-    const { data } = await http.request<T>({ url, attachToken: true })
+    const { data } = await http.request<T>({ url, attachToken: true, signal })
     return data
   } catch (error) {
     if (error instanceof HttpError && error.status === 404) {
@@ -24,14 +24,17 @@ async function fetchOrNull<T>(url: string): Promise<T | null> {
 
 // One workflow's engine state: a consignment's flow (AdminConsignmentDetail.flows) or a child
 // workflow of one (EngineNode.child_workflow_ids).
-export function getWorkflowEngineStatus(workflowId: string): Promise<EngineStatus | null> {
-  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/workflows/${encodeURIComponent(workflowId)}/engine-status`)
+export function getWorkflowEngineStatus(workflowId: string, signal?: AbortSignal): Promise<EngineStatus | null> {
+  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/workflows/${encodeURIComponent(workflowId)}/engine-status`, signal)
 }
 
 // A TASK node's independent per-task ("micro") workflow (see EngineNode.task_workflow_id) — a
 // separate ID space/manager from getWorkflowEngineStatus's flow/child-workflow IDs.
-export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<EngineStatus | null> {
-  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/task/${encodeURIComponent(taskWorkflowId)}/engine-status`)
+export function getTaskWorkflowEngineStatus(
+  taskWorkflowId: string,
+  signal?: AbortSignal,
+): Promise<EngineStatus | null> {
+  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/task/${encodeURIComponent(taskWorkflowId)}/engine-status`, signal)
 }
 
 // Resolves a node AWAITING_ADMIN, addressed by its parking: stepId is the node's step_id from the
@@ -41,12 +44,13 @@ export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<Eng
 // (child_workflow_ids), 'task' for a task workflow (task_workflow_id), which is a separate ID space
 // with its own route, like the two engine-status functions above. Required rather than defaulted, so
 // a caller can't silently address a task workflow through the workflows route. Requires
-// nsw:consignment:adminwrite.
+// consignment:adminwrite.
 export async function resolveAdminIntervention(
   workflowId: string,
   stepId: string,
   request: AdminResolutionRequest,
   workflowKind: AdminWorkflowKind,
+  signal?: AbortSignal,
 ): Promise<void> {
   const route = workflowKind === 'task' ? 'task' : 'workflows'
   await http.request({
@@ -54,6 +58,7 @@ export async function resolveAdminIntervention(
     method: 'POST',
     data: request,
     attachToken: true,
+    signal,
   })
 }
 
@@ -62,12 +67,13 @@ export async function resolveAdminIntervention(
 // - 'workflow' (a flow or a child branch): the node's whole task is closed, so the trader or
 //   officer cannot submit it.
 // - 'task' (a task workflow): only that step parks, and the task stays open.
-// Requires nsw:consignment:adminwrite.
+// Requires consignment:adminwrite.
 export async function forceParkNode(
   workflowId: string,
   stepId: string,
   reason: string,
   workflowKind: AdminWorkflowKind,
+  signal?: AbortSignal,
 ): Promise<void> {
   const route = workflowKind === 'task' ? 'task' : 'workflows'
   await http.request({
@@ -75,12 +81,16 @@ export async function forceParkNode(
     method: 'POST',
     data: { reason },
     attachToken: true,
+    signal,
   })
 }
 
 // Ops/admin view of the full consignment detail plus its flows, no trader/CHA ownership check —
 // not the trader/CHA-facing getConsignment() in features/consignment/service.ts, which 404s/403s
 // for admins inspecting a consignment outside their own company.
-export function getConsignmentForAdmin(consignmentId: string): Promise<AdminConsignmentDetail | null> {
-  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/consignments/${encodeURIComponent(consignmentId)}`)
+export function getConsignmentForAdmin(
+  consignmentId: string,
+  signal?: AbortSignal,
+): Promise<AdminConsignmentDetail | null> {
+  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/consignments/${encodeURIComponent(consignmentId)}`, signal)
 }

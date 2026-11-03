@@ -2,18 +2,16 @@ import { useState } from 'react'
 import { AlertDialog, Button, Flex, Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import type { FlowOption } from '@/features/consignment/types.ts'
-import { startConsignmentFlow } from '@/features/consignment/service.ts'
 
 interface StartFlowButtonsProps {
-  consignmentId: string
   flows: FlowOption[]
-  // Called once a flow has started, to reload the consignment so its steps show.
-  onStarted: () => void
+  // Starts the flow (useConsignment's startFlow), rejecting if it could not.
+  onStart: (templateId: string) => Promise<void>
 }
 
 // One button per flow the caller may start on the consignment (DetailDTO.startableFlows). A
 // started flow cannot be withdrawn, so each start is confirmed first.
-export function StartFlowButtons({ consignmentId, flows, onStarted }: StartFlowButtonsProps) {
+export function StartFlowButtons({ flows, onStart }: StartFlowButtonsProps) {
   const { t } = useTranslation()
   const [pending, setPending] = useState<FlowOption | null>(null)
   const [starting, setStarting] = useState(false)
@@ -25,9 +23,8 @@ export function StartFlowButtons({ consignmentId, flows, onStarted }: StartFlowB
     setStarting(true)
     setFailed(null)
     try {
-      await startConsignmentFlow(consignmentId, flow.templateId)
+      await onStart(flow.templateId)
       setPending(null)
-      onStarted()
     } catch (err) {
       console.error('Failed to start flow:', err)
       setPending(null)

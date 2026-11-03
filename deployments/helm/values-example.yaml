@@ -14,7 +14,7 @@
 #   kubectl create secret generic nsw-secrets \
 #     --from-literal=db-password=... \
 #     --from-literal=slpa-webhook-secret=... \
-#     --from-literal=notification-email-token=... \
+#     --from-literal=notification-smtp-password=... \
 #     --from-literal=notification-sms-password=... \
 #     --from-literal=m2m-npqs-secret=... \
 #     --from-literal=m2m-fcau-secret=... \
@@ -81,9 +81,13 @@ backend:
     SLPA_WEBHOOK_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: slpa-webhook-secret }
-    NOTIFICATION_EMAIL_TOKEN:
+    NOTIFICATION_EMAIL_CLIENT_SECRET:
       valueFrom:
-        secretKeyRef: { name: nsw-secrets, key: notification-email-token }
+        secretKeyRef: { name: nsw-secrets, key: notification-email-client-secret }
+    # Only with notification.providers.smtp in place of email.
+    # NOTIFICATION_SMTP_PASSWORD:
+    #   valueFrom:
+    #     secretKeyRef: { name: nsw-secrets, key: notification-smtp-password }
     NOTIFICATION_SMS_PASSWORD:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: notification-sms-password }
@@ -159,8 +163,9 @@ backend:
 
     server:
       port: 8080               # keep in step with containerPort above
-      # Audit records (category=audit) are written at info, so warn or error
-      # drops them. Startup logs that at this level.
+      # Filters the system stream (category=system) and security lines on it.
+      # Audit (category=audit) is OTLP-only and ignores this level; with export
+      # off, startup warns once.
       logLevel: info
       serviceURL: "https://nsw-api.example.com"
       # Request-body size cap and server timeouts (Slowloris/DoS hardening).
@@ -218,17 +223,13 @@ backend:
         # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
         # a known malware vector.
         - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-        # XML is data to download, not to display: it is not in inlineTypes, so a
-        # download saves it instead of opening it.
-        - text/xml
-        - application/xml
       # What machine clients may upload on POST /api/v1/internal/storage beyond
       # allowedUploadTypes, by the client's name in the catalog's clients. Not
       # read when type is proxy. Unlike allowedUploadTypes it may list a type a
       # browser opens as a document, such as text/html for the documents an
       # agency's HTML_DOCUMENT_GENERATOR generates and stores here (the route
       # is for files a deployment generates itself); only the clients named,
-      # holding nsw:storage:internalwrite, can store it.
+      # holding storage:internalwrite, can store it.
       allowedInternalUploadTypes:
         npqs:
           - text/html
@@ -245,8 +246,6 @@ backend:
         image/gif: [.gif]
         image/webp: [.webp]
         application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: [.xlsx]
-        text/xml: [.xml]
-        application/xml: [.xml]
         text/html: [.html]
       # What a download opens in the browser; every other file is saved. MIME
       # types, compared exactly with the stored type. Not read when type is
@@ -333,10 +332,12 @@ backend:
         # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
         # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
 
-    # Manifest version new flows start on (0: the highest published; see
-    # configs/config.example.yaml).
+    # Manifest version new flows start on (0: the highest published) and bytes
+    # of artifact files kept in memory (0: 64 MiB; negative: off); see
+    # configs/config.example.yaml.
     artifacts:
       manifestVersion: 0
+      fileCacheBytes: 0
 
     # Trader/agency portals calling this API.
     cors:
@@ -358,8 +359,8 @@ backend:
             clientID: NSW_TO_NPQS
             clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.npqs.nsw-agency.local
       - id: fcau
@@ -372,8 +373,8 @@ backend:
             clientID: NSW_TO_FCAU
             clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.fcau.nsw-agency.local
       - id: cda
@@ -386,8 +387,8 @@ backend:
             clientID: NSW_TO_CDA
             clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.cda.nsw-agency.local
       - id: slpa
@@ -409,8 +410,8 @@ backend:
             clientID: NSW_TO_EFC
             clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.efc.nsw-agency.local
       - id: customs-asycuda
@@ -440,8 +441,8 @@ backend:
             clientID: NSW_TO_SLTB
             clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
             scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
+              - workflow:inject
+              - task:write
             endpointParams:
               resource: https://api.sltb.nsw-agency.local
 
@@ -512,8 +513,9 @@ backend:
             # A blend sheet's number, drawn when the trader submits: the year,
             # then a sequence that restarts every year. Produces: 2026/00001
             - idType: blend_sheet_no
+              timezone: Asia/Colombo
               segments:
-                - {type: date, layout: "2006"}
+                - {type: date, format: "yyyy"}
                 - {type: literal, value: "/"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyy}", padding: 5}
@@ -533,24 +535,47 @@ backend:
                   random: {scopeKey: "{issuer}:{idType}", charset: numeric, length: 10}
         - issuer: NPQS
           formats:
-            # Shared UTC monthly sequence for NPQS certificate and treatment fees.
+            # Shared monthly sequence (Colombo time) for NPQS certificate and treatment fees.
             # Produces: NPQS-2026-09-00001
             - idType: npqs_payment_ref
+              timezone: Asia/Colombo
               segments:
                 - {type: literal, value: "NPQS-"}
-                - {type: date, layout: "2006"}
+                - {type: date, format: "yyyy"}
                 - {type: literal, value: "-"}
-                - {type: date, layout: "01"}
+                - {type: date, format: "MM"}
                 - {type: literal, value: "-"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyyMM}", padding: 5}
 
-    # Email/SMS gateways, one settings block per channel.
+    # Email/SMS gateways, one settings block per channel. Optional: a channel
+    # left out sends nothing.
     notification:
       providers:
+        # Email: set email (through PingMailer's API) or smtp (straight to an
+        # SMTP server), not both. The schemas are in
+        # github.com/OpenNSW/core/notification. Use email where the cluster
+        # can't reach the SMTP server's submission port (587).
         email:
-          baseURL: "https://email.example.com"
-          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+          baseURL: "https://api-server.mail.svc.cluster.local:8000" # PingMailer API server
+          # path: "/notify" # optional, this is the default
+          # allowInsecureHTTP: true # only if baseURL is plain http (in-cluster)
+          auth:
+            type: oauth2
+            oauth2:
+              tokenURL: "https://idp.example.com/oauth2/token"
+              clientID: "replace-with-pingmailer-client-id"
+              clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+          smtpHost: "smtp.example.com" # SMTP server PingMailer relays to
+          smtpPort: 587
+          sender: "no-reply@example.com"
+        # smtp:
+        #   host: "smtp.example.com"
+        #   # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+        #   # tlsMode: "starttls" # starttls (default), tls or none
+        #   username: "no-reply@example.com"
+        #   password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
+        #   sender: "no-reply@example.com"
         sms:
           baseURL: "https://sms.example.com"
           userName: "nsw"
@@ -560,10 +585,12 @@ backend:
     integrations:
       slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
 
-    # Flows a trader or CHA may start on a consignment, besides the export
-    # flow; see configs/config.example.yaml.
-    consignment:
-      flows: []
+    # Workflows a trader or CHA may start on a consignment they own, besides
+    # the export flow; see configs/config.example.yaml.
+    flows:
+      users:
+        enabled: false
+        workflows: []
 
     # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
     # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
@@ -667,7 +694,7 @@ frontend:
     # The `resource` value must equal backend.config.authn.audience / the NSW_API resource-server identifier.
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     APP_URL: "https://trader.example.com"
-    IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,hscode:read,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
     SHOW_AUTOFILL_BUTTON: "false"
     # "true" shows the demo color-scheme picker in the footer; leave it off in a real deployment.
     SHOW_COLOR_SCHEME_SWITCHER: "false"

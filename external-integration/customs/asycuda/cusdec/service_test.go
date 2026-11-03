@@ -46,6 +46,15 @@ func (m *mockCusdecRepository) Update(ctx context.Context, decl *CusdecDeclarati
 	return nil
 }
 
+func (m *mockCusdecRepository) GetRegisteredByCase(_ context.Context, caseID string) (*CusdecDeclaration, error) {
+	for _, d := range m.declsByEdgeID {
+		if d.CaseID == caseID && d.CusdecNumber > 0 {
+			return d, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *mockCusdecRepository) RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error {
 	m.declsByEdgeID[edgeID] = &CusdecDeclaration{EdgeID: edgeID, Status: CusdecStatusSubmitted, CaseID: caseID, WorkflowID: workflowID}
 	return nil

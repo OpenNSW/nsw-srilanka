@@ -17,8 +17,7 @@ import (
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
-	notification "github.com/OpenNSW/core/notifications"
-	"github.com/OpenNSW/core/notifications/providers"
+	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
@@ -55,11 +54,11 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
-	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 	"github.com/OpenNSW/nsw-srilanka/internal/staticdata"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/filetoken"
+	"github.com/OpenNSW/nsw-srilanka/internal/systemlog"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
@@ -186,6 +185,11 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
+	// A listed flow that is not a workflow could never start, so it stops the server here.
+	if err := cfg.Flows.CheckWorkflows(ctx, artifacts); err != nil {
+		_ = database.Close(db)
+		return nil, err
+	}
 
 	chaService := cha.NewService(db)
 	companyService := company.NewService(db)
@@ -295,7 +299,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	if agencyMode {
 		upstream = agencyCompletion(db)
 	} else {
-		consignmentService, err = consignment.NewService(db, artifacts, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Consignment.Flows)
+		consignmentService, err = consignment.NewService(db, artifacts, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Flows.Users)
 		if err != nil {
 			_ = stopTask()
 			temporalClient.Close()
@@ -413,7 +417,8 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
 		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
-		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
+		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService).
+			WithAuditor(auditor, cusdecRepo, cdnRepo)
 
 		// TEMPORARY debugging code (see asycuda/debug_forward.go): copy every SLC
 		// Edge callback to the slce-debug-forward service when config.yaml has one.
@@ -460,10 +465,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), renderConfigOf(artifacts))
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
-	// An agency uses task claims: every officer owns every injected workflow, so a
-	// claim shows the others who is working a task. TNSW does not: a step is already
-	// limited to the trader or CHA company that owns the consignment.
-	taskHandler.ClaimsEnabled = agencyMode
+	// A task's template decides who may read it and whether it can be claimed.
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
@@ -590,17 +592,17 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// Security log reads slog.Default (process stream, and OTLP when export
+	// System log reads slog.Default (process stream, and OTLP when export
 	// is on from the early configureLogging). It sits inside trace so the
 	// line carries the trace id, and outside CORS so a preflight is logged
 	// too. CaptureRoute next to the mux records Pattern for Middleware:
 	// otelhttp copies the request before ServeMux sets it. Authentication
 	// attaches the principal on a child request; the log reads it back from
-	// authn.RequestCaller.
+	// authn.RequestCaller. 401/403 also emit a sparse category=security line.
 	for _, name := range unwiredAudit {
 		slog.Warn(name + " audit is not wired: service has no WithAuditor")
 	}
-	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", securitylog.CaptureRoute(mux)))))
+	handler := trace.TraceMiddleware(systemlog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", systemlog.CaptureRoute(mux)))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
@@ -872,6 +874,30 @@ func taskManagerOptions() []orchestrator.Option {
 	return []orchestrator.Option{orchestrator.WithRequiredPreResumeExtensions(taskauthzext.ExtAuthz)}
 }
 
+// registerNotify installs the notification extension, sending through the
+// providers the notification section sets. With none set the extension still
+// runs, so steps that declare it complete, but it sends nothing.
+func registerNotify(reg *extensions.Registry, cfg config.NotificationConfig, loader registryTemplateProvider) error {
+	notifProviders, err := cfg.Build()
+	if err != nil {
+		return fmt.Errorf("notification providers: %w", err)
+	}
+	if len(notifProviders) == 0 {
+		slog.Warn("notifications disabled: notification.providers sets no provider")
+		err = notify.Register(reg, nil, loader)
+	} else {
+		var notifManager *notification.Manager
+		if notifManager, err = notification.NewManager(notifProviders...); err != nil {
+			return fmt.Errorf("notification manager: %w", err)
+		}
+		err = notify.Register(reg, notifManager, loader)
+	}
+	if err != nil {
+		return fmt.Errorf("register notification extension: %w", err)
+	}
+	return nil
+}
+
 // stepCanAct decides whether a caller may act on a task's active step, by the
 // authz rules on its step template, in the manifest version the task runs on.
 // A task with no active step template has nothing to act on.
@@ -1005,9 +1031,11 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
+	declarations := cusdec.NewDeclarationRepository(db)
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
-		Declarations:  cusdec.NewDeclarationRepository(db),
+		Declarations:  declarations,
 		DispatchNotes: cdn.NewDispatchNoteRepository(db),
+		Cases:         declarations,
 	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
@@ -1057,22 +1085,9 @@ func initTask(
 		return tm.HoldTask(context.Background(), payload)
 	})
 
-	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
-	if err != nil {
-		return nil, nil, fmt.Errorf("email provider: %w", err)
-	}
-	smsProvider, err := providers.NewSMSProvider(cfg.Notification.Providers.SMS)
-	if err != nil {
-		return nil, nil, fmt.Errorf("sms provider: %w", err)
-	}
-	notifManager, err := notification.NewManager(emailProvider, smsProvider)
-	if err != nil {
-		return nil, nil, fmt.Errorf("notification manager: %w", err)
-	}
-
 	extensionsRegistry := extensions.NewRegistry()
-	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{artifacts: artifacts}); err != nil {
-		return nil, nil, fmt.Errorf("register notification extension: %w", err)
+	if err := registerNotify(extensionsRegistry, cfg.Notification, registryTemplateProvider{artifacts: artifacts}); err != nil {
+		return nil, nil, err
 	}
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
@@ -1109,7 +1124,11 @@ func initArtifacts(ctx context.Context, cfg *config.Config) (*artifact.Set, erro
 		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
 	}
 
-	artifacts, err := artifact.LoadSet(ctx, artifactLoader, artifact.WithPinnedVersion(cfg.Artifacts.ManifestVersion))
+	opts := []artifact.SetOption{artifact.WithPinnedVersion(cfg.Artifacts.ManifestVersion)}
+	if cfg.Artifacts.FileCacheBytes != 0 {
+		opts = append(opts, artifact.WithFileCacheBytes(cfg.Artifacts.FileCacheBytes))
+	}
+	artifacts, err := artifact.LoadSet(ctx, artifactLoader, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load artifact manifests: %w", err)
 	}

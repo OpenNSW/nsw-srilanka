@@ -9,7 +9,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 | -------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
 | Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow |
-| Task claims          | off                                                     | on (a hint, never required)                |
+| Task claims          | off (its task templates leave out `claimable`)          | on: its task templates set `claimable`     |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
 | Catalog              | `catalog` in `configs/config.yaml`                      | `catalog` in the agency's `config.yaml`    |
@@ -65,11 +65,11 @@ authn:
 
 `configs/agency/cda/` is a complete example.
 
-The injecting client's token needs the `nsw:workflow:inject` scope, and `nsw:task:write`
+The injecting client's token needs the `workflow:inject` scope, and `task:write`
 to reply on the agency's parked steps (see [Asking for more information](#asking-for-more-information)).
 
 Officers need the token role of at least one role in the agency catalog (see
-[Roles per task](#roles-per-task)) and the `nsw:consignment:read` and task scopes the
+[Roles per task](#roles-per-task)) and the `consignment:read` and task scopes the
 portal token already carries.
 
 ### UI
@@ -160,7 +160,7 @@ hint, not a lock: submitting a step never checks it.
 - `GET /api/v1/tasks/{id}` returns a `claim` object: the holder's `name` (their email
   for now), `claimed_at` and `mine`.
 
-Any officer who can open the task may claim it; both routes need `nsw:task:write`.
+Any officer who can open the task may claim it; both routes need `task:write`.
 Claims, takeovers and releases are recorded in the audit trail as task updates. Claims
 are on in agency mode and off in TNSW, where the routes answer 404 and the task view
 has no `claim`. The claim is stored on the task row (`task_records_v2.claimed_by` and
