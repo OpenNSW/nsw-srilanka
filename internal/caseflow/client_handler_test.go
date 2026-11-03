@@ -1,7 +1,6 @@
 package caseflow
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,27 +11,16 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
-// ownerCapture records each owner assigned.
-type ownerCapture struct {
-	assigned []string // "case/role/ou"
-	err      error
-}
-
-func (o *ownerCapture) AssignOU(_ context.Context, caseID, role, ouHandle string) error {
-	o.assigned = append(o.assigned, caseID+"/"+role+"/"+ouHandle)
-	return o.err
-}
-
 // clientFlows lists notice for tnsw, owned by officer, in CDA's OU.
 var clientFlows = ClientFlows{Enabled: true, OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}, Owner: "officer"}}}
 
 // catalogClients is the catalog's Clients map: tnsw calls as NSW_TO_CDA.
 var catalogClients = map[string]string{"tnsw": "NSW_TO_CDA", "fcau": "FCAU_TO_NSW"}
 
-func newClientHandler(t *testing.T, list ClientFlows) (*ClientHandler, *memRepo, *startCapture, *ownerCapture) {
+func newClientHandler(t *testing.T, list ClientFlows) (*ClientHandler, *memRepo, *startCapture) {
 	t.Helper()
-	repo, wm, owners := newMemRepo(), &startCapture{}, &ownerCapture{}
-	return NewClientHandler(newService(t, repo, wm), list, owners, catalogClients), repo, wm, owners
+	repo, wm := newMemRepo(), &startCapture{}
+	return NewClientHandler(newService(t, repo, wm), list, catalogClients), repo, wm
 }
 
 // post sends body to the route for case C1, as p (unauthenticated when nil).
@@ -52,7 +40,7 @@ var tnsw = &authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA"}
 const startBody = `{"workflowId":"notice","flowId":"task-1","input":{"hs":"0801"},"callbackToken":"tok-1"}`
 
 func TestClientHandlerStartsTheFlow(t *testing.T) {
-	h, repo, wm, owners := newClientHandler(t, clientFlows)
+	h, repo, wm := newClientHandler(t, clientFlows)
 	rec := post(h, tnsw, startBody)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
@@ -77,14 +65,14 @@ func TestClientHandlerStartsTheFlow(t *testing.T) {
 	if n, ok := vars["notification"].(map[string]any); !ok || n["hs"] != "0801" {
 		t.Errorf("notification = %v, want the input", vars["notification"])
 	}
-	if len(owners.assigned) != 1 || owners.assigned[0] != "C1/officer/cda" {
-		t.Errorf("owners = %v, want C1 owned by cda as officer", owners.assigned)
+	if len(repo.owners) != 1 || repo.owners[0] != "C1/officer/cda" {
+		t.Errorf("owners = %v, want C1 owned by cda as officer", repo.owners)
 	}
 }
 
 // No callback token, no variable: a workflow that calls back by it fails at the start.
 func TestClientHandlerWithoutCallbackToken(t *testing.T) {
-	h, _, wm, _ := newClientHandler(t, clientFlows)
+	h, _, wm := newClientHandler(t, clientFlows)
 	if rec := post(h, tnsw, `{"workflowId":"notice","flowId":"task-1"}`); rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
 	}
@@ -93,9 +81,9 @@ func TestClientHandlerWithoutCallbackToken(t *testing.T) {
 	}
 }
 
-// A repeat of the same request is answered from the recorded flow and records the same owner.
+// A repeat of the same request is answered from the recorded flow, which has its owner.
 func TestClientHandlerRepeat(t *testing.T) {
-	h, _, wm, owners := newClientHandler(t, clientFlows)
+	h, repo, wm := newClientHandler(t, clientFlows)
 	for range 2 {
 		if rec := post(h, tnsw, startBody); rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
@@ -104,8 +92,8 @@ func TestClientHandlerRepeat(t *testing.T) {
 	if len(wm.starts) != 1 {
 		t.Errorf("starts = %d, want 1", len(wm.starts))
 	}
-	if len(owners.assigned) != 2 || owners.assigned[0] != owners.assigned[1] {
-		t.Errorf("owners = %v, want the same owner twice", owners.assigned)
+	if len(repo.owners) != 1 {
+		t.Errorf("owners = %v, want the one recorded with the flow", repo.owners)
 	}
 }
 
@@ -126,12 +114,12 @@ func TestClientHandlerRefuses(t *testing.T) {
 		"unauthenticated": {clientFlows, nil, startBody},
 	} {
 		t.Run(name, func(t *testing.T) {
-			h, _, wm, owners := newClientHandler(t, tc.list)
+			h, repo, wm := newClientHandler(t, tc.list)
 			if rec := post(h, tc.p, tc.body); rec.Code != http.StatusNotFound {
 				t.Errorf("status = %d, want 404", rec.Code)
 			}
-			if len(wm.starts) != 0 || len(owners.assigned) != 0 {
-				t.Errorf("starts = %v, owners = %v, want none", wm.starts, owners.assigned)
+			if len(wm.starts) != 0 || len(repo.owners) != 0 {
+				t.Errorf("starts = %v, owners = %v, want none", wm.starts, repo.owners)
 			}
 		})
 	}
@@ -145,7 +133,7 @@ func TestClientHandlerBadRequests(t *testing.T) {
 		"slash in flowId": `{"workflowId":"notice","flowId":"a/b"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			h, _, wm, _ := newClientHandler(t, clientFlows)
+			h, _, wm := newClientHandler(t, clientFlows)
 			if rec := post(h, tnsw, body); rec.Code != http.StatusBadRequest {
 				t.Errorf("status = %d, want 400", rec.Code)
 			}
@@ -158,33 +146,42 @@ func TestClientHandlerBadRequests(t *testing.T) {
 
 // A flow ID already started on another case is a conflict, and records no owner.
 func TestClientHandlerConflict(t *testing.T) {
-	repo, wm, owners := newMemRepo(Flow{WorkflowID: "task-1", CaseID: "C2", TemplateID: "notice", Status: StatusStarted, ManifestVersion: 2}), &startCapture{}, &ownerCapture{}
-	h := NewClientHandler(newService(t, repo, wm), clientFlows, owners, catalogClients)
+	repo, wm := newMemRepo(Flow{WorkflowID: "task-1", CaseID: "C2", TemplateID: "notice", Status: StatusStarted, ManifestVersion: 2}), &startCapture{}
+	h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
 	if rec := post(h, tnsw, startBody); rec.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409", rec.Code)
 	}
-	if len(owners.assigned) != 0 {
-		t.Errorf("owners = %v, want none", owners.assigned)
+	if len(repo.owners) != 0 {
+		t.Errorf("owners = %v, want none", repo.owners)
 	}
 }
 
-// A failed start records no owner; a failed owner record is an error the caller retries.
+// A failed start leaves the flow recorded with its owner, so the caller's retry starts it.
+// A failed record starts nothing.
 func TestClientHandlerFailures(t *testing.T) {
 	t.Run("start fails", func(t *testing.T) {
-		repo, wm, owners := newMemRepo(), &startCapture{err: errors.New("temporal down")}, &ownerCapture{}
-		h := NewClientHandler(newService(t, repo, wm), clientFlows, owners, catalogClients)
+		repo, wm := newMemRepo(), &startCapture{err: errors.New("temporal down")}
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
 		if rec := post(h, tnsw, startBody); rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d, want 500", rec.Code)
 		}
-		if len(owners.assigned) != 0 {
-			t.Errorf("owners = %v, want none", owners.assigned)
+		wm.err = nil
+		if rec := post(h, tnsw, startBody); rec.Code != http.StatusOK {
+			t.Fatalf("retry status = %d, body %s", rec.Code, rec.Body)
+		}
+		if repo.flows["task-1"].Status != StatusStarted || len(repo.owners) != 1 || repo.owners[0] != "C1/officer/cda" {
+			t.Errorf("flow = %+v, owners = %v, want started and owned by cda as officer", repo.flows["task-1"], repo.owners)
 		}
 	})
-	t.Run("owner record fails", func(t *testing.T) {
-		repo, wm, owners := newMemRepo(), &startCapture{}, &ownerCapture{err: errors.New("db down")}
-		h := NewClientHandler(newService(t, repo, wm), clientFlows, owners, catalogClients)
+	t.Run("record fails", func(t *testing.T) {
+		repo, wm := newMemRepo(), &startCapture{}
+		repo.recordErr = errors.New("db down")
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
 		if rec := post(h, tnsw, startBody); rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d, want 500", rec.Code)
+		}
+		if len(wm.starts) != 0 || len(repo.owners) != 0 {
+			t.Errorf("starts = %v, owners = %v, want none", wm.starts, repo.owners)
 		}
 	})
 }

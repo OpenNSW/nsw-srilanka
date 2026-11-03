@@ -58,6 +58,15 @@ type StartRequest struct {
 	// Vars seeds the workflow variables. They are recorded with the flow, so a retried
 	// start runs with the first request's variables.
 	Vars map[string]any
+	// Owner, if set, is recorded as a party of the case in the same transaction as the
+	// flow, so a recorded flow always has its owner.
+	Owner *Owner
+}
+
+// Owner is an OU that holds a role on a flow's case (case_parties).
+type Owner struct {
+	Role     string
+	OUHandle string
 }
 
 // Service starts flows and records their completion.
@@ -120,7 +129,7 @@ func (s *Service) StartFlow(ctx context.Context, req StartRequest) (*Flow, error
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.Record(ctx, newFlow); err != nil {
+	if err := s.repo.Record(ctx, newFlow, req.Owner); err != nil {
 		return nil, fmt.Errorf("caseflow: failed to record flow: %w", err)
 	}
 	f, err := s.repo.Get(ctx, newFlow.WorkflowID)

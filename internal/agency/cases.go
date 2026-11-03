@@ -37,20 +37,20 @@ type CaseHandler struct {
 	repo      CaseRepository
 	tasks     TaskLister
 	artifacts *artifact.Set // resolves each task's render config for its title
-	// tokenRoles maps each token role the catalog maps a role to back to the role's
-	// logical name.
-	tokenRoles map[string]string
+	// tokenRoles maps each token role the catalog maps a role to back to the roles'
+	// logical names: two names may share one token role.
+	tokenRoles map[string][]string
 }
 
 // NewCaseHandler creates a CaseHandler. roles is the agency catalog's Roles map: an
 // officer holding the token role of any of its entries may use the case views, and sees
 // the cases their OU owns in those roles.
 func NewCaseHandler(repo CaseRepository, tasks TaskLister, artifacts *artifact.Set, roles map[string]string) *CaseHandler {
-	tokenRoles := make(map[string]string, len(roles))
+	tokenRoles := make(map[string][]string, len(roles))
 	for name, tokenRole := range roles {
 		// An empty token role would match a caller whose roles hold an empty string.
 		if tokenRole != "" {
-			tokenRoles[tokenRole] = name
+			tokenRoles[tokenRole] = append(tokenRoles[tokenRole], name)
 		}
 	}
 	return &CaseHandler{repo: repo, tasks: tasks, artifacts: artifacts, tokenRoles: tokenRoles}
@@ -170,8 +170,10 @@ func (h *CaseHandler) requireCatalogRole(w http.ResponseWriter, r *http.Request)
 	var roles []string
 	if p.Kind == authn.KindUser {
 		for _, tokenRole := range p.Roles {
-			if name, ok := h.tokenRoles[tokenRole]; ok && !slices.Contains(roles, name) {
-				roles = append(roles, name)
+			for _, name := range h.tokenRoles[tokenRole] {
+				if !slices.Contains(roles, name) {
+					roles = append(roles, name)
+				}
 			}
 		}
 	}

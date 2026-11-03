@@ -23,7 +23,6 @@ const (
 	errFlowIDReq       = "flowId is required"
 	errFlowNotFound    = "flow not found"
 	errFailedToStart   = "failed to start flow"
-	errFailedToRecord  = "failed to record the case's owner"
 	errFlowIDConflicts = "flowId is already started with different details"
 )
 
@@ -41,30 +40,23 @@ type ClientStartRequest struct {
 	CallbackToken string `json:"callbackToken"`
 }
 
-// Owners records who owns a case. *caseparty's Assign, bound to the database, satisfies it.
-type Owners interface {
-	// AssignOU makes the OU with this handle the holder of role on caseID.
-	AssignOU(ctx context.Context, caseID, role, ouHandle string) error
-}
-
 // ClientHandler serves the route another system starts a flow on: it creates the case if it
 // is new, starts the flow, and records this deployment's own OU as an owner of the case.
 // Only the flows flows.clients lists for the calling client can be started.
 type ClientHandler struct {
 	flows   *Service
 	list    ClientFlows
-	owners  Owners
 	clients map[string]string // OAuth2 client id -> catalog client name
 }
 
 // NewClientHandler creates a ClientHandler. clients is the catalog's Clients map (name ->
 // client id).
-func NewClientHandler(flows *Service, list ClientFlows, owners Owners, clients map[string]string) *ClientHandler {
+func NewClientHandler(flows *Service, list ClientFlows, clients map[string]string) *ClientHandler {
 	byID := make(map[string]string, len(clients))
 	for name, id := range clients {
 		byID[id] = name
 	}
-	return &ClientHandler{flows: flows, list: list, owners: owners, clients: byID}
+	return &ClientHandler{flows: flows, list: list, clients: byID}
 }
 
 // HandleStart handles POST /api/v1/internal/cases/{caseId}/flows. Response: Flow.
@@ -99,7 +91,10 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidBody)
 		return
 	}
-	f, err := h.flows.StartFlow(ctx, StartRequest{CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars})
+	// The owner is recorded with the flow, so a flow that is recorded is owned, and a
+	// retry of a failed start finds both.
+	owner := &Owner{Role: flow.Owner, OUHandle: h.list.OUHandle}
+	f, err := h.flows.StartFlow(ctx, StartRequest{CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars, Owner: owner})
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidRequest):
@@ -109,12 +104,6 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		default:
 			httputil.InternalServerError(w, r, errFailedToStart, err, "caseId", caseID, "flowId", req.FlowID)
 		}
-		return
-	}
-	// Recorded after the start, so a request that fails to start leaves no owner behind.
-	// Assigning again replaces the same holder, so a retry is harmless.
-	if err := h.owners.AssignOU(ctx, caseID, flow.Owner, h.list.OUHandle); err != nil {
-		httputil.InternalServerError(w, r, errFailedToRecord, err, "caseId", caseID, "flowId", req.FlowID)
 		return
 	}
 	httputil.JSON(w, http.StatusOK, f)

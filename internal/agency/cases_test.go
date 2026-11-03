@@ -175,3 +175,18 @@ func TestCaseHandlerEmptyTokenRole(t *testing.T) {
 		}
 	}
 }
+
+// Two catalog roles may share one token role: its holder reads the cases owned in either.
+func TestCaseHandlerSharedTokenRole(t *testing.T) {
+	now := time.Now()
+	repo := fakeCaseRepo{
+		cases:  map[string]Case{"C1": {ID: "C1", State: "IN_PROGRESS", CreatedAt: now, UpdatedAt: now}},
+		owners: map[string]Owner{"C1": {OUHandle: "cda", Roles: []string{"accountant"}}},
+	}
+	h := NewCaseHandler(repo, fakeTasks{}, newSet(t, nil, nil), map[string]string{"officer": "CDA Officer", "accountant": "CDA Officer"})
+	rec := httptest.NewRecorder()
+	h.HandleGetCase(rec, requestBy(officer("CDA Officer"), "/api/v1/cases/C1", "C1"))
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}

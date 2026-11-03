@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 )
 
 // ErrFlowNotFound is returned when no case_flows row exists for a workflow ID.
@@ -58,8 +60,9 @@ type Repository interface {
 	// Record inserts the row for f.WorkflowID, and its case if new, on first sight and is
 	// a no-op afterwards, so the first payload and manifest version are the ones the
 	// workflow is started with.
-	// A new flow reopens a case that had finished.
-	Record(ctx context.Context, f Flow) error
+	// A new flow reopens a case that had finished, and makes owner, if set, the holder of
+	// its role on the case, in the same transaction.
+	Record(ctx context.Context, f Flow, owner *Owner) error
 	MarkStarted(ctx context.Context, workflowID string) error
 	Get(ctx context.Context, workflowID string) (*Flow, error)
 	// ListByCase returns a case's flows, oldest first.
@@ -105,7 +108,7 @@ func (r *repository) EnsureCase(ctx context.Context, caseID string) error {
 	return err
 }
 
-func (r *repository) Record(ctx context.Context, f Flow) error {
+func (r *repository) Record(ctx context.Context, f Flow, owner *Owner) error {
 	const insertFlow = `
 		INSERT INTO case_flows (workflow_id, case_id, template_id, manifest_version, status, payload, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, now(), now())
@@ -153,9 +156,22 @@ func (r *repository) Record(ctx context.Context, f Flow) error {
 		// A new flow reopens a case that had finished.
 		_, err = tx.ExecContext(ctx, `UPDATE cases SET state = $1, updated_at = now() WHERE id = $2 AND state <> $1`,
 			CaseInProgress, f.CaseID)
+		if err != nil || owner == nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, upsertOwner, f.CaseID, owner.Role, caseparty.TypeOU, owner.OUHandle)
 		return err
 	})
 }
+
+// upsertOwner makes an OU the holder of a role on a case, replacing any earlier holder, as
+// caseparty.Assign does.
+const upsertOwner = `
+	INSERT INTO case_parties (case_id, role, party_type, party_id, created_at, updated_at)
+	VALUES ($1, $2, $3, $4, now(), now())
+	ON CONFLICT (case_id, role) DO UPDATE
+	SET party_type = EXCLUDED.party_type, party_id = EXCLUDED.party_id, assigned_by = NULL, updated_at = now()
+`
 
 func (r *repository) MarkStarted(ctx context.Context, workflowID string) error {
 	// Only STARTING moves forward: a fast workflow can already have completed by the

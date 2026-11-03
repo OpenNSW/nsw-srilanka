@@ -179,13 +179,24 @@ func loadFile(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// validateTNSW checks TNSW's trade integrations; an agency builds none of them.
+// validateTNSW checks TNSW's trade integrations; an agency builds none of them, and is
+// checked by validateAgency instead.
 func (c *Config) validateTNSW() error {
 	if c.Mode == ModeAgency {
-		return nil
+		return c.validateAgency()
 	}
 	if err := c.Integrations.Validate(); err != nil {
 		return fmt.Errorf("invalid external integration configuration: %w", err)
+	}
+	return nil
+}
+
+// validateAgency checks that the agency lists the flows TNSW starts on it. Without them it
+// would start, but refuse every flow TNSW starts, and no officer task would ever be
+// created.
+func (c *Config) validateAgency() error {
+	if !c.Flows.Clients.Enabled || len(c.Flows.Clients.Workflows) == 0 {
+		return fmt.Errorf("invalid flows configuration: an agency needs flows.clients enabled, listing the workflows TNSW may start")
 	}
 	return nil
 }
