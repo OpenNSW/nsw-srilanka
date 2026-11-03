@@ -118,6 +118,10 @@ catalog:
     fcau: FCAU_TO_NSW
 `
 
+// agencyYAML is the override that makes baseYAML an agency's: the mode, and the flows
+// another system may start on it.
+const agencyYAML = "mode: agency\nflows:\n  clients:\n    enabled: true\n    ouHandle: cda\n    workflows:\n      - { id: review, clients: [fcau], owner: trader }\n"
+
 // configYAML returns baseYAML with override deep-merged over it and the
 // dotted keys in drop removed, so a test states only the settings it is about.
 func configYAML(t *testing.T, override string, drop ...string) string {

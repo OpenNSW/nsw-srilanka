@@ -177,7 +177,8 @@ start, who may start each (catalog `clients`), and the catalog role the agency's
 the case in once it starts (`owner`). `ouHandle` is the agency's own OU, the `ouHandle`
 its officers' tokens carry. The server refuses to start if a listed workflow is missing
 from the current manifest, an `owner` or client is not in the catalog, or the list has
-no `ouHandle`.
+no `ouHandle`. An agency also refuses to start with the list off or empty: TNSW could
+start no flow on it, so no officer task would ever be created.
 
 ```yaml
 flows:
