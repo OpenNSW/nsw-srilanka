@@ -4,12 +4,10 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 import { RedirectRenderer } from './RedirectRenderer'
 import { UnknownRenderer } from './UnknownRenderer'
 
-// RenderOptions carries the dispatch context for interactive renderers.
-// onAction is provided by WorkspaceZone (the INTERACTIVE call site) and
-// omitted by PresentationalZone — renderers that consume it (today: FORM)
-// become editable iff it's present. Renderers that don't (MARKDOWN,
-// REDIRECT) ignore the options uniformly; no type-specific branching lives
-// in the caller.
+// RenderOptions carries the dispatch context for interactive renderers. A
+// zone is interactive iff onAction is present: a FORM becomes editable, and a
+// REDIRECT sends the browser to its checkout. MARKDOWN ignores the options; no
+// type-specific branching lives in the caller.
 export type RenderOptions = {
   onAction?: ZoneAction
 }
@@ -21,7 +19,13 @@ export function renderZoneComponent(component: ZoneComponent, options: RenderOpt
     case 'MARKDOWN':
       return <MarkdownRenderer payload={component.payload} />
     case 'REDIRECT':
-      return <RedirectRenderer key={component.payload.checkout_url} payload={component.payload} />
+      return (
+        <RedirectRenderer
+          key={component.payload.checkout_url}
+          payload={component.payload}
+          interactive={options.onAction !== undefined}
+        />
+      )
     default:
       return <UnknownRenderer type={(component as { type: string }).type} />
   }

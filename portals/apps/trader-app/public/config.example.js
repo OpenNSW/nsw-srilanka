@@ -4,7 +4,8 @@
 // `docker compose` (bind-mounted into the container — see compose.yml).
 // A real deployment supplies its own values via Helm (see
 // deployments/helm/values-example.yaml). IDP_SCOPES must include the
-// API scopes the backend checks, or it rejects the resulting token.
+// API scopes: the backend checks them on every call, and the portal
+// shows a screen or action only to a user the IdP granted its scope.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8080',
   IDP_BASE_URL: 'http://localhost:8090',

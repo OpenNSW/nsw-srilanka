@@ -31,6 +31,7 @@ loginConsent:
   validityPeriod: 0
 allowedUserTypes:
   - Private_User
+  - Admin_User
 inboundAuthConfig:
   - type: oauth2
     config:

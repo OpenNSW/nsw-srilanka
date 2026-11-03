@@ -8,6 +8,7 @@ import { formatDateTime } from '@/features/consignment/utils'
 import { EngineStatusView } from '@/features/admin/components/engine/EngineStatusView'
 import type { FetchError } from '@/features/admin/components/engine/shared'
 import { FlowList } from '@/features/admin/components/flows/FlowList'
+import { ROUTES } from '@/constants'
 import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
 import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
 
@@ -84,7 +85,7 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
       <div className="mb-1 flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Consignment Debugger</h1>
         <Button variant="soft" color="gray" size="2" asChild>
-          <Link to={`/admin/consignments/${consignmentId}/view`}>View consignment</Link>
+          <Link to={ROUTES.ADMIN_CONSIGNMENT_VIEW(consignmentId)}>View consignment</Link>
         </Button>
       </div>
 

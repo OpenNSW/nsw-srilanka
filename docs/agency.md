@@ -89,8 +89,13 @@ In agency mode `/consignments` lists cases (`GET /api/v1/cases`), and
 `/api/v1/tasks/{id}`, authorized by the officer gate. The screens keep the
 `/consignments` paths because task cards and the task screen link there directly.
 
-The app has no roles of its own: it admits every signed-in user, and the backend
-checks the token's catalog roles on each call.
+The app has no roles of its own. It shows each screen and button only to a user whose token
+carries the scope its API calls need, for example `consignment:read` for the cases and
+`task:write` for working on a task; anyone else sees **Access Restricted** in place of a
+screen. An agency portal's `IDP_SCOPES` leaves out the scopes for creating consignments,
+their flows and the admin views, so it never shows them. To give one role a different view
+than another (a supervisor, say), grant the two IdP roles different scopes on the agency's
+API. The backend still checks the token's catalog roles on each call.
 
 ## Flow
 
