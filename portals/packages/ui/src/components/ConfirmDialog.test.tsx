@@ -5,7 +5,15 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ConfirmDialog } from './ConfirmDialog'
 
-function Harness({ busy = false, onConfirm = () => {} }: { busy?: boolean; onConfirm?: () => void }) {
+function Harness({
+  busy = false,
+  confirmDisabled = false,
+  onConfirm = () => {},
+}: {
+  busy?: boolean
+  confirmDisabled?: boolean
+  onConfirm?: () => void
+}) {
   const [open, setOpen] = useState(true)
   return (
     <Theme>
@@ -18,6 +26,7 @@ function Harness({ busy = false, onConfirm = () => {} }: { busy?: boolean; onCon
         cancelLabel="Cancel"
         onConfirm={onConfirm}
         busy={busy}
+        confirmDisabled={confirmDisabled}
       >
         <p>Export to Rotterdam</p>
       </ConfirmDialog>
@@ -62,5 +71,16 @@ describe('ConfirmDialog', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' }).disabled).toBe(true)
     await user.keyboard('{Escape}')
     expect(screen.getByRole('alertdialog')).toBeTruthy()
+  })
+
+  it('cannot be confirmed while confirmDisabled is set, as a required field is empty', async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    render(<Harness confirmDisabled onConfirm={onConfirm} />)
+
+    const confirm = screen.getByRole<HTMLButtonElement>('button', { name: 'Start' })
+    expect(confirm.disabled).toBe(true)
+    await user.click(confirm)
+    expect(onConfirm).not.toHaveBeenCalled()
   })
 })
