@@ -53,11 +53,26 @@ func TestCaseDeclaration_RecordsACaseWithoutOne(t *testing.T) {
 	assert.Equal(t, map[string]any{"found": false}, ctx.Record.Data["declaration"])
 }
 
+// A failed lookup may clear, so the step is retried.
 func TestCaseDeclaration_ReportsAFailedLookup(t *testing.T) {
 	ctx := caseDeclarationCtx("case-1")
 
 	err := NewCaseDeclarationPlugin(caseDeclarations{err: errors.New("connection refused")}).Execute(ctx, nil)
 
 	require.Error(t, err)
+	assert.False(t, plugins.IsPermanent(err), "a failed lookup may clear, so the step is retried")
 	assert.Nil(t, ctx.Record.Data)
+}
+
+// A step without an output namespace is misconfigured, so it parks on its first
+// attempt.
+func TestCaseDeclaration_MissingNamespaceIsPermanent(t *testing.T) {
+	ctx := caseDeclarationCtx("case-1")
+	ctx.OutputNamespace = ""
+
+	err := NewCaseDeclarationPlugin(caseDeclarations{}).Execute(ctx, nil)
+
+	errType, permanent := plugins.PermanentType(err)
+	require.True(t, permanent, "retrying can't fix a missing output namespace")
+	assert.Equal(t, plugins.ErrorTypeConfig, errType)
 }
