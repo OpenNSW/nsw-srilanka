@@ -1028,7 +1028,7 @@ func initTask(
 		DispatchNotes: dispatchNotes,
 		Cases:         declarations,
 		Notes:         dispatchNotes,
-	}, cfg.Server.ServiceURL); err != nil {
+	}); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	taskStore := gormstore.New(db)

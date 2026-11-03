@@ -118,12 +118,12 @@ func TestOGAFiles_TokenizeErrors(t *testing.T) {
 // is: the push fails, and nothing reaches the OGA.
 func TestExternalReview_DoesNotPushMismatchedFileFields(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", withRenderConfig(tokenFor, reviewRenderConfig))
+	p := NewExternalReviewPlugin(m, withRenderConfig(tokenFor, reviewRenderConfig))
 	in := reviewInputs(t)
 	in["submission"].(map[string]any)["invoice"] = []any{"k-invoice", "k-other"}
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","path":"/review"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","path":"/review","service_workflow_id":"cda-review"}`))
 
 	require.ErrorIs(t, err, filefields.ErrShape)
 	assert.Empty(t, *pushed)
@@ -150,19 +150,20 @@ func newOGA(t *testing.T) (*remote.Manager, *[]map[string]any) {
 
 func TestExternalReview_PushesFileTokens(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", withRenderConfig(tokenFor, reviewRenderConfig))
+	p := NewExternalReviewPlugin(m, withRenderConfig(tokenFor, reviewRenderConfig))
 	in := reviewInputs(t)
 	record := &store.TaskRecord{
 		TaskID:       uuid.NewString(),
 		ActiveStepID: uuid.NewString(),
+		CaseID:       "consignment-1",
 		Data:         reviewInputs(t),
 	}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","path":"/review"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","path":"/review","service_workflow_id":"cda-review"}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
 	require.Len(t, *pushed, 1)
-	data := (*pushed)[0]["data"].(map[string]any)
+	data := (*pushed)[0]["input"].(map[string]any)
 	assert.Equal(t, "CDA_TO_NSW/k-invoice", data["invoice"])
 	assert.Equal(t, reviewInputs(t), record.Data, "the task keeps its stored values")
 	assert.Equal(t, reviewInputs(t), in)
@@ -170,14 +171,14 @@ func TestExternalReview_PushesFileTokens(t *testing.T) {
 
 func TestExternalReview_DoesNotPushFilesWithoutAClient(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", OGAFiles{
+	p := NewExternalReviewPlugin(m, OGAFiles{
 		RenderConfigOf: fixedRenderConfig(reviewRenderConfig),
 		ClientFor:      func(string) (string, bool) { return "", false },
 		IssueForClient: tokenFor.IssueForClient,
 	})
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: reviewInputs(t)}, json.RawMessage(`{"service_id":"cda","path":"/review"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: reviewInputs(t)}, json.RawMessage(`{"service_id":"cda","path":"/review","service_workflow_id":"cda-review"}`))
 
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrSuspended)
@@ -188,10 +189,10 @@ func TestExternalReview_DoesNotPushFilesWithoutAClient(t *testing.T) {
 // tokens for the OGA's client too, and the task keeps its stored values.
 func TestExternalReview_RepliesWithFileTokens(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", withRenderConfig(tokenFor, reviewRenderConfig))
+	p := NewExternalReviewPlugin(m, withRenderConfig(tokenFor, reviewRenderConfig))
 	in := reviewInputs(t)
 	in["replyToken"] = "tok_x"
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
 
 	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
 
@@ -209,12 +210,12 @@ func TestExternalReview_RepliesWithFileTokens(t *testing.T) {
 // ones under "payload", and they go as tokens for the OGA's client too.
 func TestExternalReview_RepliesWithPayloadFileTokens(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", withRenderConfig(tokenFor, `{"files": ["payload.invoice"]}`))
+	p := NewExternalReviewPlugin(m, withRenderConfig(tokenFor, `{"files": ["payload.invoice"]}`))
 	in := map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"invoice": "k-invoice", "feedback": "attach the invoice"},
 	}
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
 
 	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
 
@@ -230,14 +231,14 @@ func TestExternalReview_RepliesWithPayloadFileTokens(t *testing.T) {
 // send it.
 func TestExternalReview_DoesNotReplyWithFilesWithoutAClient(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", OGAFiles{
+	p := NewExternalReviewPlugin(m, OGAFiles{
 		RenderConfigOf: fixedRenderConfig(reviewRenderConfig),
 		ClientFor:      func(string) (string, bool) { return "", false },
 		IssueForClient: tokenFor.IssueForClient,
 	})
 	in := reviewInputs(t)
 	in["replyToken"] = "tok_x"
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
 
 	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
 

@@ -11,8 +11,8 @@
     ]
   },
   "inbound": {
-    "endpoint": "POST /api/v1/inject",
-    "taskIDField": "taskId",
+    "endpoint": "POST /api/v1/internal/cases/{caseId}/flows",
+    "taskIDField": "flowId",
     "callbackTokenField": "callbackToken"
   },
   "outbound": {

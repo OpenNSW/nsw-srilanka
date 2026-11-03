@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/OpenNSW/core/remote"
 	coreplugins "github.com/OpenNSW/core/taskflow/plugins"
@@ -15,26 +16,29 @@ import (
 )
 
 // ExternalReviewPlugin is our custom replacement for the generic
-// generic_external_review plugin. It supplies the OGA portal with a
-// fully-populated submission envelope.
+// generic_external_review plugin. It starts the review flow on the OGA's side, on the
+// same case, and parks until the OGA calls back.
 type ExternalReviewPlugin struct {
 	client *dispatchHelper
 	files  OGAFiles
 }
 
 // NewExternalReviewPlugin builds a plugin that POSTs the trader's submitted
-// form to the configured service+path with a rich body shape. The files in it
-// are sent as tokens for the OGA, issued through files.
-func NewExternalReviewPlugin(manager *remote.Manager, backendBaseURL string, files OGAFiles) *ExternalReviewPlugin {
-	return &ExternalReviewPlugin{client: newDispatchHelper(manager, backendBaseURL), files: files}
+// form to the configured service+path, starting the other side's review flow. The
+// files in it are sent as tokens for the OGA, issued through files.
+func NewExternalReviewPlugin(manager *remote.Manager, files OGAFiles) *ExternalReviewPlugin {
+	return &ExternalReviewPlugin{client: newDispatchHelper(manager), files: files}
 }
 
 type externalReviewConfig struct {
 	ServiceID string `json:"service_id"`
-	// Path is where a dispatch is POSTed. A reply ignores it: it always calls back
-	// on callbacksPath/{replyToken}.
-	Path     string `json:"path,omitempty"`
-	TaskCode string `json:"task_code,omitempty"`
+	// Path is where a dispatch is POSTed: the other side's client flows route,
+	// /api/v1/internal/cases/{caseId}/flows, with {caseId} filled in from the task's
+	// case. A reply ignores it: it always calls back on callbacksPath/{replyToken}.
+	Path string `json:"path,omitempty"`
+	// ServiceWorkflowID is the workflow the other side starts for the review, as its
+	// flows.clients lists it. Required only to dispatch.
+	ServiceWorkflowID string `json:"service_workflow_id,omitempty"`
 	// ReplyCommand is the command a reply carries, e.g. "submit" for a trader's
 	// resubmission or "needs_more_info" for an officer asking for one. Required
 	// only to reply.
@@ -48,10 +52,11 @@ const replyTokenInput = "replyToken"
 // replyPayloadInput is the reserved input that, when present, is all a reply sends.
 const replyPayloadInput = "payload"
 
-// Execute persists the reviewer form ID + QUEUED_EXTERNALLY status, then
-// POSTs the submission to the OGA portal so the officer's review queue is
-// populated. The body matches the SimpleFormExternalServiceRequest shape
-// used by the legacy FCAU/NPQS OGA services.
+// casePathParam is the placeholder in a dispatch path that the task's case ID fills.
+const casePathParam = "{caseId}"
+
+// Execute marks the step QUEUED_EXTERNALLY, then POSTs the submission to the other
+// side's client flows route, which starts its review flow on the same case.
 //
 // Given a replyToken input, it replies instead: the other side parked a step
 // and handed over that token, so the step calls back on it (see replyRequest)
@@ -104,12 +109,19 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	return ErrSuspended
 }
 
-// dispatchRequest is the first round: the review the other side starts, POSTed to
-// the configured path.
+// dispatchRequest is the first round: the review flow the other side starts, POSTed
+// to the configured path with the task's case in it.
 func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalReviewConfig, callbackToken string) (string, map[string]any, error) {
 	if cfg.Path == "" {
 		return "", nil, configError(fmt.Errorf("external_review: path is required"))
 	}
+	if cfg.ServiceWorkflowID == "" {
+		return "", nil, fmt.Errorf("external_review: service_workflow_id is required")
+	}
+	if ctx.Record.CaseID == "" {
+		return "", nil, fmt.Errorf("external_review: the task has no case")
+	}
+	path := strings.ReplaceAll(cfg.Path, casePathParam, url.PathEscape(ctx.Record.CaseID))
 
 	// Convention: if input_mapping placed a value under the reserved key
 	// "submission", that value is the wire shape OGA sees — write any
@@ -128,7 +140,7 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 	if err != nil {
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}
-	return cfg.Path, buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, callbackToken, p.client.callbacksURL()), nil
+	return path, startFlowBody(ctx.Record, cfg.ServiceWorkflowID, data, callbackToken), nil
 }
 
 // reply is replyRequest for the step's inputs with their declared files sent as
@@ -196,25 +208,20 @@ func replyTokenFrom(inputs map[string]any) (string, error) {
 	return token, nil
 }
 
-// buildSubmissionBody constructs the full envelope the OGA portal expects.
-// callbackToken is opaque and names the step this dispatch is for; the reviewer
-// calls back on {serviceUrl}/{callbackToken}, so a late or repeated callback
-// can't complete a later step. It is also the reviewer's idempotency key: the
-// same on every retry of this dispatch, different for every step.
+// startFlowBody is the body of the other side's client flows route: the workflow to
+// start, this task's ID as the flow's, so a retried dispatch is recognised as the same
+// flow, the data as its input, and callbackToken. callbackToken is opaque and names the
+// step this dispatch is for; the reviewer calls back on it, so a late or repeated
+// callback can't complete a later step.
 //
 // data carries only the values declared by the workflow node's input_mapping
 // — not the full record state — so the external reviewer sees the explicit
 // contract surface and nothing more.
-func buildSubmissionBody(record *store.TaskRecord, data any, taskCode *string, callbackToken, callbackURL string) map[string]any {
-	if taskCode == nil || *taskCode == "" {
-		taskCode = &record.ActiveTaskTemplateID
-	}
+func startFlowBody(record *store.TaskRecord, workflowID string, data any, callbackToken string) map[string]any {
 	return map[string]any{
-		"taskCode":      taskCode,
-		"taskId":        record.TaskID,
+		"workflowId":    workflowID,
+		"flowId":        record.TaskID,
+		"input":         data,
 		"callbackToken": callbackToken,
-		"consignmentId": record.CaseID,
-		"serviceUrl":    callbackURL,
-		"data":          data,
 	}
 }
