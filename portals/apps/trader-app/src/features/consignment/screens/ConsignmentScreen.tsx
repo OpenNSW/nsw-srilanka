@@ -9,8 +9,9 @@ import { useTranslation } from 'react-i18next'
 import type { TradeFlow, ConsignmentState } from '@/features/consignment/types.ts'
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { ConsignmentName } from '@/features/consignment/components/ConsignmentName'
 import { ROUTES } from '@/constants'
-import { LinkRow, LoadingOverlay, PageHeader, PaginationControl, RowLink, Surface, PageState } from '@portals/ui'
+import { LinkRow, LoadingOverlay, PageHeader, PageState, PaginationControl, RowLink, Surface, Table } from '@portals/ui'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -148,67 +149,42 @@ export function ConsignmentScreen() {
               }
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-app-surface-muted">
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
-                      {t('consignments.list.table.id')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
-                      {t('consignments.list.table.tradeFlow')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
-                      {t('consignments.list.table.state')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
-                      {t('consignments.list.table.created')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {consignments.map((consignment) => (
-                    <LinkRow key={consignment.id} to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <RowLink to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
-                          {consignment.name ? (
-                            <div className="flex flex-col">
-                              <Text size="2" weight="bold" className="text-info-strong">
-                                {consignment.name}
-                              </Text>
-                              <Text size="1" color="gray" className="font-mono mt-0.5">
-                                {consignment.id}
-                              </Text>
-                            </div>
-                          ) : (
-                            <Text size="2" weight="medium" className="text-info-strong font-mono">
-                              {consignment.id}
-                            </Text>
-                          )}
-                        </RowLink>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-                          {consignment.flow === 'IMPORT'
-                            ? t('consignments.tradeFlow.import')
-                            : t('consignments.tradeFlow.export')}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge size="1" color={getStateColor(consignment.state)}>
-                          {formatState(consignment.state)}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Text size="2" color="gray">
-                          {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
-                        </Text>
-                      </td>
-                    </LinkRow>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <Table.Header>
+                <Table.HeaderCell>{t('consignments.list.table.id')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('consignments.list.table.tradeFlow')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('consignments.list.table.state')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('consignments.list.table.created')}</Table.HeaderCell>
+              </Table.Header>
+              <Table.Body>
+                {consignments.map((consignment) => (
+                  <LinkRow key={consignment.id} to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
+                    <Table.Cell>
+                      <RowLink to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
+                        <ConsignmentName name={consignment.name} id={consignment.id} />
+                      </RowLink>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
+                        {consignment.flow === 'IMPORT'
+                          ? t('consignments.tradeFlow.import')
+                          : t('consignments.tradeFlow.export')}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Badge size="1" color={getStateColor(consignment.state)}>
+                        {formatState(consignment.state)}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text size="2" color="gray">
+                        {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
+                      </Text>
+                    </Table.Cell>
+                  </LinkRow>
+                ))}
+              </Table.Body>
+            </Table>
           )}
         </div>
         <div className="bg-app-surface/60">
