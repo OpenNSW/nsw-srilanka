@@ -62,6 +62,10 @@ build: ## Build the images without starting anything
 deps: ## Start everything EXCEPT the apps (api, trader-portal, cda-api, cda-portal, efc-api, efc-portal, npqs-api, npqs-portal, sltb-api, sltb-portal, fcau-api, fcau-portal)
 	$(COMPOSE) up -d $(DEPS_SERVICES)
 
+.PHONY: otel
+otel: ## Start local OpenObserve (Compose profile otel); point tnsw-api otel at it — see README
+	$(COMPOSE) --profile otel up -d openobserve
+
 .PHONY: test-e2e
 test-e2e: export APP_ENV = development
 test-e2e: export E2E = 1

@@ -217,6 +217,29 @@ services:
       - temporal
 
   # -------------------------------------------------------------------
+  # 3b. Local OpenObserve (opt-in: `make otel` / Compose profile `otel`)
+  # -------------------------------------------------------------------
+  # Not started by `make deps` or `make dev`. Ephemeral: no volume; data
+  # is gone when the container is removed. Loopback-only publish. Root
+  # credentials below are fixed local defaults (not secrets) so the UI and
+  # OTLP Basic auth match the commented `otel` blocks in the example configs.
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.14.7
+    container_name: nsw-openobserve
+    profiles:
+      - otel
+    networks:
+      - nsw-network
+    ports:
+      - "127.0.0.1:${OPENOBSERVE_PORT:-5080}:5080"
+    environment:
+      ZO_ROOT_USER_EMAIL: root@example.com
+      ZO_ROOT_USER_PASSWORD: Complexpass#123
+      ZO_TELEMETRY: "false"
+    # No healthcheck: the image has no shell/curl/wget. Probe from the host
+    # with `curl -sf http://127.0.0.1:5080/healthz` after `make otel`.
+
+  # -------------------------------------------------------------------
   # 4. Database Migrations
   # -------------------------------------------------------------------
   migrate:
