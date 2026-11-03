@@ -2,181 +2,13 @@ package agency
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
 	"gorm.io/gorm"
 )
 
-// ErrWorkflowNotFound is returned when no agency_workflow row exists for a taskId.
-var ErrWorkflowNotFound = errors.New("agency workflow not found")
-
-// Status is this subsystem's own view of an injected workflow's lifecycle.
-type Status string
-
-const (
-	// StatusStarting means the row is recorded but the engine start has not been
-	// confirmed yet — either in flight or failed. A later inject retries the start.
-	StatusStarting Status = "STARTING"
-	// StatusStarted means the engine accepted the workflow; later injects are no-ops.
-	StatusStarted Status = "STARTED"
-	// StatusCompleted means the workflow finished. Later injects are no-ops too.
-	StatusCompleted Status = "COMPLETED"
-)
-
-// Case states, matching the cases_state_check constraint.
-const (
-	CaseInProgress = "IN_PROGRESS"
-	CaseFinished   = "FINISHED"
-)
-
-// Workflow is one row per injected taskId. TaskID doubles as the workflow instance ID
-// passed to the engine, which starts it as its own case, so it is also the engine's case ID
-// (store.TaskRecord.CaseID) of every task spawned under it. CaseID groups it with the other
-// workflows working on the same case in cases.
-type Workflow struct {
-	TaskID   string `gorm:"column:task_id" json:"taskId"`
-	TaskCode string `gorm:"column:task_code" json:"taskCode"`
-	CaseID   string `gorm:"column:case_id" json:"caseId"`
-	// ManifestVersion is the artifact manifest version the workflow resolves its templates
-	// through: the current one when the row was recorded. A retried start keeps it.
-	ManifestVersion int    `gorm:"column:manifest_version" json:"manifestVersion"`
-	Status          Status `gorm:"column:status" json:"status"`
-	// CallbackToken is the token the injecting system expects the decision back on.
-	// Not echoed in responses: only the workflow needs it.
-	CallbackToken string          `gorm:"column:callback_token" json:"-"`
-	Payload       json.RawMessage `gorm:"column:payload" json:"payload,omitempty"`
-	CreatedAt     time.Time       `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt     time.Time       `gorm:"column:updated_at" json:"updatedAt"`
-}
-
-// Repository persists injected workflows.
-type Repository interface {
-	// Record inserts the row for taskID, and its case if new, on first sight and is a
-	// no-op afterwards, so the first payload and manifest version are the ones the
-	// workflow was started with.
-	Record(ctx context.Context, w Workflow) error
-	MarkStarted(ctx context.Context, taskID string) error
-	Get(ctx context.Context, taskID string) (*Workflow, error)
-	// MarkCompleted marks taskID's workflow COMPLETED and, once every workflow of its
-	// case is, the case FINISHED. found is false when taskID is not an injected
-	// workflow. It is idempotent, so a retried completion is harmless.
-	MarkCompleted(ctx context.Context, taskID string) (found bool, err error)
-}
-
-type repository struct {
-	db *gorm.DB
-}
-
-// NewRepository creates a Repository on the app's shared *gorm.DB.
-func NewRepository(db *gorm.DB) Repository {
-	return &repository{db: db}
-}
-
-func (r *repository) Record(ctx context.Context, w Workflow) error {
-	// name is left unset (nothing supplies one yet) and state takes its IN_PROGRESS default.
-	const insertCase = `
-		INSERT INTO cases (id, created_at, updated_at)
-		VALUES (?, now(), now())
-		ON CONFLICT (id) DO NOTHING
-	`
-	const insertWorkflow = `
-		INSERT INTO agency_workflow (task_id, task_code, case_id, manifest_version, status, callback_token, payload, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, now(), now())
-		ON CONFLICT (task_id) DO NOTHING
-	`
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		caseResult := tx.Exec(insertCase, w.CaseID)
-		if caseResult.Error != nil {
-			return caseResult.Error
-		}
-		result := tx.Exec(insertWorkflow, w.TaskID, w.TaskCode, w.CaseID, w.ManifestVersion, StatusStarting, w.CallbackToken, w.Payload)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			// A repeat taskId under a different consignmentId must not leave behind the
-			// empty case created above. Nothing else can reference that row yet: it is
-			// uncommitted, and a concurrent insert of the same id waits on it.
-			if caseResult.RowsAffected == 0 {
-				return nil
-			}
-			return tx.Exec(`DELETE FROM cases WHERE id = ?`, w.CaseID).Error
-		}
-		// A new workflow reopens a case that had finished.
-		return tx.Exec(`UPDATE cases SET state = ?, updated_at = now() WHERE id = ? AND state <> ?`,
-			CaseInProgress, w.CaseID, CaseInProgress).Error
-	})
-}
-
-func (r *repository) MarkCompleted(ctx context.Context, taskID string) (bool, error) {
-	found := false
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var caseIDs []string
-		if err := tx.Raw(`SELECT case_id FROM agency_workflow WHERE task_id = ?`, taskID).Scan(&caseIDs).Error; err != nil {
-			return err
-		}
-		if len(caseIDs) == 0 {
-			return nil
-		}
-		found = true
-		caseID := caseIDs[0]
-		// Lock the case first, so two of its workflows completing at once cannot each
-		// see the other still running and both leave the case IN_PROGRESS.
-		if err := tx.Exec(`SELECT id FROM cases WHERE id = ? FOR UPDATE`, caseID).Error; err != nil {
-			return err
-		}
-		if err := tx.Exec(`UPDATE agency_workflow SET status = ?, updated_at = now() WHERE task_id = ?`,
-			StatusCompleted, taskID).Error; err != nil {
-			return err
-		}
-		return tx.Exec(`
-			UPDATE cases SET state = ?, updated_at = now()
-			WHERE id = ? AND state <> ?
-			AND NOT EXISTS (SELECT 1 FROM agency_workflow WHERE case_id = ? AND status <> ?)
-		`, CaseFinished, caseID, CaseFinished, caseID, StatusCompleted).Error
-	})
-	return found, err
-}
-
-func (r *repository) MarkStarted(ctx context.Context, taskID string) error {
-	// Only STARTING moves forward: a fast workflow can already have completed by the
-	// time its start is confirmed, and that COMPLETED must not be overwritten.
-	const q = `
-		UPDATE agency_workflow
-		SET status = CASE WHEN status = ? THEN ? ELSE status END, updated_at = now()
-		WHERE task_id = ?
-	`
-	result := r.db.WithContext(ctx).Exec(q, StatusStarting, StatusStarted, taskID)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrWorkflowNotFound
-	}
-	return nil
-}
-
-func (r *repository) Get(ctx context.Context, taskID string) (*Workflow, error) {
-	const q = `
-		SELECT task_id, task_code, case_id, manifest_version, status, COALESCE(callback_token, '') AS callback_token,
-			payload, created_at, updated_at
-		FROM agency_workflow
-		WHERE task_id = ?
-	`
-	var w Workflow
-	result := r.db.WithContext(ctx).Raw(q, taskID).Scan(&w)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	if result.RowsAffected == 0 {
-		return nil, ErrWorkflowNotFound
-	}
-	return &w, nil
-}
-
-// ErrCaseNotFound is returned when no cases row exists for an id.
+// ErrCaseNotFound is returned when no cases row exists for an id, or the caller owns none.
 var ErrCaseNotFound = errors.New("case not found")
 
 // Case is one row of the generic cases table.
@@ -188,21 +20,23 @@ type Case struct {
 	UpdatedAt time.Time `gorm:"column:updated_at"`
 }
 
-// CaseRepository reads cases and the workflows grouped under them.
-type CaseRepository interface {
-	// ListCases returns one page of cases, newest first, and the total count.
-	ListCases(ctx context.Context, offset, limit int) ([]Case, int64, error)
-	GetCase(ctx context.Context, id string) (*Case, error)
-	// ListWorkflows returns every workflow in the case, oldest first.
-	ListWorkflows(ctx context.Context, caseID string) ([]CaseWorkflow, error)
+// Owner is who reads a case: an OU, by its handle, in any of a set of catalog roles. A
+// case is theirs when case_parties records the OU in one of the roles on it.
+type Owner struct {
+	OUHandle string
+	Roles    []string
 }
 
-// CaseWorkflow identifies one workflow of a case: its instance id, the taskCode that
-// selected its task_config, and the manifest version it resolves that config through.
-type CaseWorkflow struct {
-	TaskID          string `gorm:"column:task_id"`
-	TaskCode        string `gorm:"column:task_code"`
-	ManifestVersion int    `gorm:"column:manifest_version"`
+// CaseRepository reads the cases an owner owns.
+type CaseRepository interface {
+	// ListCases returns one page of the cases owner owns, newest first, and their total.
+	ListCases(ctx context.Context, owner Owner, offset, limit int) ([]Case, int64, error)
+	// GetCase returns case id if owner owns it, else ErrCaseNotFound.
+	GetCase(ctx context.Context, owner Owner, id string) (*Case, error)
+}
+
+type repository struct {
+	db *gorm.DB
 }
 
 // NewCaseRepository creates a CaseRepository on the app's shared *gorm.DB.
@@ -210,28 +44,42 @@ func NewCaseRepository(db *gorm.DB) CaseRepository {
 	return &repository{db: db}
 }
 
-func (r *repository) ListCases(ctx context.Context, offset, limit int) ([]Case, int64, error) {
+// owned is the condition that the case in cases is the owner's.
+const owned = `EXISTS (
+	SELECT 1 FROM case_parties
+	WHERE case_parties.case_id = cases.id AND case_parties.party_type = 'ou'
+	AND case_parties.party_id = ? AND case_parties.role IN ?
+)`
+
+func (r *repository) ListCases(ctx context.Context, owner Owner, offset, limit int) ([]Case, int64, error) {
+	if owner.OUHandle == "" || len(owner.Roles) == 0 {
+		return []Case{}, 0, nil
+	}
 	var total int64
-	if err := r.db.WithContext(ctx).Raw(`SELECT count(*) FROM cases`).Scan(&total).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(`SELECT count(*) FROM cases WHERE `+owned, owner.OUHandle, owner.Roles).Scan(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	const q = `
+	q := `
 		SELECT id, name, state, created_at, updated_at
 		FROM cases
+		WHERE ` + owned + `
 		ORDER BY created_at DESC
 		OFFSET ? LIMIT ?
 	`
 	var cases []Case
-	if err := r.db.WithContext(ctx).Raw(q, offset, limit).Scan(&cases).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(q, owner.OUHandle, owner.Roles, offset, limit).Scan(&cases).Error; err != nil {
 		return nil, 0, err
 	}
 	return cases, total, nil
 }
 
-func (r *repository) GetCase(ctx context.Context, id string) (*Case, error) {
-	const q = `SELECT id, name, state, created_at, updated_at FROM cases WHERE id = ?`
+func (r *repository) GetCase(ctx context.Context, owner Owner, id string) (*Case, error) {
+	if owner.OUHandle == "" || len(owner.Roles) == 0 {
+		return nil, ErrCaseNotFound
+	}
+	q := `SELECT id, name, state, created_at, updated_at FROM cases WHERE id = ? AND ` + owned
 	var c Case
-	result := r.db.WithContext(ctx).Raw(q, id).Scan(&c)
+	result := r.db.WithContext(ctx).Raw(q, id, owner.OUHandle, owner.Roles).Scan(&c)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -239,13 +87,4 @@ func (r *repository) GetCase(ctx context.Context, id string) (*Case, error) {
 		return nil, ErrCaseNotFound
 	}
 	return &c, nil
-}
-
-func (r *repository) ListWorkflows(ctx context.Context, caseID string) ([]CaseWorkflow, error) {
-	const q = `SELECT task_id, task_code, manifest_version FROM agency_workflow WHERE case_id = ? ORDER BY created_at`
-	var workflows []CaseWorkflow
-	if err := r.db.WithContext(ctx).Raw(q, caseID).Scan(&workflows).Error; err != nil {
-		return nil, err
-	}
-	return workflows, nil
 }
