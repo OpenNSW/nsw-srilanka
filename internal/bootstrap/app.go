@@ -1014,14 +1014,15 @@ func (p registryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]b
 // separately (see Stage 5 below).
 // registerFlowPlugins installs the plugins this deployment adds on top of the
 // task-plugin set: the synchronous transforms that shape a fan-out, the CHA
-// writer, the reference ID generator, the HTML document generator, and the
-// lookup that lists a consignment's SLPA containers from its tasks.
+// writer, the reference ID generator, the HTML document generator, the lookup
+// that lists a consignment's SLPA containers from its tasks, and the archiver
+// that stores a copy of a document another service links to.
 //
 // A table rather than a run of near-identical registrations, as
 // taskplugins.Register does for the same reason — seven of them inline was most
 // of initTask's branching, and adding an eighth meant editing a function that
 // has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, caseTasks taskplugins.CaseTasks) error {
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -1035,6 +1036,7 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
 		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files)},
 		{taskplugins.TaskTypeSLPACaseContainers, taskplugins.NewSLPACaseContainersPlugin(caseTasks)},
+		{taskplugins.TaskTypeRemoteFileArchiver, taskplugins.NewRemoteFileArchiverPlugin(fetcher, files)},
 	}
 
 	for _, e := range entries {
@@ -1088,7 +1090,7 @@ func initTask(
 	}
 	taskStore := gormstore.New(db)
 
-	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, taskStore); err != nil {
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, taskStore, remoteManager); err != nil {
 		return nil, nil, err
 	}
 
