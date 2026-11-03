@@ -36,6 +36,8 @@ type UserService interface {
 // and, where the task can be claimed, who holds its claim, as seen by the caller.
 type taskResponse struct {
 	zoneview.ZoneView
+	// Title names the task: its render config's title, else its task template.
+	Title string     `json:"title,omitempty"`
 	Claim *taskClaim `json:"claim,omitempty"`
 }
 
