@@ -118,12 +118,98 @@
         "body": {
           "command": "submit",
           "payload": {
+            "cusdec_draft": {
+              "identification": {
+                "officeCode": "CBEX1",
+                "declarationType": "EX",
+                "generalProcedureCode": "1",
+                "declarationMode": "E"
+              },
+              "traders": {
+                "exporter": {
+                  "code": "1340082537000",
+                  "name": "E2E Tea Exporter",
+                  "address": "Colombo",
+                  "countryCode": "LK"
+                },
+                "declarant": {
+                  "code": "1040661607000"
+                },
+                "consignee": {
+                  "name": "Jordan Tea Importers",
+                  "address": "Amman",
+                  "countryCode": "JO"
+                }
+              },
+              "generalInfo": {
+                "countryOfFirstDestination": "JO",
+                "exportCountryCode": "LK",
+                "destinationCountryCode": "JO"
+              },
+              "transport": {
+                "vesselName": "E2E VESSEL",
+                "transportNationality": "LK",
+                "modeOfTransport": "1",
+                "containerized": true,
+                "deliveryTermsCode": "FOB",
+                "deliveryTermsPlace": "Colombo",
+                "borderOfficeCode": "CBEX1",
+                "placeOfDischargeCode": "JOAQJ"
+              },
+              "financial": {
+                "bankCode": "6010",
+                "bankReference": "E2E-REM-1",
+                "remittanceAmount": 15000,
+                "remittanceCurrencyCode": "USD",
+                "paymentTermsCode": "10"
+              },
+              "valuation": {
+                "totalAmountInvoiced": {
+                  "amount": 17007942.72,
+                  "currencyCode": "LKR"
+                }
+              },
+              "packages": {
+                "totalPackages": 100
+              },
+              "items": [
+                {
+                  "packages": {
+                    "quantity": 100,
+                    "kindCode": "CT"
+                  },
+                  "tarification": {
+                    "hsCode": "0902301100",
+                    "extendedProcedureCode": "1100",
+                    "nationalProcedureCode": "000",
+                    "supplementaryUnit": {
+                      "code": "KGM",
+                      "quantity": 16128
+                    }
+                  },
+                  "goodsDescription": {
+                    "originCountryCode": "LK",
+                    "description": "Black tea BOPF",
+                    "commercialDescription": "BOPF",
+                    "commercialDescription1": "BOPF"
+                  },
+                  "marksAndNumbers": "E2E ESTATE",
+                  "valuation": {
+                    "grossWeight": 16500,
+                    "netWeight": 16128,
+                    "invoiceAmount": {
+                      "amount": 17007942.72,
+                      "currencyCode": "LKR"
+                    }
+                  }
+                }
+              ]
+            },
             "blendsheet_data": [
               {
                 "form": "100_local",
-                "blendsheet_no": "2026/E2E-001",
                 "exporter_registration_no": "R/473",
-                "company_tin": "900000000004",
+                "exporter_tin": "900000000004",
                 "private_treaty_to_be_exported": "Jordan",
                 "cusdec_number": "CBEX1 2026 E 48428",
                 "blend_no": "26/1386",
@@ -133,6 +219,8 @@
                 "fob_avg": 2359,
                 "date_of_blend": "2026-07-23",
                 "lion_logo_requested": "no",
+                "sample_rediness_date": "2026-07-25",
+                "warehouse_address": "E2E Tea Warehouse, Colombo",
                 "sales": {
                   "sheet": [
                     {
@@ -141,7 +229,7 @@
                       "BR_code": "BR01",
                       "LOT_number": "L-100",
                       "Invoice_number": "INV-1",
-                      "Garden_mark": "E2E ESTATE",
+                      "Garden_mark": "WRONG ESTATE",
                       "Sale_grade": "BOPF",
                       "Sale_rate": 1054.56,
                       "Sale_quantity": 16128,
@@ -162,8 +250,7 @@
                 },
                 "total_blend_balances_and_gain": 0,
                 "total": 16128,
-                "blend_balance": 0,
-                "warehouse_address": "E2E Tea Warehouse, Colombo"
+                "blend_balance": 0
               }
             ]
           }
@@ -187,8 +274,7 @@
         "command": "needs_more_info",
         "content": {
           "review_outcome": "needs_more_info",
-          "feedback": "Please correct the garden mark on sale line 1.",
-          "rejection_reason": "data_mismatch"
+          "feedback": "Please correct the garden mark on sale line 1."
         },
         "timeout": "60s"
       }
@@ -227,12 +313,98 @@
         "body": {
           "command": "submit",
           "payload": {
+            "cusdec_draft": {
+              "identification": {
+                "officeCode": "CBEX1",
+                "declarationType": "EX",
+                "generalProcedureCode": "1",
+                "declarationMode": "E"
+              },
+              "traders": {
+                "exporter": {
+                  "code": "1340082537000",
+                  "name": "E2E Tea Exporter",
+                  "address": "Colombo",
+                  "countryCode": "LK"
+                },
+                "declarant": {
+                  "code": "1040661607000"
+                },
+                "consignee": {
+                  "name": "Jordan Tea Importers",
+                  "address": "Amman",
+                  "countryCode": "JO"
+                }
+              },
+              "generalInfo": {
+                "countryOfFirstDestination": "JO",
+                "exportCountryCode": "LK",
+                "destinationCountryCode": "JO"
+              },
+              "transport": {
+                "vesselName": "E2E VESSEL",
+                "transportNationality": "LK",
+                "modeOfTransport": "1",
+                "containerized": true,
+                "deliveryTermsCode": "FOB",
+                "deliveryTermsPlace": "Colombo",
+                "borderOfficeCode": "CBEX1",
+                "placeOfDischargeCode": "JOAQJ"
+              },
+              "financial": {
+                "bankCode": "6010",
+                "bankReference": "E2E-REM-1",
+                "remittanceAmount": 15000,
+                "remittanceCurrencyCode": "USD",
+                "paymentTermsCode": "10"
+              },
+              "valuation": {
+                "totalAmountInvoiced": {
+                  "amount": 17007942.72,
+                  "currencyCode": "LKR"
+                }
+              },
+              "packages": {
+                "totalPackages": 100
+              },
+              "items": [
+                {
+                  "packages": {
+                    "quantity": 100,
+                    "kindCode": "CT"
+                  },
+                  "tarification": {
+                    "hsCode": "0902301100",
+                    "extendedProcedureCode": "1100",
+                    "nationalProcedureCode": "000",
+                    "supplementaryUnit": {
+                      "code": "KGM",
+                      "quantity": 16128
+                    }
+                  },
+                  "goodsDescription": {
+                    "originCountryCode": "LK",
+                    "description": "Black tea BOPF",
+                    "commercialDescription": "BOPF",
+                    "commercialDescription1": "BOPF"
+                  },
+                  "marksAndNumbers": "E2E ESTATE",
+                  "valuation": {
+                    "grossWeight": 16500,
+                    "netWeight": 16128,
+                    "invoiceAmount": {
+                      "amount": 17007942.72,
+                      "currencyCode": "LKR"
+                    }
+                  }
+                }
+              ]
+            },
             "blendsheet_data": [
               {
                 "form": "100_local",
-                "blendsheet_no": "2026/E2E-001",
                 "exporter_registration_no": "R/473",
-                "company_tin": "900000000004",
+                "exporter_tin": "900000000004",
                 "private_treaty_to_be_exported": "Jordan",
                 "cusdec_number": "CBEX1 2026 E 48428",
                 "blend_no": "26/1386",
@@ -242,6 +414,8 @@
                 "fob_avg": 2359,
                 "date_of_blend": "2026-07-23",
                 "lion_logo_requested": "no",
+                "sample_rediness_date": "2026-07-25",
+                "warehouse_address": "E2E Tea Warehouse, Colombo",
                 "sales": {
                   "sheet": [
                     {
@@ -271,8 +445,7 @@
                 },
                 "total_blend_balances_and_gain": 0,
                 "total": 16128,
-                "blend_balance": 0,
-                "warehouse_address": "E2E Tea Warehouse, Colombo"
+                "blend_balance": 0
               }
             ]
           }
@@ -296,18 +469,110 @@
         "command": "approve",
         "content": {
           "review_outcome": "approve",
-          "reference_number": "SLTB-E2E-001",
-          "levy_amount": 15000,
-          "collection_method": "none"
+          "levy_amount": 15000
         },
         "timeout": "60s"
       }
     },
     {
-      "name": "wait for SLTB pay-levy task (rework loop advanced)",
+      "name": "wait for SLTB pay-levy task (application approved & advanced)",
       "wait": {
         "node": "Pay SLTB Levy",
         "state": "IN_PROGRESS",
+        "into": "payTask",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "trader reads the step payTask is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{payTask}}",
+        "extract": {
+          "payTaskStep": "step_id"
+        },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "trader selects the payment method",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{payTask}}/steps/{{payTaskStep}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "selected_method": "govpay"
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "payment gateway confirms the SLTB levy",
+      "pay": {
+        "taskVar": "payTask",
+        "method": "govpay",
+        "status": "paid",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for the SLTB levy to be paid",
+      "wait": {
+        "node": "Pay SLTB Levy",
+        "state": "COMPLETED",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for SLTB tasting decision",
+      "wait": {
+        "node": "Tasting Decision",
+        "state": "QUEUED_EXTERNALLY",
+        "into": "tastingTask",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "SLTB officer decides tasting is not required",
+      "callback": {
+        "taskVar": "tastingTask",
+        "command": "no",
+        "content": {
+          "tasting_required": "no"
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for final SLTB decision task",
+      "wait": {
+        "node": "Final Application Decision",
+        "state": "QUEUED_EXTERNALLY",
+        "into": "finalDecision",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "SLTB agency issues the final approval",
+      "callback": {
+        "taskVar": "finalDecision",
+        "command": "approve",
+        "content": {
+          "final_decision_outcome": "approve",
+          "remarks": "E2E blend sheet approved."
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for final SLTB decision to complete",
+      "wait": {
+        "node": "Final Application Decision",
+        "state": "COMPLETED",
         "timeout": "60s"
       }
     }

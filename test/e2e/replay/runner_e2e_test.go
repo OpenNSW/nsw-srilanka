@@ -37,19 +37,18 @@ func TestReplay_ConsignmentFlows(t *testing.T) {
 	runFlow(t, h, "consignment_flows.json")
 }
 
-// TestReplay_SLTBApplicationApprove drives the SLTB blendsheet branch
-// end-to-end: submit the blend sheet → mock agency posts an "approve" callback
-// with levy + collection_method=none → select payment method → mock gateway
-// confirms the levy → pay-levy COMPLETED.
+// TestReplay_SLTBApplicationApprove drives the SLTB blendsheet happy path:
+// submit blend sheet + CusDec → approve → pay levy → tasting not required →
+// final approval COMPLETED.
 func TestReplay_SLTBApplicationApprove(t *testing.T) {
 	skipUnlessE2E(t)
 	h := newHarness(t)
 	runFlow(t, h, "sltb_application_approve.json")
 }
 
-// TestReplay_SLTBApplicationRework sends the SLTB blend sheet back with
-// needs_more_info, then the trader resubmits and the agency approves, asserting
-// the workflow still advances to the pay-levy task.
+// TestReplay_SLTBApplicationRework sends the blend sheet back with
+// needs_more_info, then the trader resubmits and the agency approves through
+// levy payment and final decision.
 func TestReplay_SLTBApplicationRework(t *testing.T) {
 	skipUnlessE2E(t)
 	h := newHarness(t)
@@ -78,8 +77,9 @@ func runFlow(t *testing.T, h *harness, file string) {
 	r.Logf = t.Logf
 	r.Agency = h.agency          // drives `callback` steps (external-agency flows)
 	r.PaymentGateway = h.gateway // drives `pay` steps (payment flows)
+	r.Signaller = h.signaller    // drives `signal` steps (CusDec assessed stand-in)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	if err := r.Run(ctx, flow); err != nil {
 		t.Fatalf("flow %q failed: %v", flow.Name, err)

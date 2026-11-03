@@ -118,12 +118,98 @@
         "body": {
           "command": "submit",
           "payload": {
+            "cusdec_draft": {
+              "identification": {
+                "officeCode": "CBEX1",
+                "declarationType": "EX",
+                "generalProcedureCode": "1",
+                "declarationMode": "E"
+              },
+              "traders": {
+                "exporter": {
+                  "code": "1340082537000",
+                  "name": "E2E Tea Exporter",
+                  "address": "Colombo",
+                  "countryCode": "LK"
+                },
+                "declarant": {
+                  "code": "1040661607000"
+                },
+                "consignee": {
+                  "name": "Jordan Tea Importers",
+                  "address": "Amman",
+                  "countryCode": "JO"
+                }
+              },
+              "generalInfo": {
+                "countryOfFirstDestination": "JO",
+                "exportCountryCode": "LK",
+                "destinationCountryCode": "JO"
+              },
+              "transport": {
+                "vesselName": "E2E VESSEL",
+                "transportNationality": "LK",
+                "modeOfTransport": "1",
+                "containerized": true,
+                "deliveryTermsCode": "FOB",
+                "deliveryTermsPlace": "Colombo",
+                "borderOfficeCode": "CBEX1",
+                "placeOfDischargeCode": "JOAQJ"
+              },
+              "financial": {
+                "bankCode": "6010",
+                "bankReference": "E2E-REM-1",
+                "remittanceAmount": 15000,
+                "remittanceCurrencyCode": "USD",
+                "paymentTermsCode": "10"
+              },
+              "valuation": {
+                "totalAmountInvoiced": {
+                  "amount": 17007942.72,
+                  "currencyCode": "LKR"
+                }
+              },
+              "packages": {
+                "totalPackages": 100
+              },
+              "items": [
+                {
+                  "packages": {
+                    "quantity": 100,
+                    "kindCode": "CT"
+                  },
+                  "tarification": {
+                    "hsCode": "0902301100",
+                    "extendedProcedureCode": "1100",
+                    "nationalProcedureCode": "000",
+                    "supplementaryUnit": {
+                      "code": "KGM",
+                      "quantity": 16128
+                    }
+                  },
+                  "goodsDescription": {
+                    "originCountryCode": "LK",
+                    "description": "Black tea BOPF",
+                    "commercialDescription": "BOPF",
+                    "commercialDescription1": "BOPF"
+                  },
+                  "marksAndNumbers": "E2E ESTATE",
+                  "valuation": {
+                    "grossWeight": 16500,
+                    "netWeight": 16128,
+                    "invoiceAmount": {
+                      "amount": 17007942.72,
+                      "currencyCode": "LKR"
+                    }
+                  }
+                }
+              ]
+            },
             "blendsheet_data": [
               {
                 "form": "100_local",
-                "blendsheet_no": "2026/E2E-001",
                 "exporter_registration_no": "R/473",
-                "company_tin": "900000000004",
+                "exporter_tin": "900000000004",
                 "private_treaty_to_be_exported": "Jordan",
                 "cusdec_number": "CBEX1 2026 E 48428",
                 "blend_no": "26/1386",
@@ -133,6 +219,8 @@
                 "fob_avg": 2359,
                 "date_of_blend": "2026-07-23",
                 "lion_logo_requested": "no",
+                "sample_rediness_date": "2026-07-25",
+                "warehouse_address": "E2E Tea Warehouse, Colombo",
                 "sales": {
                   "sheet": [
                     {
@@ -162,8 +250,7 @@
                 },
                 "total_blend_balances_and_gain": 0,
                 "total": 16128,
-                "blend_balance": 0,
-                "warehouse_address": "E2E Tea Warehouse, Colombo"
+                "blend_balance": 0
               }
             ]
           }
@@ -187,8 +274,7 @@
         "command": "reject",
         "content": {
           "review_outcome": "reject",
-          "feedback": "Blend sheet quantities do not reconcile with the CUSDEC.",
-          "rejection_reason": "not_reconcilable"
+          "feedback": "Blend sheet quantities do not reconcile with the CUSDEC."
         },
         "timeout": "60s"
       }
@@ -198,7 +284,23 @@
       "wait": {
         "node": "Submit & Review Blend Sheet",
         "state": "COMPLETED",
+        "into": "sltbApp",
         "timeout": "60s"
+      }
+    },
+    {
+      "name": "trader confirms the application task stayed completed (no pay-levy)",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{sltbApp}}",
+        "extract": {
+          "sltbAppState": "state"
+        },
+        "extractEquals": {
+          "sltbAppState": "COMPLETED"
+        },
+        "retry": "15s"
       }
     }
   ]
