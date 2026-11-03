@@ -1,4 +1,4 @@
--- Created at: 2026-11-03T11:00:00Z
+-- Created at: 2026-11-03T16:00:00Z
 -- Need Postgres- or SQLite-only SQL? Nest -- @postgres / -- @sqlite blocks
 -- inside @UP or @DOWN -- see docs/migrations.md.
 
