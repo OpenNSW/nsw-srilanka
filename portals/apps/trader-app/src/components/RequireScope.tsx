@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react'
 import { useScopes } from '@/hooks/useScopes'
 
-// Renders children only for a user granted scope, and fallback otherwise,
-// including when scope is unset.
+// Renders children only for a user granted scope, and fallback otherwise.
 export function RequireScope({
   scope,
   fallback = null,
   children,
 }: {
-  scope: string | undefined
+  scope: string
   fallback?: ReactNode
   children: ReactNode
 }) {

@@ -4,6 +4,11 @@ import { describe, expect, it, vi } from 'vitest'
 import '@/i18n'
 import { NavMenu } from '@/components/Layout/NavMenu'
 
+// config.js sets this in the app; @/constants reads it as it loads.
+vi.hoisted(() => {
+  window.__APP_CONFIG__ = { API_BASE_URL: 'http://api.test' }
+})
+
 const auth = vi.hoisted(() => ({ scope: '' }))
 vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { scope: auth.scope } }) }))
 

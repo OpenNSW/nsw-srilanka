@@ -36,10 +36,7 @@ export const NAV_STRUCTURE: NavItemOrGroup[] = [
 
 // The destinations in structure that a user with these scopes may open. A
 // group left with no items is dropped.
-export function permittedNav(
-  structure: NavItemOrGroup[],
-  hasScope: (scope: string | undefined) => boolean,
-): NavItemOrGroup[] {
+export function permittedNav(structure: NavItemOrGroup[], hasScope: (scope: string) => boolean): NavItemOrGroup[] {
   return structure.flatMap((item): NavItemOrGroup[] => {
     if (!isNavGroup(item)) return hasScope(item.route.scope) ? [item] : []
     const items = item.items.filter((child) => hasScope(child.route.scope))
@@ -49,10 +46,7 @@ export function permittedNav(
 
 // The path of the first destination in nav order that a user with these scopes
 // may open, or null when there is none.
-export function firstPermittedPath(
-  structure: NavItemOrGroup[],
-  hasScope: (scope: string | undefined) => boolean,
-): string | null {
+export function firstPermittedPath(structure: NavItemOrGroup[], hasScope: (scope: string) => boolean): string | null {
   const first = permittedNav(structure, hasScope)[0]
   if (!first) return null
   return isNavGroup(first) ? first.items[0].route.path : first.route.path

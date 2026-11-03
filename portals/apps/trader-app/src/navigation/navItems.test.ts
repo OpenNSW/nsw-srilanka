@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { firstPermittedPath, permittedNav, type NavItem, type NavItemOrGroup } from '@/navigation/navItems'
+
+// config.js sets this in the app; @/constants reads it as it loads.
+vi.hoisted(() => {
+  window.__APP_CONFIG__ = { API_BASE_URL: 'http://api.test' }
+})
 
 const consignments: NavItem = {
   labelKey: 'nav.consignments',
@@ -16,8 +21,8 @@ const structure: NavItemOrGroup[] = [consignments, adminGroup]
 
 const granting =
   (...granted: string[]) =>
-  (scope: string | undefined) =>
-    scope !== undefined && granted.includes(scope)
+  (scope: string) =>
+    granted.includes(scope)
 
 describe('permittedNav', () => {
   it('keeps only the destinations whose scope is granted', () => {

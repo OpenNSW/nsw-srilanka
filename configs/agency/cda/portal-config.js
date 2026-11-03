@@ -9,13 +9,6 @@ window.__APP_CONFIG__ = {
   APP_URL: 'http://localhost:5176',
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read',
-  // The scope each screen and action this portal shows needs. A SCOPE_* key left unset
-  // (here: creating consignments, their flows, the admin views) hides its
-  // screen or action from everyone.
-  SCOPE_CONSIGNMENTS_VIEW: 'consignment:read',
-  SCOPE_TASKS_VIEW: 'task:read',
-  SCOPE_TASKS_ACTIONS: 'task:write',
-  SCOPE_PROFILE_VIEW: 'profile:read',
   SHOW_AUTOFILL_BUTTON: 'false',
   APP_MODE: 'agency',
 }

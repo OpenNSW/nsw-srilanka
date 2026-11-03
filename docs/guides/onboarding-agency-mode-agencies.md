@@ -464,10 +464,6 @@ frontend:
     IDP_CLIENT_ID: "<portal client ID>"
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.dea.nsw-agency.local"
     IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read"
-    SCOPE_CONSIGNMENTS_VIEW: "consignment:read"
-    SCOPE_TASKS_VIEW: "task:read"
-    SCOPE_TASKS_ACTIONS: "task:write"
-    SCOPE_PROFILE_VIEW: "profile:read"
     SHOW_AUTOFILL_BUTTON: "false"
   branding:
     systemName: "DEA"

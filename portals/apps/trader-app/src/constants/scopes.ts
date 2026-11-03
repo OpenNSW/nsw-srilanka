@@ -1,20 +1,13 @@
-import { getEnv } from '@/runtimeConfig'
-
-function configuredScope(name: string): string | undefined {
-  return getEnv(name)?.trim()
-}
-
-// The scope each screen and action needs, set per deployment in the runtime
-// config (config.js, or frontend.config in the Helm values). The portal shows
-// a screen or action only to a user the IdP granted its scope. One whose key
-// is unset is shown to nobody, so a deployment sets only the keys it uses.
+// The scope each screen and action needs: the NSW API scope its calls require
+// (internal/scopes/scopes.go). The portal shows a screen or action only to a
+// user the IdP granted its scope.
 export const ACCESS_SCOPES = {
-  CONSIGNMENTS_VIEW: configuredScope('SCOPE_CONSIGNMENTS_VIEW'),
-  CONSIGNMENTS_CREATE: configuredScope('SCOPE_CONSIGNMENTS_CREATE'),
-  CONSIGNMENT_FLOWS: configuredScope('SCOPE_CONSIGNMENT_FLOWS'),
-  TASKS_VIEW: configuredScope('SCOPE_TASKS_VIEW'),
-  TASKS_ACTIONS: configuredScope('SCOPE_TASKS_ACTIONS'),
-  ADMIN_VIEW: configuredScope('SCOPE_ADMIN_VIEW'),
-  ADMIN_ACTIONS: configuredScope('SCOPE_ADMIN_ACTIONS'),
-  PROFILE_VIEW: configuredScope('SCOPE_PROFILE_VIEW'),
+  CONSIGNMENTS_VIEW: 'consignment:read',
+  CONSIGNMENTS_CREATE: 'consignment:write',
+  CONSIGNMENT_FLOWS: 'consignment:flow:write',
+  TASKS_VIEW: 'task:read',
+  TASKS_ACTIONS: 'task:write',
+  ADMIN_VIEW: 'consignment:adminread',
+  ADMIN_ACTIONS: 'consignment:adminwrite',
+  PROFILE_VIEW: 'profile:read',
 } as const

@@ -6,7 +6,7 @@ export interface AppRoute {
   path: string
   // Its screen, and any nav destination for it, are shown only to a user granted
   // this scope.
-  scope: string | undefined
+  scope: string
 }
 
 // The signed-in routes. The router restricts each screen, and the nav lists

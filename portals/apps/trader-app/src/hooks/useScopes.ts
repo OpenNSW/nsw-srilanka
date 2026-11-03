@@ -2,8 +2,7 @@ import { useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
 
 interface UseScopesResult {
-  // False for an unset scope: an item without one is shown to nobody.
-  hasScope: (scope: string | undefined) => boolean
+  hasScope: (scope: string) => boolean
 }
 
 // The scopes in a token response's space-separated `scope`.
@@ -19,6 +18,6 @@ export function useScopes(): UseScopesResult {
 
   return useMemo(() => {
     const granted = grantedScopes(scope)
-    return { hasScope: (s: string | undefined) => s !== undefined && granted.has(s) }
+    return { hasScope: (s: string) => granted.has(s) }
   }, [scope])
 }

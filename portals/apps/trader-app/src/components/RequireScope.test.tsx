@@ -30,18 +30,6 @@ describe('RequireScope', () => {
     expect(screen.getByText('Restricted')).toBeTruthy()
   })
 
-  it('renders the fallback when the deployment sets no scope for it', () => {
-    auth.scope = 'openid consignment:read consignment:write'
-    render(
-      <RequireScope scope={undefined} fallback={<p>Restricted</p>}>
-        <button>New consignment</button>
-      </RequireScope>,
-    )
-
-    expect(screen.queryByRole('button', { name: 'New consignment' })).toBeNull()
-    expect(screen.getByText('Restricted')).toBeTruthy()
-  })
-
   it('renders nothing without a fallback', () => {
     auth.scope = ''
     const { container } = render(

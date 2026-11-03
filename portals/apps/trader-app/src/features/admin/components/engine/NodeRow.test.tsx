@@ -1,9 +1,14 @@
 import { render, screen } from '@testing-library/react'
 import { Theme } from '@radix-ui/themes'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { NodeRow } from '@/features/admin/components/engine/NodeRow'
 import { NO_EXPAND_SIGNAL } from '@/features/admin/components/engine/shared'
 import type { EngineNode } from '@/features/admin/types'
+
+// config.js sets this in the app; @/constants reads it as it loads.
+vi.hoisted(() => {
+  window.__APP_CONFIG__ = { API_BASE_URL: 'http://api.test' }
+})
 
 const parked: EngineNode = {
   id: 'pay_fee',

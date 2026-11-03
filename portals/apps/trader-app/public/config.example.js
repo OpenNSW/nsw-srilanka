@@ -14,17 +14,8 @@ window.__APP_CONFIG__ = {
   APP_URL: 'http://localhost:5173',
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,hscode:read,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
-  // The scope each screen and action needs: the portal shows it only to a user
-  // the IdP granted that scope. A SCOPE_* key left unset hides its screen or
-  // action from everyone.
-  SCOPE_CONSIGNMENTS_VIEW: 'consignment:read',
-  SCOPE_CONSIGNMENTS_CREATE: 'consignment:write',
-  SCOPE_CONSIGNMENT_FLOWS: 'consignment:flow:write',
-  SCOPE_TASKS_VIEW: 'task:read',
-  SCOPE_TASKS_ACTIONS: 'task:write',
-  SCOPE_ADMIN_VIEW: 'consignment:adminread',
-  SCOPE_ADMIN_ACTIONS: 'consignment:adminwrite',
-  SCOPE_PROFILE_VIEW: 'profile:read',
+  // ID-token claim holding the roles (an array), and the role names in it. For an
+  // IdP that models roles as groups, set the claim to 'groups' and use the group names.
   SHOW_AUTOFILL_BUTTON: 'true',
   // Shows the demo color-scheme picker in the footer. Off unless 'true'.
   SHOW_COLOR_SCHEME_SWITCHER: 'true',
