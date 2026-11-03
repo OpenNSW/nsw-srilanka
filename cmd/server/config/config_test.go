@@ -942,6 +942,21 @@ func TestConfigValidate_Otel(t *testing.T) {
 	}
 }
 
+func TestConfigValidate_RejectsInvalidOtelEndpoint(t *testing.T) {
+	for _, endpoint := range []string{
+		"https://collector.example?token=secret",
+		"https://collector.example#fragment",
+		"https://collector.example/v1/metrics/extra",
+	} {
+		cfg := validConfig()
+		cfg.Otel.Endpoint = endpoint
+		cfg.Otel.ServiceName = "tnsw-api"
+		if err := cfg.Validate(); err == nil || !containsString(err.Error(), "otel.endpoint") {
+			t.Errorf("expected otel.endpoint validation error, got: %v", err)
+		}
+	}
+}
+
 func TestConfigValidate_StorageProxy(t *testing.T) {
 	cfg := validConfig()
 	// Proxy mode validates the proxy settings, not the core/storage backend,

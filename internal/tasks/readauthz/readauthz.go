@@ -31,9 +31,7 @@ package readauthz
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
@@ -53,26 +51,14 @@ var ErrDenied = errors.New("task read authz: denied")
 // single place the spelling is decided.
 func ClaimKey(role string) string { return ClaimPrefix + role }
 
-// Policy is this application's slice of a task template: which roles may read the
-// task. Core decodes the same template as types.TaskTemplate, which ignores this
-// field.
-type Policy struct {
-	Read *ReadPolicy `json:"read"`
-}
-
-// ReadPolicy lists the logical catalog roles allowed to read the task, in
-// precedence order: a caller eligible for several of them acts as the first one
-// listed. An absent Read block, or an empty Roles list, means any role that owns
-// the consignment may read it, with no precedence applied.
-type ReadPolicy struct {
-	Roles []string `json:"roles"`
-}
-
 // Resolve decides whether the caller may read a task of case caseID, which is the
 // id of the consignment the task belongs to, and if so returns the
-// claims that shape their view of it. taskTemplate is the task's template, as raw
-// JSON, whose read policy decides. It returns ErrDenied when they may not; any
-// other error is a real failure, not a denial, and must not be answered as one.
+// claims that shape their view of it. readRoles is the task template's read.roles:
+// the logical catalog roles allowed to read the task, in precedence order (a caller
+// eligible for several acts as the first one listed). An empty list means any role
+// that owns the consignment may read it, with no precedence applied. It returns
+// ErrDenied when they may not; any other error is a real failure, not a denial, and
+// must not be answered as one.
 //
 // The returned map always carries one entry per catalog role, denials included as
 // false: uiprojector treats a claim a blueprint references but the caller never
@@ -83,11 +69,8 @@ type ReadPolicy struct {
 // answer, and it cannot arise in the wiring anyway: the read route is served
 // through the authz gate, whose construction already requires the catalog to
 // define both owner roles.
-func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, taskTemplate json.RawMessage, caseID string) (map[string]bool, error) {
-	allowed, declared, err := allowedRoles(ctx, cat, taskTemplate)
-	if err != nil {
-		return nil, err
-	}
+func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, readRoles []string, caseID string) (map[string]bool, error) {
+	allowed, declared := allowedRoles(ctx, cat, readRoles)
 
 	// Only the admitted roles can ever yield a true claim, so eligibility is
 	// resolved for those alone: a caller holding none of them is denied without a
@@ -130,26 +113,20 @@ func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, tas
 	return nil, ErrDenied
 }
 
-// allowedRoles returns the logical role names the task template admits and
-// whether it declared them. When it did, the order is the caller's precedence
+// allowedRoles returns the logical role names readRoles admits and whether the task
+// template declared any. When it did, the order is the caller's precedence
 // order; when it did not, every catalog role is admitted in no meaningful order.
 //
 // A name the catalog does not define cannot be owned by anyone, so it is dropped
 // and logged — the artifacts' CI (check_agency_authz.py) is the place that
 // rejects it.
-func allowedRoles(ctx context.Context, cat taskauthz.Catalog, taskTemplate json.RawMessage) ([]string, bool, error) {
-	var policy Policy
-	if len(taskTemplate) > 0 {
-		if err := json.Unmarshal(taskTemplate, &policy); err != nil {
-			return nil, false, fmt.Errorf("readauthz: decode read policy: %w", err)
-		}
-	}
-	if policy.Read == nil || len(policy.Read.Roles) == 0 {
-		return cat.RoleNames(), false, nil
+func allowedRoles(ctx context.Context, cat taskauthz.Catalog, readRoles []string) ([]string, bool) {
+	if len(readRoles) == 0 {
+		return cat.RoleNames(), false
 	}
 
-	names := make([]string, 0, len(policy.Read.Roles))
-	for _, name := range policy.Read.Roles {
+	names := make([]string, 0, len(readRoles))
+	for _, name := range readRoles {
 		if _, ok := cat.Roles[name]; !ok {
 			slog.WarnContext(ctx, "readauthz: task template allows a role the catalog does not define; ignoring it",
 				"role", name)
@@ -157,5 +134,5 @@ func allowedRoles(ctx context.Context, cat taskauthz.Catalog, taskTemplate json.
 		}
 		names = append(names, name)
 	}
-	return names, true, nil
+	return names, true
 }

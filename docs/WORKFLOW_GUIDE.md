@@ -471,6 +471,40 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
 - **Filename:** names the stored document, not the template: it defaults to `<template_id>.html`, and `.html` is added when missing. Templates use `.gohtml` so editors highlight the template actions.
 - **Re-runs:** the step renders and stores a new document every time it runs, so a loop that brings it back after the inputs changed records the document for the new data. A Temporal retry can leave an extra copy in storage that nothing refers to; superseded files are not deleted.
 
+### Copies of another service's documents (`REMOTE_FILE_ARCHIVER`)
+
+Stores a copy of a document another service hands out by link, such as SLPA's payment slip. Those links are signed and expire, so a step that only shows them leaves the trader with a dead link later and the document outside this deployment. The step is synchronous.
+
+```json
+{
+  "id": "slpa-invoice--archive-payment-slip",
+  "task_type": "REMOTE_FILE_ARCHIVER",
+  "output_namespace": "payment_slip_file",
+  "plugin_properties": {
+    "service_id": "slpa",
+    "source_input": "payment_slip_url",
+    "mime_type": "application/pdf",
+    "filename": "slpa-payment-slip.pdf"
+  }
+}
+```
+
+The node maps the link into the input `source_input` names, and takes the key out as `HTML_DOCUMENT_GENERATOR`'s:
+
+```json
+{
+  "id": "archive_payment_slip",
+  "type": "TASK",
+  "task_template_id": "slpa-invoice--archive-payment-slip",
+  "input_mapping": { "payment.payment_slip_url?": "payment_slip_url" },
+  "output_mapping": { "payment_slip_file?": "payment.payment_slip_file" }
+}
+```
+
+- **Properties:** all four are required. `service_id` is the registered service the link is downloaded through (its credentials, and only its host: a URL on any other host is refused). `source_input` is the input holding the link. `mime_type` is the type the document is stored as. `filename` names it, extension included.
+- **Output:** `{key, name, mime_type, size}` at `<output_namespace>`, as `HTML_DOCUMENT_GENERATOR` writes it. Declare the key under the render config's `files` and link it as `[Download](files:{{.payment_slip_file.key}})`. An empty source stores nothing.
+- **Failures:** a download the service refuses (a 4xx, such as an expired link) or an empty answer is recorded as `{error}` at `<output_namespace>`, with no `key`, and the step goes on: show the service's own link when there is no key. A transport failure or a 5xx fails the step, so the engine retries it.
+
 ### Payments (`PAYMENT`)
 
 Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway reports the payment settled. The payer pays against `reference_number`, generated from a format in the `refid` section of `configs/config.yaml`: the fee's own, named in `reference`, or `TNSW`/`payment_ref` otherwise.

@@ -255,10 +255,10 @@ type apiCallConfig struct {
 func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg apiCallConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
-		return fmt.Errorf("api_call: invalid config: %w", err)
+		return configError(fmt.Errorf("api_call: invalid config: %w", err))
 	}
 	if cfg.ServiceID == "" || cfg.Path == "" {
-		return fmt.Errorf("api_call: service_id and path are required")
+		return configError(fmt.Errorf("api_call: service_id and path are required"))
 	}
 
 	method := strings.ToUpper(strings.TrimSpace(cfg.Method))
@@ -268,7 +268,7 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 
 	path, err := expandPath(cfg.Path, ctx.Inputs)
 	if err != nil {
-		return err
+		return inputError(err)
 	}
 
 	// The state a render config keys on while the call is out. A flow that

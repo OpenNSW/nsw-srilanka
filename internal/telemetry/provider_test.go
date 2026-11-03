@@ -1,12 +1,17 @@
 package telemetry
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/OpenNSW/core/trace"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -15,6 +20,53 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
+
+func TestShutdownFlushesLogsBeforeStalledMetrics(t *testing.T) {
+	logs := make(chan []byte, 1)
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/metrics" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		if r.URL.Path == "/v1/logs" {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+			}
+			logs <- body
+		}
+		w.Header().Set("Content-Type", "application/x-protobuf")
+	}))
+	defer collector.Close()
+	tracer, propagator := otel.GetTracerProvider(), otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(tracer)
+		otel.SetTextMapPropagator(propagator)
+	})
+	p, err := Start(t.Context(), Config{Endpoint: collector.URL, ServiceName: "shutdown-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counter, err := p.mp.Meter("shutdown-test").Int64Counter("startup.attempts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	counter.Add(t.Context(), 1)
+	slog.New(p.SlogHandler()).Error("bootstrap failed")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	if err := p.Shutdown(ctx); err == nil {
+		t.Error("Shutdown succeeded despite metrics export returning 503")
+	}
+	select {
+	case body := <-logs:
+		if !bytes.Contains(body, []byte("bootstrap failed")) {
+			t.Error("log export omitted the bootstrap error")
+		}
+	default:
+		t.Error("metrics exhausted the shutdown deadline before logs were exported")
+	}
+}
 
 func TestStartNoopWithoutEndpoint(t *testing.T) {
 	p, err := Start(t.Context(), Config{})

@@ -3,6 +3,7 @@ package trade
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -57,15 +58,23 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, config json.RawMes
 
 	chaCompanyID, ok := ctx.Inputs["cha_company_id"].(string)
 	if !ok || chaCompanyID == "" {
-		return fmt.Errorf("cha_persist: cha_company_id not found in inputs")
+		return plugins.Permanent(plugins.ErrorTypeInput, fmt.Errorf("cha_persist: cha_company_id not found in inputs"))
 	}
 
 	record, err := p.companyService.GetCompanyByID(ctx.Context, chaCompanyID)
 	if err != nil {
-		return fmt.Errorf("cha_persist: failed to look up CHA company %q: %w", chaCompanyID, err)
+		err = fmt.Errorf("cha_persist: failed to look up CHA company %q: %w", chaCompanyID, err)
+		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
+			return plugins.Permanent(plugins.ErrorTypeInput, err)
+		}
+		return err
 	}
 	if !record.HasCHA {
-		return fmt.Errorf("cha_persist: company %q is not enabled as a CHA", chaCompanyID)
+		return plugins.Permanent(plugins.ErrorTypeInput, fmt.Errorf("cha_persist: company %q is not enabled as a CHA", chaCompanyID))
+	}
+	// The case's party is the company's OU, which its users' tokens name.
+	if record.OUHandle == "" {
+		return fmt.Errorf("cha_persist: company %q has no OU handle", chaCompanyID)
 	}
 	// The case's party is the company's OU, which its users' tokens name.
 	if record.OUHandle == "" {
@@ -78,13 +87,13 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, config json.RawMes
 	}
 
 	if ctx.Record == nil {
-		return fmt.Errorf("cha_persist: task record is nil")
+		return plugins.Permanent(plugins.ErrorTypeInput, fmt.Errorf("cha_persist: task record is nil"))
 	}
 	// Every flow of a consignment runs with the consignment ID as its case ID, at any depth
 	// of nesting (see internal/caseflow).
 	consignmentID := ctx.Record.CaseID
 	if consignmentID == "" {
-		return fmt.Errorf("cha_persist: case id is empty")
+		return plugins.Permanent(plugins.ErrorTypeInput, fmt.Errorf("cha_persist: case id is empty"))
 	}
 
 	name, _ := ctx.Inputs["consignment_name"].(string)
@@ -92,7 +101,7 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, config json.RawMes
 		name = ""
 	}
 	if len([]rune(name)) > 255 {
-		return fmt.Errorf("cha_persist: consignment name exceeds maximum length of 255 characters")
+		return plugins.Permanent(plugins.ErrorTypeInput, fmt.Errorf("cha_persist: consignment name exceeds maximum length of 255 characters"))
 	}
 
 	if err := p.assignCHA(ctx.Context, consignmentID, chaCompanyID, record.OUHandle, name); err != nil {
@@ -117,7 +126,7 @@ func (p *CHAPersistPlugin) assignCHA(ctx context.Context, consignmentID, chaComp
 			return fmt.Errorf("cha_persist: failed to update consignment %q: %w", consignmentID, result.Error)
 		}
 		if result.RowsAffected == 0 {
-			return fmt.Errorf("cha_persist: consignment %q not found", consignmentID)
+			return plugins.Permanent(plugins.ErrorTypeInput, fmt.Errorf("cha_persist: consignment %q not found", consignmentID))
 		}
 		if err := caseparty.Assign(ctx, tx, caseparty.Party{
 			CaseID: consignmentID,
