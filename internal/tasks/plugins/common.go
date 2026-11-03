@@ -2,8 +2,6 @@ package plugins
 
 import (
 	"context"
-	"log/slog"
-	"net/url"
 
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
@@ -17,33 +15,16 @@ import (
 // dispatchHelper bundles outbound HTTP behaviour shared by plugins in this
 // package.
 type dispatchHelper struct {
-	manager        *remote.Manager
-	backendBaseURL string
+	manager *remote.Manager
 }
 
-func newDispatchHelper(manager *remote.Manager, backendBaseURL string) *dispatchHelper {
-	return &dispatchHelper{
-		manager:        manager,
-		backendBaseURL: backendBaseURL,
-	}
+func newDispatchHelper(manager *remote.Manager) *dispatchHelper {
+	return &dispatchHelper{manager: manager}
 }
 
 // callbacksPath is where a service accepts a callback on one of its parked steps:
 // POST {callbacksPath}/{token}.
 const callbacksPath = "/api/v1/callbacks"
-
-// callbacksURL is the base URL the receiving OGA portal calls back into, at
-// {callbacksURL}/{callbackToken}, to advance the workflow once the officer has
-// acted.
-func (h *dispatchHelper) callbacksURL() string {
-	joined, err := url.JoinPath(h.backendBaseURL, callbacksPath)
-	if err != nil {
-		slog.Error("taskv2 plugin: failed to build callback URL",
-			"backendBaseURL", h.backendBaseURL, "error", err)
-		return h.backendBaseURL + callbacksPath
-	}
-	return joined
-}
 
 // post sends body as JSON to the resolved service+path. Errors always
 // propagate: this dispatch is a precondition for ErrSuspended (the caller is

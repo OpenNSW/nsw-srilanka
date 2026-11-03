@@ -60,7 +60,7 @@ func newReviewService(t *testing.T, status int) (*remote.Manager, *reviewService
 			return
 		}
 		svc.mu.Lock()
-		svc.received = append(svc.received, receivedCall{path: r.URL.Path, body: body})
+		svc.received = append(svc.received, receivedCall{path: r.URL.EscapedPath(), body: body})
 		svc.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
@@ -90,39 +90,83 @@ func ownToken(t *testing.T) string {
 
 func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
 	ctx := reviewContext(map[string]any{"submission": map[string]any{"field": "v1"}})
 
-	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/inject", "task_code": "review_v1"}`))
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review"}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
 	assert.Equal(t, "QUEUED_EXTERNALLY", ctx.Record.State)
 	calls := svc.calls()
 	require.Len(t, calls, 1)
 	call := calls[0]
-	assert.Equal(t, "/api/v1/inject", call.path)
-	assert.Equal(t, reviewTaskID, call.body["taskId"])
-	assert.Equal(t, "review_v1", call.body["taskCode"])
-	assert.Equal(t, ownToken(t), call.body["callbackToken"])
-	assert.Equal(t, map[string]any{"field": "v1"}, call.body["data"])
+	// The other side starts its review flow on the same case.
+	assert.Equal(t, "/api/v1/internal/cases/consignment-1/flows", call.path)
+	assert.Equal(t, map[string]any{
+		"workflowId":    "review",
+		"flowId":        reviewTaskID,
+		"callbackToken": ownToken(t),
+		"input":         map[string]any{"field": "v1"},
+	}, call.body)
 }
 
-func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
-	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
-	ctx := reviewContext(map[string]any{"replyToken": "", "submission": map[string]any{}})
+// A dispatch needs its path, the workflow to start and the task's case; without one it
+// fails before calling out.
+func TestExternalReview_DispatchNeeds(t *testing.T) {
+	for name, tc := range map[string]struct {
+		config string
+		caseID string
+	}{
+		"path":                {`{"service_id": "agency", "service_workflow_id": "review"}`, "consignment-1"},
+		"service_workflow_id": {`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows"}`, "consignment-1"},
+		"a case":              {`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review"}`, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mgr, svc := newReviewService(t, http.StatusOK)
+			p := NewExternalReviewPlugin(mgr, tokenFor)
+			ctx := reviewContext(map[string]any{"submission": map[string]any{}})
+			ctx.Record.CaseID = tc.caseID
 
-	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/inject", "reply_command": "submit"}`))
+			err := p.Execute(ctx, json.RawMessage(tc.config))
+
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, ErrSuspended)
+			assert.Empty(t, svc.calls())
+		})
+	}
+}
+
+// The case ID is escaped into its path segment.
+func TestExternalReview_EscapesTheCaseID(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
+	ctx := reviewContext(map[string]any{"submission": map[string]any{}})
+	ctx.Record.CaseID = "a/b"
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review"}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
 	calls := svc.calls()
 	require.Len(t, calls, 1)
-	assert.Equal(t, "/api/v1/inject", calls[0].path)
+	assert.Equal(t, "/api/v1/internal/cases/a%2Fb/flows", calls[0].path)
+}
+
+func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
+	ctx := reviewContext(map[string]any{"replyToken": "", "submission": map[string]any{}})
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review", "reply_command": "submit"}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "/api/v1/internal/cases/consignment-1/flows", calls[0].path)
 }
 
 func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"submission": map[string]any{"field": "v2"},
@@ -148,7 +192,7 @@ func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 
 func TestExternalReview_ReplySendsOnlyPayloadInput(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"feedback": "attach the invoice"},
@@ -174,7 +218,7 @@ func TestExternalReview_ReplySendsOnlyPayloadInput(t *testing.T) {
 
 func TestExternalReview_ReplyWithEmptyPayloadSendsOnlyCallbackToken(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{},
@@ -194,7 +238,7 @@ func TestExternalReview_ReplyTokenizesOnlyPayloadInput(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
 	// tokenFor has no client for "agency": tokenizing the submission's invoice
 	// would fail the reply, though the reply does not send it.
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", withRenderConfig(tokenFor, reviewRenderConfig))
+	p := NewExternalReviewPlugin(mgr, withRenderConfig(tokenFor, reviewRenderConfig))
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"feedback": "attach the invoice"},
@@ -214,7 +258,7 @@ func TestExternalReview_ReplyTokenizesOnlyPayloadInput(t *testing.T) {
 
 func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusConflict)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
@@ -229,7 +273,7 @@ func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 
 func TestExternalReview_ReplyPayloadNotAnObjectIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x", "payload": "x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
@@ -243,7 +287,7 @@ func TestExternalReview_ReplyPayloadNotAnObjectIsNotRetried(t *testing.T) {
 
 func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusServiceUnavailable)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor)
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
@@ -269,7 +313,7 @@ func TestExternalReview_ConfigErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mgr, svc := newReviewService(t, http.StatusOK)
-			p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+			p := NewExternalReviewPlugin(mgr, tokenFor)
 
 			err := p.Execute(reviewContext(tt.inputs), json.RawMessage(tt.config))
 
