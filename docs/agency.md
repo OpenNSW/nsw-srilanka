@@ -103,21 +103,20 @@ checks the token's catalog roles on each call.
    `workflowId` for it. Anything else is a `404 flow not found`, as for a flow that
    does not exist, and the reason is logged.
 3. `caseflow.StartFlow` records the flow in `case_flows` (creating the case if it is
-   new, and reopening it if it had finished) and starts `workflowId` with `flowId` as the
-   workflow instance ID, on the manifest version current when the flow was first
-   recorded. The workflow is seeded with `taskId` (the flow ID), `taskCode` (the
+   new, and reopening it if it had finished) and, in the same transaction, the agency's
+   own OU (`flows.clients.ouHandle`) as an owner of the case in the flow's `owner` role
+   (`case_parties`), so a recorded flow always has its owner. It then starts `workflowId`
+   with `flowId` as the workflow instance ID, on the manifest version current when the
+   flow was first recorded. The workflow is seeded with `taskId` (the flow ID), `taskCode` (the
    workflow), `consignmentId` (the case), `notification` (the input) and, when the
    caller sent one, `callbackToken`. A workflow sends its decision back with it on the
    caller's `POST /api/v1/callbacks/{callbackToken}`: the token names the caller's
    step, so a late or repeated decision cannot complete a later one.
-4. The agency's own OU (`flows.clients.ouHandle`) is recorded as an owner of the case
-   in the flow's `owner` role (`case_parties`).
-5. Retries are safe. A flow still `STARTING` (a failed start) is started again, a
-   started one is returned without touching the engine, and the owner is recorded again
-   as the same row. A repeat `flowId` with a different case or workflow is a 409 and
-   starts nothing. Nor is it a new review round: where the artifacts are wired for
+4. Retries are safe. A flow still `STARTING` (a failed start) is started again, with the
+   owner already recorded, and a started one is returned without touching the engine. A
+   repeat `flowId` with a different case or workflow is a 409 and starts nothing. Nor is it a new review round: where the artifacts are wired for
    replies, a resubmission comes back as a reply on the agency's own token (below).
-6. Every task the workflow spawns is filed under the case ID. The task authz gate
+5. Every task the workflow spawns is filed under the case ID. The task authz gate
    (`authzgate`, the same as TNSW's) reports ownership in every role the officer's OU
    (their token's `ouHandle`) holds on the case: for an officer, the agency's own OU in
    the flow's `owner` role. `readauthz` and the write extension then treat officers like

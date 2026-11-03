@@ -11,7 +11,6 @@ import (
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
-	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
@@ -29,7 +28,7 @@ func mountAgency(
 	withAuth func(http.Handler) http.Handler,
 	withScope func(string) func(http.Handler) http.Handler,
 ) {
-	start := caseflow.NewClientHandler(flows, clientFlows, caseparty.NewRepository(db), cat.Clients)
+	start := caseflow.NewClientHandler(flows, clientFlows, cat.Clients)
 	mux.Handle("POST /api/v1/internal/cases/{caseId}/flows", withAuth(withScope(caseflow.ScopeFlowStart)(http.HandlerFunc(start.HandleStart))))
 
 	// ConsignmentRead is the read scope the portal's token already carries; the
