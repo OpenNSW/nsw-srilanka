@@ -179,6 +179,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		plugin   flowplugins.TaskPlugin
 	}{
 		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
+		{TaskTypeValueWriter, NewValueWriterPlugin()},
 		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, ogaFiles, cases)},
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},

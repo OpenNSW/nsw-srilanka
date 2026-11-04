@@ -415,6 +415,52 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Not configured:** if the deployment has no `refid.issuers`, the step fails.
 - **Showing the IDs:** the step doesn't write the namespace a user's own form reads, e.g. the one its `USER_INPUT` step fills. So a form section reading that namespace shows the IDs only once a later step maps them back in. To show them straight away, add a `MARKDOWN` section with `"dataKey": "refid"`.
 
+### Writing values into the inputs (`VALUE_WRITER`)
+
+Writes values the workflow already has into fields of a copy of the step's inputs, and writes the filled copy to `<output_namespace>`, as `REFID_GENERATOR` does with IDs. Use it to put one value, issued once for a case, everywhere a form keeps it. The step is synchronous. In the example below, every blend sheet gets the CusDec reference and the CusDec gets its registration number:
+
+```json
+{
+  "id": "sltb-submit-blendsheet--write-cusdec-reference",
+  "task_type": "VALUE_WRITER",
+  "output_namespace": "written",
+  "plugin_properties": {
+    "writes": [
+      {
+        "each": "/userform/blendsheet_data",
+        "path": "0/cusdec_number",
+        "template": "TNSW {year} E {registration_no}",
+        "params": {
+          "year": "/cusdec/year",
+          "registration_no": "/cusdec/registration_no"
+        }
+      },
+      {
+        "path": "/userform/cusdec_draft/identification/registrationNumber",
+        "from": "/cusdec/registration_no"
+      }
+    ]
+  }
+}
+```
+
+The node passes the form and the values in, `"input_mapping": {"userform": "userform", "cusdec": "cusdec"}`, and takes the form back out, `"output_mapping": {"written.userform": "userform"}`.
+
+| Field      | Meaning                                                                                                                                |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`     | The field to write, a pointer as in `REFID_GENERATOR`. With `each` it must be relative (`0/…`), so every element is written.           |
+| `each`     | Optional. An absolute pointer to an array of objects; the entry writes every element. A missing or `null` array has nothing to write.  |
+| `from`     | The value to write, copied as it is: text, a number, an object or a list. Takes `from` or `template`, not both.                        |
+| `template` | Text with a `{name}` placeholder for each of `params`, e.g. `"TNSW {year} E {registration_no}"`.                                       |
+| `params`   | With `template`: maps each placeholder to a pointer to its value, which must be text. A placeholder `params` doesn't name is an error. |
+
+**Behaviour:**
+
+- **Always written:** a field is written whatever it held. Mark it `readOnly` in the form, so the user sees it isn't theirs to change and the server holds it to what this step stored (see [Adding validation to a form](guides/form-validation.md#a-value-the-server-fills-in)).
+- **A missing source fails the step:** a `from` or a param with no value fails it, rather than leaving the field as it was.
+- **Read before written:** every value is read before any field is written, so the order of the entries doesn't change what they read.
+- **Shape errors:** `each` that isn't an array, an element that isn't an object, or a path that runs through a non-object fails the step.
+
 ### Print-ready HTML documents (`HTML_DOCUMENT_GENERATOR`)
 
 Renders a permit, licence, certificate or receipt as print-ready HTML with [`htmlgen`](https://github.com/OpenNSW/core/tree/main/htmlgen), stores it, and records its storage key. The step is synchronous. Adding one takes four pieces:
