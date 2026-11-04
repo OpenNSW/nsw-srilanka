@@ -46,7 +46,6 @@ func mountTNSW(
 	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(h.cha.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(h.company.HandleGetCompanies))))
 	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(h.consignment.HandleCreateConsignment))))
-	mux.Handle("GET /api/v1/consignments/{id}/agency", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(h.consignment.HandleGetConsignmentAgency))))
 	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(h.consignment.HandleGetConsignmentByID))))
 	mux.Handle("POST /api/v1/consignments/{id}/flows", withAuth(withScope(scopes.ConsignmentFlowWrite)(http.HandlerFunc(h.consignment.HandleStartConsignmentFlow))))
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(h.consignment.HandleGetConsignments))))
