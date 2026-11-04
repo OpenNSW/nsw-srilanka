@@ -76,7 +76,7 @@ func note(container, seal, mark string, volume float64) string {
 	raw, _ := json.Marshal(map[string]any{"eventType": "CDN_RETRIEVED", "payload": map[string]any{"cdn": map[string]any{
 		"voyageNumber": "V092", "voyageDateAsString": "2026-06-25", "vessel": "CMA CGM MARCO POLO",
 		"vesselOpCode": "OP-MSC", "contOpCode": "CO-882", "placeOfLoading": "LKCMB", "placeOfDischarge": "DEHAM",
-		"containerNumber": container, "sealNo": seal, "containerMark": mark, "volume": volume,
+		"containerNumber": container, "sealNo": seal, "containerMark": mark, "volume": volume, "bol": "BL-" + container,
 	}}})
 	return string(raw)
 }
@@ -121,6 +121,7 @@ func TestPrefill_FillsTheBoatNoteFromCustoms(t *testing.T) {
 		"port_of_discharge":         "DEHAM",
 		"vessel_op_code":            "OP-MSC",
 		"cont_op_code":              "CO-882",
+		"sn_bl_no":                  "BL-MSCU8492019",
 		"description_of_goods":      "Coconut Oil; Desiccated Coconut",
 		"cccn_no":                   "1513110000; 0801110000",
 		"number_of_packages":        "160",

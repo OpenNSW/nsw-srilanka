@@ -139,10 +139,11 @@ func declarationFields(decl map[string]any) map[string]any {
 }
 
 // dispatchFields fills, from the dispatch notes (Annex B), what the declaration
-// does not carry: the port of loading, the operators, the container marks and
-// the volume. The voyage number and date a note was booked on replace the
-// declaration's voyage name, which carries no date; other fields the
-// declaration already filled are kept.
+// does not carry: the port of loading, the operators, the bill of lading number
+// (from the first note that has one), the container marks and the volume. The
+// voyage number and date a note was booked on replace the declaration's voyage
+// name, which carries no date; other fields the declaration already filled are
+// kept.
 func dispatchFields(form map[string]any, notes []map[string]any) {
 	var marks []string
 	var cube float64
@@ -159,6 +160,7 @@ func dispatchFields(form map[string]any, notes []map[string]any) {
 		setIfAbsent(form, "port_of_discharge", document.Text(n, "placeOfDischarge"))
 		setIfAbsent(form, "vessel_op_code", document.Text(n, "vesselOpCode"))
 		setIfAbsent(form, "cont_op_code", document.Text(n, "contOpCode"))
+		setIfAbsent(form, "sn_bl_no", document.Text(n, "bol"))
 		marks = appendUnique(marks, firstNonEmpty(document.Text(n, "containerMark"), document.Text(n, "containerNumber")))
 		if v, ok := document.Float(n["volume"]); ok {
 			cube, hasCube = cube+v, true
