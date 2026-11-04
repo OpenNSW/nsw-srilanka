@@ -59,11 +59,12 @@ export function isThemeVariable(name: string): boolean {
 // resolve, and on every Theme root (.radix-themes: the app's and each dialog
 // portal's), which Radix's own [data-accent-color] and [data-gray-color]
 // rules would otherwise repaint. Both selectors outrank Radix's without
-// !important. A Theme root takes the dark variables when it is dark itself
-// or sits under a dark <html> without being light; the light ones never
-// reach it then, so a value set for light can't leak into dark.
+// !important. Radix gives a Theme root the light or dark class only for an
+// explicit appearance; one that inherits has neither and follows <html>.
+// The two selectors never match the same element, so a value set for one
+// appearance can't leak into the other, whatever its specificity.
 const SELECTORS: Record<Appearance, string> = {
-  light: 'html:root:not(.dark), :root .radix-themes:not(.dark)',
+  light: 'html:root:not(.dark), :root:not(.dark) .radix-themes:not(.dark), :root.dark .radix-themes.light',
   dark: 'html:root.dark, :root .radix-themes.dark, :root.dark .radix-themes:not(.light)',
 }
 

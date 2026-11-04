@@ -92,6 +92,46 @@ describe('applyTheme', () => {
   })
 })
 
+describe('applyTheme selectors', () => {
+  afterEach(() => {
+    document.documentElement.className = ''
+    document.body.replaceChildren()
+  })
+
+  // Which appearance's rules match an element: exactly one, every time.
+  function appearanceOf(element: Element) {
+    applyTheme({})
+    const [light, dark] = rules()
+    return [light.selectorText, dark.selectorText]
+      .map((selector, i) => (element.matches(selector) ? (['light', 'dark'] as const)[i] : null))
+      .filter(Boolean)
+  }
+
+  it.each([
+    ['', '', 'light'],
+    ['', 'light', 'light'],
+    ['', 'dark', 'dark'],
+    ['dark', '', 'dark'],
+    ['dark', 'light', 'light'],
+    ['dark', 'dark', 'dark'],
+    ['light', '', 'light'],
+  ])('under <html class="%s">, a Theme root with class "%s" takes %s only', (htmlClass, rootClass, expected) => {
+    document.documentElement.className = htmlClass
+    const root = document.createElement('div')
+    root.className = `radix-themes ${rootClass}`.trim()
+    document.body.append(root)
+    expect(appearanceOf(root)).toEqual([expected])
+  })
+
+  it.each([
+    ['', 'light'],
+    ['dark', 'dark'],
+  ])('<html class="%s"> takes %s only', (htmlClass, expected) => {
+    document.documentElement.className = htmlClass
+    expect(appearanceOf(document.documentElement)).toEqual([expected])
+  })
+})
+
 describe('isThemeVariable', () => {
   it.each(['accent-9', 'accent-a12', 'gray-contrast', 'red-11', 'slate-a3', 'blue-surface'])('accepts %s', (name) => {
     expect(isThemeVariable(name)).toBe(true)
