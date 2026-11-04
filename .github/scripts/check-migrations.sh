@@ -43,6 +43,7 @@ done < <(names migrations)
 
 # A BASE with 000038_add_cases_attributes.sql holds the v0.x migrations, which
 # 000001 replaces and no v1 database has applied, so they are not compared.
+# TODO(#1104): remove after v1.0.0.
 if git cat-file -e "${base}:migrations/000038_add_cases_attributes.sql" 2>/dev/null; then
   echo "BASE holds the v0.x migrations that 000001 replaces; not comparing them."
   base_files=""
