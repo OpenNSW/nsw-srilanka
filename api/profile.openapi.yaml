@@ -3,11 +3,10 @@ info:
   title: NSW Sri Lanka / Profile API
   description: |
     OpenAPI 3.0 specification for the identity/profile-adjacent read
-    endpoints: the caller's own user profile, the CHA directory, and the
-    company directory. These are small, closely related reference-data
-    reads mounted together in `internal/bootstrap/app.go`; the handlers
-    themselves live in `internal/profile`, `internal/profile/cha` and
-    `internal/profile/company`.
+    endpoints: the caller's own user profile and the company directory.
+    These are small, closely related reference-data reads mounted together
+    in `internal/bootstrap/app.go`; the handlers themselves live in
+    `internal/profile` and `internal/profile/company`.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -49,42 +48,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: No persisted user profile exists for the caller.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/chas:
-    get:
-      summary: List Customs House Agents
-      description: |
-        Returns every registered Customs House Agent. Unpaginated.
-
-        Requires scope `cha:read`.
-      operationId: listCHAs
-      responses:
-        '200':
-          description: OK.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CHARecord'
-        '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden. The bearer token lacks scope `cha:read`.
           content:
             application/json:
               schema:
@@ -224,34 +187,6 @@ components:
           format: date-time
         company:
           $ref: '#/components/schemas/CompanySummary'
-
-    CHARecord:
-      type: object
-      description: A Customs House Agent's persisted profile.
-      required:
-        - id
-        - name
-        - companyId
-        - createdAt
-        - updatedAt
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        description:
-          type: string
-        email:
-          type: string
-          format: email
-        companyId:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
 
     CompanyListResult:
       type: object

@@ -13,7 +13,7 @@ window.__APP_CONFIG__ = {
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.nsw-srilanka.local',
   APP_URL: 'http://localhost:5173',
   IDP_SCOPES:
-    'openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
+    'openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
   // The ID-token claim holding the user's roles (an array of role names), which the user
   // menu lists. Needs the 'role' scope above. For an IdP that models roles as groups, set
   // the claim to 'groups'. Defaults to 'roles'.

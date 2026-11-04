@@ -11,7 +11,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
-	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
@@ -20,7 +19,6 @@ import (
 // tnswHandlers are the handlers behind TNSW's own routes.
 type tnswHandlers struct {
 	consignment *consignment.Router
-	cha         *cha.Handler
 	company     *company.Handler
 	payment     *payment.HTTPHandler
 	slce        *asycuda.Handler
@@ -29,7 +27,7 @@ type tnswHandlers struct {
 }
 
 // mountTNSW registers TNSW's own routes: machine uploads, consignments and their admin views, the
-// trader portal's CHA/company lookups, and the payment, customs and port callbacks.
+// trader portal's company lookups, and the payment, customs and port callbacks.
 // The routes both modes serve are registered in Build.
 func mountTNSW(
 	mux *http.ServeMux,
@@ -43,7 +41,6 @@ func mountTNSW(
 		mux.Handle(nswstorage.InternalUploadRoute, withAuth(withScope(scopes.StorageInternalWrite)(http.HandlerFunc(h.files.InternalUpload))))
 	}
 
-	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(h.cha.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(h.company.HandleGetCompanies))))
 	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(h.consignment.HandleCreateConsignment))))
 	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(h.consignment.HandleGetConsignmentByID))))

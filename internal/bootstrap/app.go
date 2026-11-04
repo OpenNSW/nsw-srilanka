@@ -413,14 +413,13 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// -------------------------------------------------------------------
 
 	// TNSW's trade integrations: customs, port and payment callbacks, and the
-	// trader portal's CHA/company lookups. An agency serves none of them, so it builds
+	// trader portal's company lookups. An agency serves none of them, so it builds
 	// none of them either — the SLPA handler, for one, refuses to start without its
 	// secret.
 	var (
 		slceHandler    *asycuda.Handler
 		slpaHandler    *slpawebhook.Handler
 		paymentHandler *payment.HTTPHandler
-		chaHandler     *cha.Handler
 		companyHandler *company.Handler
 	)
 	if !agencyMode {
@@ -453,7 +452,6 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 			return nil, fmt.Errorf("failed to build the SLPA webhook handler: %w", err)
 		}
 
-		chaHandler = cha.NewHandler(chaService)
 		companyHandler = company.NewHandler(companyService)
 		paymentHandler = payment.NewHTTPHandler(paymentService)
 	}
@@ -582,14 +580,13 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(fileHandler.Upload))))
 	mux.Handle(nswstorage.DownloadRoute, withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(fileHandler.Download))))
 
-	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
+	// Mode-specific routes: TNSW's consignment, company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
 		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,
-			cha:         chaHandler,
 			company:     companyHandler,
 			payment:     paymentHandler,
 			slce:        slceHandler,
