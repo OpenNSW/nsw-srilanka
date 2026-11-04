@@ -41,7 +41,7 @@ export function LoginScreen() {
       )}
 
       {/* Hero & Authentication */}
-      <div className="lg:order-last relative flex-1 min-h-125 lg:min-h-[calc(100vh-2rem)] overflow-hidden">
+      <div className="lg:order-last relative flex flex-1 flex-col min-h-125 lg:min-h-[calc(100vh-2rem)] overflow-hidden">
         {/* Hero background — no clip on mobile (logo has its own strip above), diagonal on desktop */}
         <div className="absolute inset-0 [clip-path:none] lg:[clip-path:polygon(25%_0,100%_0,100%_100%,0%_100%)]">
           <div
@@ -51,14 +51,15 @@ export function LoginScreen() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-black/10" />
         </div>
 
-        {/* Centered Authentication Card */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 lg:pl-[12%]">
+        {/* Centered Authentication Card. In flow, not pinned to the hero's box, so the hero grows
+            with an error banner or a heading that wraps instead of clipping it at the top. */}
+        <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12 lg:pl-[12%]">
           {auth.error && hasUrlError && (
             <Banner variant="error" title={t('auth.login.errorTitle')} className="mb-6">
               {auth.error.message}
             </Banner>
           )}
-          <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-tight mb-10 -mt-20 drop-shadow-lg">
+          <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-tight mb-10 drop-shadow-lg">
             {systemName}
           </h1>
           <div className="bg-white/10 border border-white/15 backdrop-blur-xl py-10 px-8 xl:px-12 rounded-3xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-2xl">
