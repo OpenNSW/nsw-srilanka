@@ -1,4 +1,4 @@
-package consignment
+package workflowadmin
 
 import (
 	"context"
@@ -47,7 +47,7 @@ type EngineNodeDTO struct {
 	UpdatedAt     time.Time         `json:"updated_at"`
 	// ChildWorkflowIDs lists any child workflow executions spawned by this node (SPLIT_TASK /
 	// BATCH_SPLIT). Each ID can be fetched via the same engine-status endpoint (it treats the
-	// path parameter as a workflow ID, not a consignment record) to drill down, regardless of
+	// path parameter as a workflow ID, not a case record) to drill down, regardless of
 	// whether that child has since completed.
 	ChildWorkflowIDs []string `json:"child_workflow_ids,omitempty"`
 	// TaskWorkflowID is set only for a TASK node whose task has actually started (there's a
@@ -62,7 +62,7 @@ type EngineNodeDTO struct {
 	CachedTaskResult map[string]any `json:"cached_task_result,omitempty"`
 }
 
-// EngineStatusDTO is one workflow's raw engine state: a consignment's flow, or a child
+// EngineStatusDTO is one workflow's raw engine state: a case's flow, or a child
 // workflow of one.
 type EngineStatusDTO struct {
 	WorkflowID string          `json:"workflow_id"`
@@ -98,17 +98,17 @@ var ErrAdminActionUnsupportedForGateway = errors.New("complete is not supported 
 // workflow.AdminInterventionResolver.
 var ErrAdminInterventionUnsupported = errors.New("workflow manager does not support resolving admin interventions")
 
-// GetEngineStatus returns the raw engine state for workflowID — one of a consignment's flows,
+// GetEngineStatus returns the raw engine state for workflowID — one of a case's flows,
 // or (queried the same way, via this same endpoint) a nested child spawned by a SPLIT_TASK/
 // BATCH_SPLIT/PARALLEL_SPLIT node — straight from the registered workflow.Manager, an interface
-// so this stays agnostic to whatever engine actually backs it. Unlike GetConsignmentByID, it
-// performs no trader/CHA ownership check — see the TODO on the route wiring in router.go.
+// so this stays agnostic to whatever engine actually backs it. It checks no ownership of
+// the case: the admin routes are gated on the admin scopes instead.
 //
 // Each TASK node's DTO is additionally enriched with TaskWorkflowID, when its task has actually
 // started.
 func (s *Service) GetEngineStatus(ctx context.Context, workflowID string) (*EngineStatusDTO, error) {
 	if s.wm == nil {
-		return nil, fmt.Errorf("no workflow manager registered for ConsignmentService")
+		return nil, fmt.Errorf("no workflow manager registered for workflowadmin.Service")
 	}
 
 	instance, err := s.wm.GetStatus(ctx, workflowID)
@@ -120,9 +120,9 @@ func (s *Service) GetEngineStatus(ctx context.Context, workflowID string) (*Engi
 	}
 
 	dto := buildEngineStatusDTO(workflowID, instance)
-	// Fetches every task record for the whole consignment, not just the ones under workflowID's
+	// Fetches every task record for the whole case, not just the ones under workflowID's
 	// own branch — the task store only supports filtering by case ID (see
-	// attachTaskWorkflowIDs), so a nested child-branch call re-fetches the same consignment-wide
+	// attachTaskWorkflowIDs), so a nested child-branch call re-fetches the same case-wide
 	// list. Acceptable for an admin screen opened manually and rarely; would need a narrower
 	// query on the task store itself (TaskRecord.ParentWorkflowID already holds the more specific
 	// ID, but nothing queries by it) if this ever shows up as an actual cost.
@@ -136,7 +136,7 @@ func (s *Service) GetEngineStatus(ctx context.Context, workflowID string) (*Engi
 // GetEngineStatus queries.
 func (s *Service) GetTaskWorkflowEngineStatus(ctx context.Context, taskWorkflowID string) (*EngineStatusDTO, error) {
 	if s.taskWm == nil {
-		return nil, fmt.Errorf("no task workflow manager registered for ConsignmentService")
+		return nil, fmt.Errorf("no task workflow manager registered for workflowadmin.Service")
 	}
 
 	instance, err := s.taskWm.GetStatus(ctx, taskWorkflowID)
@@ -198,7 +198,7 @@ func buildEngineStatusDTO(workflowID string, instance *workflow.WorkflowInstance
 }
 
 // attachTaskWorkflowIDs fills in TaskWorkflowID on each TASK-type node in nodes, when its task
-// has started. Task records are stored keyed by the consignment's case ID
+// has started. Task records are stored keyed by the case ID
 // (store.TaskRecord.CaseID) even for a node nested several levels deep in a
 // BATCH_SPLIT/PARALLEL_SPLIT branch — so the case ID is read off instance.WorkflowVariables
 // (workflow.VarCaseID, propagated by the engine to every level of nesting) rather than
@@ -228,7 +228,7 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 }
 
 // ResolveAdminIntervention sends an admin's decision (RETRY/COMPLETE/ABORT) to a node parked
-// in AWAITING_ADMIN on workflowID, one of a consignment's flows or one of its child-branch
+// in AWAITING_ADMIN on workflowID, one of a case's flows or one of its child-branch
 // workflows, through the same manager GetEngineStatus queries. A task workflow is a separate ID
 // space on its own manager: see ResolveTaskWorkflowAdminIntervention. sig.ActivationID names the
 // parked step.
@@ -238,7 +238,7 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 // the step ID is what addresses the run.
 func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) (nodeID string, err error) {
 	if s.wm == nil {
-		return "", fmt.Errorf("no workflow manager registered for ConsignmentService")
+		return "", fmt.Errorf("no workflow manager registered for workflowadmin.Service")
 	}
 	return resolveAdminIntervention(ctx, s.wm, workflowID, sig)
 }
@@ -248,7 +248,7 @@ func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID strin
 // one GetTaskWorkflowEngineStatus queries.
 func (s *Service) ResolveTaskWorkflowAdminIntervention(ctx context.Context, taskWorkflowID string, sig workflow.AdminResolutionSignal) (nodeID string, err error) {
 	if s.taskWm == nil {
-		return "", fmt.Errorf("no task workflow manager registered for ConsignmentService")
+		return "", fmt.Errorf("no task workflow manager registered for workflowadmin.Service")
 	}
 	return resolveAdminIntervention(ctx, s.taskWm, taskWorkflowID, sig)
 }

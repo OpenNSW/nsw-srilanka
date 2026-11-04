@@ -1,4 +1,4 @@
-package consignment
+package workflowadmin
 
 import (
 	"net/http"
@@ -36,7 +36,7 @@ func TestTaskWorkflowEngineStatus_AuditTarget(t *testing.T) {
 			} else {
 				tasks.On("GetTaskByWorkflowID", mock.Anything, workflowID).Return(tc.record, tc.found).Once()
 			}
-			svc := mustNewService(t, nil, nil, nil, nil, nil, taskStore)
+			svc := newTestService(taskStore)
 			wm := new(MockWM)
 			require.NoError(t, svc.RegisterTaskWorkflowManager(wm))
 			// Task workflow globals can echo its own ID; they are not the audit target.
@@ -44,7 +44,7 @@ func TestTaskWorkflowEngineStatus_AuditTarget(t *testing.T) {
 				ID: workflowID, WorkflowVariables: map[string]any{workflow.VarCaseID: workflowID},
 			}, nil).Once()
 			client, capture := nswaudit.NewWithCapture()
-			router := mustNewRouter(t, svc, nil, nil, client)
+			router := NewHandler(svc, nil, client)
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.SetPathValue("id", workflowID)
 			req = req.WithContext(withAuthContext(req.Context(), "admin-1"))
@@ -84,7 +84,7 @@ func TestTaskWorkflowActions_AuditTarget(t *testing.T) {
 				const workflowID = "task-wf-review"
 				tasks := new(MockTaskStore)
 				tasks.On("GetTaskByWorkflowID", mock.Anything, workflowID).Return(store.TaskRecord{CaseID: "consignment-1"}, true).Once()
-				svc := mustNewService(t, nil, nil, nil, nil, nil, tasks)
+				svc := newTestService(tasks)
 				wm := new(MockWM)
 				require.NoError(t, svc.RegisterTaskWorkflowManager(wm))
 				instance := parkedInstance(workflow.NodeTypeTask)
@@ -103,7 +103,7 @@ func TestTaskWorkflowActions_AuditTarget(t *testing.T) {
 					}
 				}
 				client, capture := nswaudit.NewWithCapture()
-				router := mustNewRouter(t, svc, nil, nil, client)
+				router := NewHandler(svc, nil, client)
 				body := `{"action":"RETRY","reason":"repair"}`
 				if forcePark {
 					body = `{"reason":"repair"}`
@@ -139,12 +139,12 @@ func TestTaskWorkflowActions_AuditTarget(t *testing.T) {
 func TestWorkflowEngineStatus_AuditTargetUnchanged(t *testing.T) {
 	tasks := new(MockTaskStore) // A flow audit must not use the task-workflow lookup.
 	tasks.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: "flow-1"}).Return([]store.TaskRecord(nil)).Once()
-	svc := mustNewService(t, nil, nil, nil, nil, nil, tasks)
+	svc := newTestService(tasks)
 	wm := new(MockWM)
 	require.NoError(t, svc.RegisterWorkflowManager(wm))
 	wm.On("GetStatus", mock.Anything, "flow-1").Return(&workflow.WorkflowInstance{ID: "flow-1", WorkflowVariables: map[string]any{workflow.VarCaseID: "flow-1"}}, nil).Once()
 	client, capture := nswaudit.NewWithCapture()
-	router := mustNewRouter(t, svc, nil, nil, client)
+	router := NewHandler(svc, nil, client)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.SetPathValue("id", "flow-1")
 	req = req.WithContext(withAuthContext(req.Context(), "admin-1"))

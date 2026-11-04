@@ -189,13 +189,13 @@ In **APIs**, use **Add resource server**:
 Then, under **Resources**, add these resources at the top level, with no parent, and
 their actions (**Add Action**):
 
-| Resource      | Actions         |
-| ------------- | --------------- |
-| `consignment` | `read`          |
-| `task`        | `read`, `write` |
-| `profile`     | `read`          |
-| `storage`     | `read`, `write` |
-| `workflow`    | `inject`        |
+| Resource      | Actions                           |
+| ------------- | --------------------------------- |
+| `consignment` | `read`, `adminread`, `adminwrite` |
+| `task`        | `read`, `write`                   |
+| `profile`     | `read`                            |
+| `storage`     | `read`, `write`                   |
+| `workflow`    | `inject`                          |
 
 Unlike the names, these handles are fixed: they make the permissions `task:write`,
 `workflow:inject` and so on, which the backend checks in both modes.
@@ -203,7 +203,7 @@ Unlike the names, these handles are fixed: they make the permissions `task:write
 ### 2c. The officers' group
 
 In **Groups**, use **Add Group** to create the officers' group in the agency's OU, for
-example `DEA Officers`.
+example `DEA Officers`, and the admins' group the same way, for example `DEA Admins`.
 
 ### 2d. The officer portal application
 
@@ -265,6 +265,7 @@ Assignment**):
 | Role                         | Example name  | Permissions                                                                                                       | Assigned to               |
 | ---------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | Officer role                 | `DEA Officer` | On the agency API: `consignment:read`, `profile:read`, `storage:read`, `storage:write`, `task:read`, `task:write` | The officers' group       |
+| Admin role                   | `DEA Admin`   | On the agency API: `consignment:adminread`, `consignment:adminwrite`, `profile:read`                              | The admins' group         |
 | TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `workflow:inject`, `task:write`                                                                | The TNSW-to-agency client |
 
 The agency-to-TNSW client needs no role of its own: every agency's client shares TNSW's.
@@ -469,12 +470,15 @@ frontend:
     IDP_BASE_URL: "https://idp.example.com"
     IDP_CLIENT_ID: "<portal client ID>"
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.dea.nsw-agency.local"
-    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
     IDP_ROLE_CLAIM_NAME: "roles"
     IDP_ROLE_LABELS:
       "DEA Officer":
         title: "DEA Officer"
         description: "Reviews and completes the tasks DEA receives from the National Single Window."
+      "DEA Admin":
+        title: "DEA Admin"
+        description: "Views any case and its workflows, and resolves or force-parks their nodes."
     SHOW_AUTOFILL_BUTTON: "false"
   branding:
     systemName: "DEA"

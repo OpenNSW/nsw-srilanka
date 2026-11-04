@@ -2,18 +2,21 @@
 
 The same backend runs as TNSW or as a government agency (e.g. CDA), chosen by `mode`
 in `config.yaml`. The modes are exclusive: a deployment is one or the other, never
-both. Both share the task engine, Temporal, renderers, plugins, storage and
-`/api/v1/tasks/{id}`. They differ at the edges:
+both. Both share the task engine, Temporal, renderers, plugins, storage,
+`/api/v1/tasks/{id}`, and the admin routes (engine status, resolve,
+force-park, and the generic `GET /api/v1/admin/cases/{id}` —
+`internal/workflowadmin`), gated on the admin scopes rather than ownership.
+They differ at the edges:
 
-|                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                    |
-| -------------------- | ------------------------------------------------------- | ------------------------------------------ |
-| Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/internal/cases/{id}/flows`   |
-| Task ownership       | trader/CHA company's OU owns the consignment            | the agency's own OU owns the case          |
-| Task claims          | off (its task templates leave out `claimable`)          | on: its task templates set `claimable`     |
-| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `internal/cases/{id}/flows`, `cases`       |
-| Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
-| Catalog              | `catalog` in `configs/config.yaml`                      | `catalog` in the agency's `config.yaml`    |
-| Artifacts            | TNSW artifact root                                      | the agency's artifacts                     |
+|                      | TNSW (`mode: tnsw`)                                                         | Agency (`mode: agency`)                  |
+| -------------------- | --------------------------------------------------------------------------- | ---------------------------------------- |
+| Workflow starts from | `POST /api/v1/consignments` (trader)                                        | `POST /api/v1/internal/cases/{id}/flows` |
+| Task ownership       | trader/CHA company's OU owns the consignment                                | the agency's own OU owns the case        |
+| Task claims          | off (its task templates leave out `claimable`)                              | on: its task templates set `claimable`   |
+| Own routes           | consignments, `admin/consignments/{id}`, CHAs/companies, payments, webhooks | `internal/cases/{id}/flows`, `cases`     |
+| Catalog must map     | `trader`, `cha`                                                             | no particular role (see Roles per task)  |
+| Catalog              | `catalog` in `configs/config.yaml`                                          | `catalog` in the agency's `config.yaml`  |
+| Artifacts            | TNSW artifact root                                                          | the agency's artifacts                   |
 
 A missing or unknown `mode` stops the server at startup.
 

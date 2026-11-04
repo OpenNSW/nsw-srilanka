@@ -15,7 +15,6 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/taskflow/store"
-	workflow "github.com/OpenNSW/core/workflow"
 
 	"github.com/OpenNSW/core/pagination"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
@@ -28,11 +27,10 @@ import (
 
 // TaskStore is the narrow interface needed from taskv2 package to load task records.
 type TaskStore interface {
-	// GetTasks lists the tasks filter matches. The consignment detail and the engine status
-	// pass only a CaseID, so every task of the case is listed whatever its read roles: the
-	// detail authorizes its caller on the consignment, and the engine status is an admin view.
+	// GetTasks lists the tasks filter matches. The consignment detail passes only a CaseID,
+	// so every task of the case is listed whatever its read roles: the detail authorizes its
+	// caller on the consignment.
 	GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord
-	GetTaskByWorkflowID(ctx context.Context, workflowID string) (store.TaskRecord, bool)
 }
 
 // CaseFlows creates a case and starts and lists its flows. *caseflow.Service satisfies it.
@@ -46,21 +44,14 @@ type CaseFlows interface {
 // internal/caseflow): its flows are started through flows, which also keeps the case's
 // state in step with them.
 type Service struct {
-	db        *gorm.DB
-	artifacts *artifact.Set
-	flows     CaseFlows
-	// wm is the parent workflow manager, read for engine status and admin resolution.
-	wm workflow.Manager
-	// taskWm is the workflow.Manager for the per-task ("micro") workflow runner — a separate
-	// manager/task queue from wm.
-	taskWm         workflow.Manager
+	db             *gorm.DB
+	artifacts      *artifact.Set
+	flows          CaseFlows
 	chaService     cha.Service
 	companyService company.Service
 	userService    user.Service
 	taskStore      TaskStore
-	// tasks closes a task from outside its workflow for ForceParkTaskNode.
-	tasks TaskCanceller
-	roles map[string]string // logical name ("trader"/"cha") -> IdP token role
+	roles          map[string]string // logical name ("trader"/"cha") -> IdP token role
 	// userFlows are the flows a trader or CHA may start on a consignment (flows.users).
 	userFlows caseflow.UserFlows
 }
@@ -93,31 +84,6 @@ func NewService(
 		taskStore:      taskStore,
 		roles:          roles,
 	}, nil
-}
-
-// RegisterWorkflowManager registers the workflow manager.
-func (s *Service) RegisterWorkflowManager(wm workflow.Manager) error {
-	if s.wm != nil {
-		return fmt.Errorf("workflow manager already registered for ConsignmentService")
-	}
-	if wm == nil {
-		return fmt.Errorf("workflow manager cannot be nil")
-	}
-	s.wm = wm
-	return nil
-}
-
-// RegisterTaskWorkflowManager registers the workflow manager for the per-task ("micro")
-// workflow runner.
-func (s *Service) RegisterTaskWorkflowManager(wm workflow.Manager) error {
-	if s.taskWm != nil {
-		return fmt.Errorf("task workflow manager already registered for ConsignmentService")
-	}
-	if wm == nil {
-		return fmt.Errorf("task workflow manager cannot be nil")
-	}
-	s.taskWm = wm
-	return nil
 }
 
 // RegisterCaseFlows registers what starts and lists the consignment's flows.
@@ -293,7 +259,7 @@ func (s *Service) StartConsignmentFlow(
 	if err != nil {
 		return nil, fmt.Errorf("failed to start flow %q on consignment %s: %w", templateID, consignmentID, err)
 	}
-	dto := s.flowDTO(ctx, *f)
+	dto := caseflow.ViewOf(ctx, s.artifacts, *f)
 	return &dto, nil
 }
 
@@ -328,28 +294,9 @@ func (s *Service) flowDTOs(ctx context.Context, consignmentID string) ([]FlowDTO
 	}
 	dtos := make([]FlowDTO, 0, len(flows))
 	for _, f := range flows {
-		dtos = append(dtos, s.flowDTO(ctx, f))
+		dtos = append(dtos, caseflow.ViewOf(ctx, s.artifacts, f))
 	}
 	return dtos, nil
-}
-
-// flowDTO presents f, named by its workflow definition's name in the manifest version
-// the flow runs on (its template ID when the definition has none or cannot be loaded).
-func (s *Service) flowDTO(ctx context.Context, f caseflow.Flow) FlowDTO {
-	name := f.TemplateID
-	if reg, err := s.artifacts.Registry(ctx, f.ManifestVersion); err == nil {
-		if def, err := workflowdef.Load(ctx, reg, f.TemplateID); err == nil && def.Name != "" {
-			name = def.Name
-		}
-	}
-	return FlowDTO{
-		WorkflowID:   f.WorkflowID,
-		TemplateID:   f.TemplateID,
-		TemplateName: name,
-		Status:       string(f.Status),
-		CreatedAt:    f.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    f.UpdatedAt.Format(time.RFC3339),
-	}
 }
 
 // Roles the consignment's companies hold on its case (case_parties).

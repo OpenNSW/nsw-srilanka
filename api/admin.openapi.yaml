@@ -2,9 +2,12 @@ openapi: 3.0.3
 info:
   title: NSW Sri Lanka / Admin API
   description: |
-    OpenAPI 3.0 specification for the ops/admin views of any consignment —
-    full detail, its flows, and each flow's raw workflow-engine state, with no
-    trader/CHA ownership check.
+    OpenAPI 3.0 specification for the ops/admin views of any consignment (in
+    TNSW) or case (in an agency) — full detail, its flows, and each flow's raw
+    workflow-engine state, with no ownership check. The workflow routes and
+    the generic `GET /api/v1/admin/cases/{id}` are the same in TNSW and the
+    agencies; only `GET /api/v1/admin/consignments/{id}` is TNSW-specific,
+    for the trader/CHA company names a case has no equivalent of.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -57,6 +60,62 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: No such consignment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/cases/{id}:
+    get:
+      summary: "[Admin] Get any case, every task on it and its flows"
+      description: |
+        The ops/admin view of **any** case, with no ownership check — a
+        consignment's or an agency case's, addressed by the one ID space they
+        share, unlike the trader/CHA- or officer-facing views, each scoped to
+        the caller's own. This lists every task on the case, whatever its read
+        roles, with raw task-store state rather than a mode's business-facing
+        label. `flows` lists the case's top-level workflows; open one with
+        `GET /api/v1/admin/workflows/{id}/engine-status`. Served in both TNSW
+        and agency mode, the same route either way — `GET
+        /api/v1/admin/consignments/{id}` above additionally carries TNSW's
+        trader/CHA company names, which a case has no equivalent of.
+
+        Requires scope `consignment:adminread`.
+      operationId: adminGetCaseByID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The case ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCaseDetail'
+        '401':
+          description: Unauthorized. Missing or invalid bearer token, or not a user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `consignment:adminread`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such case.
           content:
             application/json:
               schema:
@@ -723,9 +782,80 @@ components:
               items:
                 $ref: '#/components/schemas/FlowDTO'
 
+    CaseNodeTemplate:
+      type: object
+      description: A task's display name and type, in the admin case view.
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+
+    CaseNode:
+      type: object
+      description: >-
+        One task of any flow on a case, in the admin case view: the task
+        store's own state (e.g. `PENDING_USER`), not a mode's business-facing
+        label — unlike WorkflowNodeResponseDTO's `state`, since this is a
+        diagnostic view, not the trader's or officer's own.
+      required:
+        - id
+        - workflowNodeTemplate
+        - state
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        workflowNodeTemplate:
+          $ref: '#/components/schemas/CaseNodeTemplate'
+        state:
+          type: string
+
+    AdminCaseDetail:
+      type: object
+      description: Any case — a consignment's or an agency's own — every task on it, and its flows.
+      required:
+        - id
+        - state
+        - createdAt
+        - updatedAt
+        - workflowNodes
+        - flows
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        state:
+          $ref: '#/components/schemas/State'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        workflowNodes:
+          type: array
+          description: Every task on the case but system ones, whatever their read roles.
+          items:
+            $ref: '#/components/schemas/CaseNode'
+        flows:
+          type: array
+          description: The case's top-level workflows, oldest first.
+          items:
+            $ref: '#/components/schemas/FlowDTO'
+
     FlowDTO:
       type: object
-      description: One top-level workflow (flow) of a consignment.
+      description: One top-level workflow (flow) of a consignment or case.
       required:
         - workflowId
         - templateId

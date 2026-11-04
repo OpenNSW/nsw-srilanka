@@ -75,6 +75,7 @@ creates SLTB for this deployment, on the `SLTB API` resource server
 | Caller                             | Client                | Grant                                                                                                                      |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
+| Admin `sltb_admin`                 | `OGA_PORTAL_APP_SLTB` | `SLTB Admin` role (via `SLTB Admins`): `consignment:adminread`/`adminwrite`, `profile:read`                                |
 | TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `workflow:inject`, and `task:write` to reply on SLTB's parked steps, which its catalog maps `tnsw` to |
 | SLTB decision callback and storage | `SLTB_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` and `storage:read`/`write` on TNSW                                                     |
 

@@ -45,6 +45,12 @@ resources:
       - name: Read
         handle: read
         description: Read action
+      - name: Admin Read
+        handle: adminread
+        description: Admin Read action
+      - name: Admin Write
+        handle: adminwrite
+        description: Admin Write action
   - name: Task
     handle: task
     description: Task resource
@@ -112,6 +118,29 @@ resource_type: group
 id: 01a13912-d3e2-7e28-bf72-d545885fccc8
 name: FCAU Officers
 description: FCAU officers group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+---
+# File: FCAU_Admin.yaml
+resource_type: role
+id: 9da237fd-43cb-467b-93b4-b9a344a39e6a
+name: FCAU Admin
+description: Role for FCAU admins, who view any case and its workflows and resolve or force-park their nodes
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+permissions:
+  - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
+    permissions:
+      - consignment:adminread
+      - consignment:adminwrite
+      - profile:read
+assignments:
+  - id: c1f9508e-3d22-46b0-ac61-0517891d17d7
+    type: group
+---
+# File: FCAU_Admins.yaml
+resource_type: group
+id: c1f9508e-3d22-46b0-ac61-0517891d17d7
+name: FCAU Admins
+description: FCAU admins group
 ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
 ---
 # File: FCAUPortalApp.yaml
@@ -195,6 +224,8 @@ inboundAuthConfig:
         - role
         - ou
         - consignment:read
+        - consignment:adminread
+        - consignment:adminwrite
         - task:read
         - task:write
         - profile:read

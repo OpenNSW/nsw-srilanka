@@ -45,6 +45,12 @@ resources:
       - name: Read
         handle: read
         description: Read action
+      - name: Admin Read
+        handle: adminread
+        description: Admin Read action
+      - name: Admin Write
+        handle: adminwrite
+        description: Admin Write action
   - name: Task
     handle: task
     description: Task resource
@@ -112,6 +118,29 @@ resource_type: group
 id: 01a13912-d3b8-74ee-801c-da16adde68e9
 name: EFC Officers
 description: EFC officers group
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+---
+# File: EFC_Admin.yaml
+resource_type: role
+id: e96f8b65-9c03-4bb1-838d-ce0640208b70
+name: EFC Admin
+description: Role for EFC admins, who view any case and its workflows and resolve or force-park their nodes
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+permissions:
+  - resourceServerId: 01a13912-cb36-74ad-aab0-b49b1c19fbf9
+    permissions:
+      - consignment:adminread
+      - consignment:adminwrite
+      - profile:read
+assignments:
+  - id: dc4af422-e193-43c5-bba2-7cb7c57ae60c
+    type: group
+---
+# File: EFC_Admins.yaml
+resource_type: group
+id: dc4af422-e193-43c5-bba2-7cb7c57ae60c
+name: EFC Admins
+description: EFC admins group
 ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
 ---
 # File: EfcPortalApp.yaml
@@ -195,6 +224,8 @@ inboundAuthConfig:
         - role
         - ou
         - consignment:read
+        - consignment:adminread
+        - consignment:adminwrite
         - task:read
         - task:write
         - profile:read

@@ -38,6 +38,12 @@ resources:
       - name: Read
         handle: read
         description: Read action
+      - name: Admin Read
+        handle: adminread
+        description: Admin Read action
+      - name: Admin Write
+        handle: adminwrite
+        description: Admin Write action
   - name: Task
     handle: task
     description: Task resource
@@ -112,6 +118,29 @@ resource_type: group
 id: 01a13912-d39b-7594-a4b4-58e791da6085
 name: CDA Officers
 description: CDA officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: CDA_Admin.yaml
+resource_type: role
+id: ece78545-978f-4c7f-a87b-ed68d75bb99b
+name: CDA Admin
+description: Role for CDA admins, who view any case and its workflows and resolve or force-park their nodes
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:adminread
+      - consignment:adminwrite
+      - profile:read
+assignments:
+  - id: 4d2e3edc-30c7-4a3a-8801-321ff02c5eab
+    type: group
+---
+# File: CDA_Admins.yaml
+resource_type: group
+id: 4d2e3edc-30c7-4a3a-8801-321ff02c5eab
+name: CDA Admins
+description: CDA admins group
 ouId: 01a13912-d209-78da-9de0-dd544935e1ae
 ---
 # File: CDAPortalApp.yaml
@@ -195,6 +224,8 @@ inboundAuthConfig:
         - role
         - ou
         - consignment:read
+        - consignment:adminread
+        - consignment:adminwrite
         - task:read
         - task:write
         - profile:read
