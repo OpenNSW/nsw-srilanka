@@ -22,7 +22,7 @@ export function PaginationControl({
   const { pagination: labels } = useUiLabels()
 
   return (
-    <Flex justify="between" align="center" mt="4" pt="4" pb="4" pl="4" pr="4">
+    <Flex justify="between" align="center" wrap="wrap" gap="3" mt="4" pt="4" pb="4" pl="4" pr="4">
       <Flex align="center" gap="4">
         {totalCount !== undefined && (
           <Text size="2" color="gray">
@@ -31,7 +31,7 @@ export function PaginationControl({
         )}
       </Flex>
 
-      <Flex gap="2" align="center">
+      <Flex gap="2" align="center" wrap="wrap">
         <Text size="2" color="gray" mr="2">
           {labels.page(currentPage, totalPages || 1)}
         </Text>
