@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
 )
@@ -106,8 +107,7 @@ func declarationFields(decl map[string]any) map[string]any {
 	setString(form, "consignee", party(importer))
 	setString(form, "exporters_registration_no", document.Text(exporter, "id"))
 	setString(form, "vessel", document.Text(general, "transportVesselName"))
-	setString(form, "voyage_no_date", document.Text(general, "transportVoyageName"))
-	setString(form, "port_of_discharge", document.Text(general, "placeOfDischarge"))
+	setString(form, "voyage_no", document.Text(general, "transportVoyageName"))
 	if n, ok := document.Float(general["numberOfPackages"]); ok {
 		form["number_of_packages"] = document.FormatNumber(n)
 	}
@@ -139,10 +139,11 @@ func declarationFields(decl map[string]any) map[string]any {
 }
 
 // dispatchFields fills, from the dispatch notes (Annex B), what the declaration
-// does not carry: the port of loading, the operators, the container marks and
-// the volume. The voyage number and date a note was booked on replace the
-// declaration's voyage name, which carries no date; other fields the
-// declaration already filled are kept.
+// does not carry: the operators, the bill of lading number (from the first note
+// that has one), the container marks and the volume. The voyage number and date
+// of the first note that has either replace the declaration's voyage name,
+// which carries no date; other fields the declaration already filled are kept.
+// The ports are left for the trader to name.
 func dispatchFields(form map[string]any, notes []map[string]any) {
 	var marks []string
 	var cube float64
@@ -151,14 +152,16 @@ func dispatchFields(form map[string]any, notes []map[string]any) {
 		if n == nil {
 			continue
 		}
-		if voyage := strings.Join(nonEmpty(document.Text(n, "voyageNumber"), document.Text(n, "voyageDateAsString")), " / "); voyage != "" && !voyageFromNote {
-			form["voyage_no_date"], voyageFromNote = voyage, true
+		number, date := document.Text(n, "voyageNumber"), document.Text(n, "voyageDateAsString")
+		if (number != "" || date != "") && !voyageFromNote {
+			voyageFromNote = true
+			setString(form, "voyage_no", number)
+			setString(form, "voyage_date", isoDate(date))
 		}
 		setIfAbsent(form, "vessel", document.Text(n, "vessel"))
-		setIfAbsent(form, "port_of_loading", document.Text(n, "placeOfLoading"))
-		setIfAbsent(form, "port_of_discharge", document.Text(n, "placeOfDischarge"))
 		setIfAbsent(form, "vessel_op_code", document.Text(n, "vesselOpCode"))
 		setIfAbsent(form, "cont_op_code", document.Text(n, "contOpCode"))
+		setIfAbsent(form, "sn_bl_no", document.Text(n, "bol"))
 		marks = appendUnique(marks, firstNonEmpty(document.Text(n, "containerMark"), document.Text(n, "containerNumber")))
 		if v, ok := document.Float(n["volume"]); ok {
 			cube, hasCube = cube+v, true
@@ -176,6 +179,24 @@ func containerRow(number string, note map[string]any) map[string]any {
 	setString(row, "container_number", document.Text(note, "containerNumber"))
 	setString(row, "customs_seal_no", document.Text(note, "sealNo"))
 	return row
+}
+
+// voyageDateLayouts are the shapes a dispatch note's voyage date is read in: the
+// ISO-8601 date the CDN was raised with (Annex B), the dd/MM/yyyy ASYCUDA uses
+// elsewhere, and a timestamp.
+var voyageDateLayouts = []string{"2006-01-02", "02/01/2006", time.RFC3339, "2006-01-02T15:04:05"}
+
+// isoDate rewrites a voyage date as the yyyy-MM-dd the boat note's date field
+// takes. A date in no known shape is left out, for the trader to pick, rather
+// than guessed.
+func isoDate(v string) string {
+	v = strings.TrimSpace(v)
+	for _, layout := range voyageDateLayouts {
+		if t, err := time.Parse(layout, v); err == nil {
+			return t.Format("2006-01-02")
+		}
+	}
+	return ""
 }
 
 func party(p map[string]any) string {
