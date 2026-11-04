@@ -63,8 +63,9 @@ const PARK_CATEGORY_INFO: Record<ParkCategory, { label: string; tone: StatusTone
 
 // Which resolution actions exist and whether core's engine rejects them for a GATEWAY node (a
 // gateway's routing can't be completed without bypassing its own condition logic — see
-// core/workflow.parkNodeForAdmin). description is shown via an info icon next to each button —
-// see the ADMIN_ACTIONS.map below.
+// core/workflow.parkNodeForAdmin). description is a tooltip on an info button next to each action
+// on wide screens, and the chosen action's text under the buttons on narrow ones — see the
+// Action section below.
 const ADMIN_ACTIONS: {
   action: AdminResolutionAction
   label: string
@@ -302,23 +303,30 @@ export function ResolveAdminInterventionView({
                     color={color}
                     size="2"
                     disabled={disabled}
+                    aria-pressed={action === candidate}
                     title={disabled ? 'Not supported for GATEWAY nodes — use Retry or Abort' : undefined}
                     onClick={() => setAction(candidate)}
                   >
                     {label}
                   </Button>
+                  {/* A button so the tooltip opens on keyboard focus as well as hover; narrow screens
+                      have no hover, so they read the chosen action's description below instead. */}
                   <Tooltip content={description} maxWidth="320px">
-                    <InfoCircledIcon
-                      className="text-foreground-muted cursor-help"
-                      width={15}
-                      height={15}
+                    <button
+                      type="button"
                       aria-label={`What ${label} does`}
-                    />
+                      className="hidden md:inline-flex rounded text-foreground-muted cursor-help"
+                    >
+                      <InfoCircledIcon width={15} height={15} />
+                    </button>
                   </Tooltip>
                 </div>
               )
             })}
           </div>
+          <Text as="p" size="2" color="gray" className="mt-4 text-justify md:hidden" aria-live="polite">
+            {currentAction?.description ?? 'Select an action to see what it does.'}
+          </Text>
         </Section>
 
         <Section title="Reason (required)">
