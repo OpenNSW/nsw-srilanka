@@ -41,7 +41,9 @@ OAuth scopes are part of the contract too. `internal/scopes/scopes.go` names the
 
 ## Testing Guidelines
 
-Place Go tests beside implementation as `*_test.go`, using `TestXxx`, standard `testing`, Testify, and SQL mocks where appropriate. Run `make test`; no numeric coverage threshold is configured. Cover changed behavior and edge cases. Run replay tests serially with `make deps` followed by `make test-e2e`; this stops the API container. Place frontend tests beside the code as `*.test.ts(x)`, using Vitest (importing from `vitest`, no globals) and Testing Library; run them with `pnpm test` from `portals/`.
+Place Go tests beside implementation as `*_test.go`, using `TestXxx`, standard `testing`, Testify, and SQL mocks where appropriate. Run `make test`; no numeric coverage threshold is configured. Run replay tests serially with `make deps` followed by `make test-e2e`; this stops the API container. Place frontend tests beside the code as `*.test.ts(x)`, using Vitest (importing from `vitest`, no globals) and Testing Library; run them with `pnpm test` from `portals/`.
+
+Every change that adds or changes behaviour comes with tests in the same PR: each new or changed function, handler or component gets a test beside it covering its main path, its error paths and its edge cases, not only through the screen or service that uses it. A change that can't be tested this way (styling only, wiring) says why in the PR's Testing section.
 
 ## Commit & Pull Request Guidelines
 
