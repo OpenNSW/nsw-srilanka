@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
@@ -221,7 +222,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
-	stopWarm := warmArtifacts(ctx, artifacts)
+	stopWarm := warmArtifacts(ctx, artifacts, warmStopTimeout)
 	defer func() {
 		if err != nil {
 			stopWarm()
@@ -1128,21 +1129,32 @@ func initArtifacts(ctx context.Context, cfg *config.Config) (*artifact.Set, erro
 	return artifacts, nil
 }
 
+// warmStopTimeout bounds how long shutdown waits for the artifact warm-up to stop. Nothing
+// shut down after it depends on the warm-up, which only fills the in-memory file cache.
+const warmStopTimeout = 5 * time.Second
+
 // warmArtifacts fetches the current manifest version's artifact files into the file cache in
 // the background, so startup doesn't wait on them. A lookup that comes first fetches its file
 // on demand, so a slow, failed or cut-short warm-up only costs latency and is logged, not
-// returned. The returned stop cancels the warm-up and waits for it to finish.
-func warmArtifacts(ctx context.Context, artifacts *artifact.Set) (stop func()) {
+// returned. The returned stop cancels the warm-up and waits up to stopTimeout for it to finish,
+// since a loader read that ignores cancellation (the local loader's file read) could otherwise
+// hold up shutdown. Calls to stop after the first return at once.
+func warmArtifacts(ctx context.Context, artifacts *artifact.Set, stopTimeout time.Duration) (stop func()) {
 	warmCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	version := artifacts.Current()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := artifacts.Warm(warmCtx, artifacts.Current()); err != nil {
-			slog.Warn("failed to warm the artifact file cache", "version", artifacts.Current(), "error", err)
+		if err := artifacts.Warm(warmCtx, version); err != nil {
+			slog.Warn("failed to warm the artifact file cache", "version", version, "error", err)
 		}
 	}()
-	return func() {
+	return sync.OnceFunc(func() {
 		cancel()
-		<-done
-	}
+		select {
+		case <-done:
+		case <-time.After(stopTimeout):
+			slog.Warn("artifact file cache warm-up did not stop in time; continuing without it", "version", version, "timeout", stopTimeout)
+		}
+	})
 }
