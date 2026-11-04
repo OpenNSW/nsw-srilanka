@@ -639,7 +639,6 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 	return dtos, nil
 }
 
-// companyRecordToMap converts a company.Record to a map[string]any via its JSON tags.
 // caseAttributes are the attributes of the consignment's case (cases.attributes).
 // EXTERNAL_REVIEW sends them to every agency it starts a flow on, so only values every
 // agency may see go in: the trader company's name, but not its id or data, nor the
@@ -648,6 +647,7 @@ func caseAttributes(trader *company.Record) map[string]any {
 	return map[string]any{"traderCompany": map[string]any{"name": trader.Name}}
 }
 
+// companyRecordToMap converts a company.Record to a map[string]any via its JSON tags.
 func companyRecordToMap(record *company.Record) (map[string]any, error) {
 	raw, err := json.Marshal(record)
 	if err != nil {
