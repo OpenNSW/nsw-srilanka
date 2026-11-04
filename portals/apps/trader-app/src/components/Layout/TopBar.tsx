@@ -67,7 +67,7 @@ function SmallScreenMenu() {
       </Popover.Trigger>
       <Popover.Content align="end" width="320px" maxWidth="calc(100vw - 32px)">
         <Flex direction="column" gap="3" align="start">
-          <NavMenu onNavigate={() => setOpen(false)} />
+          <NavMenu layout="list" onNavigate={() => setOpen(false)} />
           <CompanyName />
           <Flex gap="2" wrap="wrap">
             <LanguageSwitcher />

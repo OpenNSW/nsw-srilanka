@@ -6,11 +6,39 @@ import { DropdownMenu } from '@radix-ui/themes'
 import { useAbilities } from '@/hooks/useCan'
 import { NAV_STRUCTURE, isNavGroup, permittedNav, type NavItem } from '@/navigation/navItems'
 
+function NavLinkRow({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <Link
+      to={item.route.path}
+      onClick={onNavigate}
+      aria-current={active ? 'page' : undefined}
+      className={`flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl text-sm font-semibold transition-colors ${
+        active ? 'bg-primary-subtle text-primary-strong' : 'text-foreground hover:bg-app-surface-muted'
+      }`}
+    >
+      <span className={active ? '' : 'text-foreground-muted'}>{item.icon}</span>
+      <span>{t(item.labelKey)}</span>
+    </Link>
+  )
+}
+
 // The app's nav destinations the user may open, surfaced as a menu in
 // the TopBar rather than a permanent side rail. onNavigate fires when the
 // person picks a destination, so a menu holding this one (the TopBar's
 // small-screen menu) can close.
-export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
+//
+// layout 'dropdown' is a menu button with flyout submenus for groups. 'list'
+// lays every destination out as a link, a group as a labelled run of them, for
+// a menu that is already open (the TopBar's small-screen menu), where a nested
+// dropdown with flyouts is awkward to use by touch.
+export function NavMenu({
+  onNavigate,
+  layout = 'dropdown',
+}: {
+  onNavigate?: () => void
+  layout?: 'dropdown' | 'list'
+}) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
@@ -45,18 +73,31 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     if (!only) return null
     const target = isNavGroup(only) ? only.items[0] : only
     if (!target) return null
+    return <NavLinkRow item={target} active={isItemActive(target)} onNavigate={onNavigate} />
+  }
+
+  if (layout === 'list') {
     return (
-      <Link
-        to={target.route.path}
-        onClick={onNavigate}
-        aria-current={isItemActive(target) ? 'page' : undefined}
-        className={`flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl text-sm font-semibold transition-colors ${
-          isItemActive(target) ? 'bg-primary-subtle text-primary-strong' : 'text-foreground hover:bg-app-surface-muted'
-        }`}
-      >
-        <span className={isItemActive(target) ? '' : 'text-foreground-muted'}>{target.icon}</span>
-        <span>{t(target.labelKey)}</span>
-      </Link>
+      <nav aria-label={t('nav.menu')} className="flex w-full flex-col gap-1">
+        {navStructure.map((item) =>
+          isNavGroup(item) ? (
+            <div key={item.labelKey} role="group" aria-label={t(item.labelKey)} className="flex flex-col gap-1">
+              <div
+                aria-hidden
+                className="flex items-center gap-2 px-2.5 pt-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted"
+              >
+                {item.icon}
+                {t(item.labelKey)}
+              </div>
+              {item.items.map((child) => (
+                <NavLinkRow key={child.route.path} item={child} active={isItemActive(child)} onNavigate={onNavigate} />
+              ))}
+            </div>
+          ) : (
+            <NavLinkRow key={item.route.path} item={item} active={isItemActive(item)} onNavigate={onNavigate} />
+          ),
+        )}
+      </nav>
     )
   }
 
