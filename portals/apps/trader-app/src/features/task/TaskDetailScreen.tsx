@@ -35,6 +35,7 @@ export function TaskDetailScreen() {
     refetch,
     formEpoch,
     submitted,
+    stillProcessing,
     actionError,
     claimBusy,
     claimError,
@@ -127,6 +128,11 @@ export function TaskDetailScreen() {
       {submitError && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
           <Banner variant="error">{submitError}</Banner>
+        </div>
+      )}
+      {stillProcessing && (
+        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
+          <Banner variant="warning">{t('tasks.stillProcessing')}</Banner>
         </div>
       )}
       {zoneView.claim && (

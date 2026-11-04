@@ -134,6 +134,7 @@ const en = {
       backToCase: 'Back to case',
       draftSaved: 'Draft saved',
       savingDraft: 'Saving…',
+      stillProcessing: 'Still processing. Check back shortly.',
       submitting: 'Submitting...',
       onHoldBanner: 'This step is on hold while our team looks into a problem. No action is needed from you.',
       handles: {

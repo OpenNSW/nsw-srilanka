@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { POST_SUBMIT_REFETCH_DELAY_MS, useTask } from '@/features/task/hooks'
+import { SUBMIT_POLL_INTERVAL_MS, SUBMIT_POLL_WARN_MS, useTask } from '@/features/task/hooks'
 import { claimTask, getZoneView, releaseTask, saveTaskStepDraft, submitTaskStep } from '@/features/task/service'
 import { getConsignment } from '@/features/consignment/service'
 import type { ConsignmentDetail } from '@/features/consignment/types'
@@ -170,7 +170,7 @@ describe('useTask', () => {
     expect(mockGetZoneView).toHaveBeenCalledTimes(1)
   })
 
-  it('latches a submission until the task is refetched after a delay', async () => {
+  it('latches a submission until the next step is polled', async () => {
     mockSubmit.mockResolvedValue(undefined)
     const { result } = await renderLoaded()
     vi.useFakeTimers()
@@ -187,13 +187,121 @@ describe('useTask', () => {
     expect(mockGetZoneView).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(POST_SUBMIT_REFETCH_DELAY_MS)
+      await vi.advanceTimersByTimeAsync(SUBMIT_POLL_INTERVAL_MS)
       await submitted
     })
     expect(mockGetZoneView).toHaveBeenCalledTimes(2)
     expect(result.current.submitted).toBe(false)
     expect(result.current.formEpoch).toBe(1)
+    expect(result.current.stillProcessing).toBe(false)
+    expect(result.current.actionError).toBeNull()
     scrollTo.mockRestore()
+  })
+
+  it('warns when the step is still pending after the poll', async () => {
+    mockSubmit.mockResolvedValue(undefined)
+    const { result } = await renderLoaded()
+    mockGetZoneView.mockResolvedValue(makeZoneView('PENDING_USER'))
+    vi.useFakeTimers()
+
+    await act(async () => {
+      const submitted = result.current.submit('SUBMIT', {})
+      await vi.advanceTimersByTimeAsync(SUBMIT_POLL_WARN_MS)
+      await submitted
+    })
+
+    expect(result.current.stillProcessing).toBe(true)
+    expect(result.current.actionError).toBeNull()
+    expect(result.current.formEpoch).toBe(0)
+    expect(result.current.zoneView?.state).toBe('IN_PROGRESS')
+  })
+
+  it('keeps polling through a step that is still starting', async () => {
+    mockSubmit.mockResolvedValue(undefined)
+    const { result } = await renderLoaded()
+    mockGetZoneView
+      .mockResolvedValueOnce(makeZoneView('ADVANCING'))
+      .mockResolvedValueOnce(makeZoneView('STARTING_STEP', 'step-2'))
+      .mockResolvedValue(makeZoneView('PENDING_USER', 'step-2'))
+    vi.useFakeTimers()
+
+    await act(async () => {
+      const submitted = result.current.submit('SUBMIT', {})
+      await vi.advanceTimersByTimeAsync(SUBMIT_POLL_INTERVAL_MS * 3)
+      await submitted
+    })
+
+    expect(mockGetZoneView).toHaveBeenCalledTimes(4)
+    expect(result.current.zoneView).toMatchObject({ state: 'PENDING_USER', step_id: 'step-2' })
+    expect(result.current.formEpoch).toBe(1)
+    expect(result.current.stillProcessing).toBe(false)
+  })
+
+  it('drops a poll when the trader opens another task', async () => {
+    mockSubmit.mockResolvedValue(undefined)
+    const { result, rerender } = await renderLoaded()
+    vi.useFakeTimers()
+
+    let submitted!: Promise<void>
+    await act(async () => {
+      submitted = result.current.submit('SUBMIT', {})
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(result.current.submitted).toBe(true)
+
+    mockGetZoneView.mockResolvedValue(makeZoneView('PENDING_USER', 'step-9'))
+    act(() => {
+      rerender({ taskId: 't-2' })
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SUBMIT_POLL_WARN_MS)
+      await submitted
+    })
+
+    expect(result.current.stillProcessing).toBe(false)
+    expect(result.current.submitted).toBe(false)
+    expect(result.current.zoneView?.step_id).not.toBe('step-1')
+  })
+
+  it('rejects a second submit while the first is still polling', async () => {
+    mockSubmit.mockResolvedValue(undefined)
+    const { result } = await renderLoaded()
+    vi.useFakeTimers()
+
+    let submitted!: Promise<void>
+    await act(async () => {
+      submitted = result.current.submit('SUBMIT', {})
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    await act(async () => {
+      await expect(result.current.submit('SUBMIT', {})).rejects.toThrow('submit in progress')
+    })
+    expect(mockSubmit).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SUBMIT_POLL_INTERVAL_MS)
+      await submitted
+    })
+    expect(result.current.submitted).toBe(false)
+  })
+
+  it('treats a later pending step as the hand-off', async () => {
+    mockSubmit.mockResolvedValue(undefined)
+    const { result } = await renderLoaded()
+    mockGetZoneView.mockResolvedValue(makeZoneView('PENDING_USER', 'step-2'))
+    vi.useFakeTimers()
+
+    await act(async () => {
+      const submitted = result.current.submit('SUBMIT', {})
+      await vi.advanceTimersByTimeAsync(SUBMIT_POLL_INTERVAL_MS)
+      await submitted
+    })
+
+    expect(mockGetZoneView).toHaveBeenCalledTimes(2)
+    expect(result.current.stillProcessing).toBe(false)
+    expect(result.current.formEpoch).toBe(1)
   })
 
   it('reloads the form when a submission targets a step the task has left', async () => {
