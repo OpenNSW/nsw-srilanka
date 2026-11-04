@@ -18,6 +18,13 @@ const en = {
       },
     },
 
+    appearance: {
+      label: 'Appearance: {{current}}',
+      light: 'Light',
+      dark: 'Dark',
+      system: 'System',
+    },
+
     nav: {
       menu: 'Menu',
       consignments: 'Consignments',

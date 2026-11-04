@@ -53,7 +53,7 @@ export function RedirectRenderer({ payload, interactive }: ZoneRendererProps<'RE
     return (
       <div className="rounded-2xl bg-primary-subtle/40 p-6 text-sm text-foreground-muted shadow-sm transition-all duration-300">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-primary-subtle rounded-full text-primary">
+          <div className="p-2 bg-primary-subtle rounded-full text-primary-strong">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               className="w-5 h-5"
@@ -70,7 +70,7 @@ export function RedirectRenderer({ payload, interactive }: ZoneRendererProps<'RE
             </svg>
           </div>
           <div>
-            <h4 className="font-semibold text-primary text-base">{t('tasks.redirect.redirectedTitle')}</h4>
+            <h4 className="font-semibold text-primary-strong text-base">{t('tasks.redirect.redirectedTitle')}</h4>
             <p className="text-xs text-foreground-muted">{t('tasks.redirect.redirectedDescription')}</p>
           </div>
         </div>
@@ -79,7 +79,7 @@ export function RedirectRenderer({ payload, interactive }: ZoneRendererProps<'RE
           <ReactMarkdown
             components={{
               a: ({ children, href }) => (
-                <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                <a href={href} target="_blank" rel="noreferrer" className="text-primary-strong hover:underline">
                   {children}
                 </a>
               ),
@@ -130,11 +130,11 @@ export function RedirectRenderer({ payload, interactive }: ZoneRendererProps<'RE
 
   return (
     <div className="rounded-2xl bg-primary-subtle/40 p-6 text-sm text-foreground-muted">
-      {interactive && <p className="mb-3 font-medium text-primary">{t('tasks.redirect.redirecting')}</p>}
+      {interactive && <p className="mb-3 font-medium text-primary-strong">{t('tasks.redirect.redirecting')}</p>}
       <ReactMarkdown
         components={{
           a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+            <a href={href} target="_blank" rel="noreferrer" className="text-primary-strong hover:underline">
               {children}
             </a>
           ),

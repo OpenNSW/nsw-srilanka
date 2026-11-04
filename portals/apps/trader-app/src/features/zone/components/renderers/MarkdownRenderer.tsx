@@ -74,7 +74,7 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
                 <a
                   href={`/storage/${ref}`}
                   onClick={handleClick}
-                  className="text-primary hover:underline cursor-pointer"
+                  className="text-primary-strong hover:underline cursor-pointer"
                 >
                   {children}
                 </a>
@@ -82,7 +82,7 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
             }
 
             return (
-              <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+              <a href={href} target="_blank" rel="noreferrer" className="text-primary-strong hover:underline">
                 {children}
               </a>
             )
@@ -93,7 +93,7 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
           ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 text-foreground-muted">{children}</ol>,
           li: ({ children }) => <li>{children}</li>,
           code: ({ children }) => (
-            <code className="bg-app-surface-muted text-primary px-1.5 py-0.5 rounded text-xs font-mono">
+            <code className="bg-app-surface-muted text-primary-strong px-1.5 py-0.5 rounded text-xs font-mono">
               {children}
             </code>
           ),

@@ -252,10 +252,19 @@ gets Radix's default, indigo. Values are used as given and not checked (one
 that isn't a color leaves its step unset), and nothing is generated, so for
 a custom brand supply each step you want changed: the
 [Radix custom palette tool](https://www.radix-ui.com/colors/custom) gives
-all of them from one color. `dark` holds the same fields for the dark
-appearance; light `colors` don't carry over to it. The portal renders in
-light mode only for now, so `dark` takes effect once it supports dark mode
-([#1081](https://github.com/OpenNSW/nsw-srilanka/issues/1081)).
+all of them from one color.
+
+The portal has a light and a dark appearance. Each user picks light, dark or
+their OS's setting with the switcher next to the language switcher; until
+they choose, it follows the OS. `theme.dark` holds the same fields for the
+dark appearance: `accent` and `gray` carry over from the light theme when it
+leaves them out, light `colors` don't. Radix's dark scales are made for dark
+backgrounds, so a named scale usually needs nothing more. Buttons carry white
+text on `accent-9`, so check that it reads at 4.5:1 in each appearance:
+Radix's own step 9 for some scales falls short in dark (the default theme
+uses blue's deeper step 8 there for that reason). For a logo that doesn't
+read on a dark background, set `logoUrlDark` and `systemLogoUrlDark`; the
+dark appearance uses them in place of `logoUrl` and `systemLogoUrl`.
 
 ```yaml
 frontend:
@@ -268,7 +277,9 @@ frontend:
         accent-10: "#1a3175"
       dark:
         colors:
-          accent-9: "#5b7fd6"
+          accent-9: "#2870bd"
+    logoUrl: /branding/logo.png
+    logoUrlDark: /branding/logo-dark.png # optional
 ```
 
 ### Health checks

@@ -78,7 +78,7 @@ body {
  * the bundle isn't something this file controls. It only guards the
  * specific properties below, scoped to the exact classes Radix renders.
  * ========================================================================= */
-/* Editable: white, with a grey border that darkens on hover. */
+/* Editable: the surface color, with a grey border that strengthens on hover. */
 .rt-TextFieldRoot.rt-variant-surface,
 .rt-SelectTrigger.rt-variant-surface,
 .rt-TextAreaRoot.rt-variant-surface {

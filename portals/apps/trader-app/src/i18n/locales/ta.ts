@@ -19,6 +19,12 @@ const ta: Locale = {
         signOut: 'வெளியேறு',
       },
     },
+    appearance: {
+      label: 'தோற்றம்: {{current}}',
+      light: 'ஒளி',
+      dark: 'இருள்',
+      system: 'கணினி',
+    },
     nav: {
       menu: 'மெனு',
       consignments: 'அனுப்புப்பொருள்',

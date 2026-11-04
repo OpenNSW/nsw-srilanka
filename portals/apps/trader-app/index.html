@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Trader Portal</title>
     <script defer src="/config.js"></script>
+    <script>
+      // Sets the appearance before the first paint, so a dark-mode user
+      // doesn't see a white page while the app loads. The same storage key
+      // and rule as src/services/appearanceContextCore.ts, and the same
+      // marks on <html> as @portals/theme's applyAppearance.
+      try {
+        var setting = null
+        try {
+          setting = localStorage.getItem('appearance')
+        } catch (e) {
+          // Storage blocked: follow the OS, as the app does.
+        }
+        var dark =
+          setting === 'dark' || (setting !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      } catch (e) {
+        // matchMedia unavailable: the app sets the appearance when it loads.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

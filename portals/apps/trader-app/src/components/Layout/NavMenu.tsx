@@ -51,7 +51,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
         onClick={onNavigate}
         aria-current={isItemActive(target) ? 'page' : undefined}
         className={`flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl text-sm font-semibold transition-colors ${
-          isItemActive(target) ? 'bg-primary-subtle text-primary' : 'text-foreground hover:bg-app-surface-muted'
+          isItemActive(target) ? 'bg-primary-subtle text-primary-strong' : 'text-foreground hover:bg-app-surface-muted'
         }`}
       >
         <span className={isItemActive(target) ? '' : 'text-foreground-muted'}>{target.icon}</span>
@@ -87,7 +87,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
                       onNavigate?.()
                       void navigate(child.route.path)
                     }}
-                    className={isItemActive(child) ? 'bg-primary-subtle! text-primary!' : undefined}
+                    className={isItemActive(child) ? 'bg-primary-subtle! text-primary-strong!' : undefined}
                   >
                     <span className="flex items-center gap-2">
                       {child.icon}
@@ -104,7 +104,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
                 onNavigate?.()
                 void navigate(item.route.path)
               }}
-              className={isItemActive(item) ? 'bg-primary-subtle! text-primary!' : undefined}
+              className={isItemActive(item) ? 'bg-primary-subtle! text-primary-strong!' : undefined}
             >
               <span className="flex items-center gap-2">
                 {item.icon}
