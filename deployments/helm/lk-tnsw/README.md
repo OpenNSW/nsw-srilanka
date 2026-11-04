@@ -241,6 +241,36 @@ startup (`initAppConfig()` in
 [`src/configs/types.ts`](../../../portals/apps/trader-app/src/configs/types.ts)
 for the full schema.
 
+`frontend.branding.theme` sets the portal's colors. Without it, the portal
+uses its default navy. Colors are
+[Radix color scales](https://www.radix-ui.com/colors): name a scale for the
+accent (buttons, links, focus rings) and the grays, and override any single
+step by its CSS variable name, without the leading dashes. A name that
+isn't a Radix step (a typo such as `acent-9`) fails `branding.json`
+validation, like any other invalid field. A theme that names no accent
+gets Radix's default, indigo. Values are used as given and not checked (one
+that isn't a color leaves its step unset), and nothing is generated, so for
+a custom brand supply each step you want changed: the
+[Radix custom palette tool](https://www.radix-ui.com/colors/custom) gives
+all of them from one color. `dark` holds the same fields for the dark
+appearance; light `colors` don't carry over to it. The portal renders in
+light mode only for now, so `dark` takes effect once it supports dark mode
+([#1081](https://github.com/OpenNSW/nsw-srilanka/issues/1081)).
+
+```yaml
+frontend:
+  branding:
+    theme:
+      accent: blue # a Radix scale: blue, ruby, jade, iris, ...
+      gray: slate # gray, mauve, slate, sage, olive or sand
+      colors:
+        accent-9: "#1e3a8a"
+        accent-10: "#1a3175"
+      dark:
+        colors:
+          accent-9: "#5b7fd6"
+```
+
 ### Health checks
 
 Both components default their `livenessProbe`/`readinessProbe` to `GET

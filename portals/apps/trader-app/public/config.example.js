@@ -26,8 +26,6 @@ window.__APP_CONFIG__ = {
     'NSW Admin': { title: 'NSW Administrator', description: 'Administers consignments across all traders.' },
   }),
   SHOW_AUTOFILL_BUTTON: 'true',
-  // Shows the demo color-scheme picker in the footer. Off unless 'true'.
-  SHOW_COLOR_SCHEME_SWITCHER: 'true',
   // 'tnsw' (default) lists consignments; 'agency' lists an agency's cases instead.
   APP_MODE: 'tnsw',
 }

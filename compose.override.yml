@@ -32,6 +32,8 @@ volumes:
     driver: local
   pnpm-ui-modules:
     driver: local
+  pnpm-theme-modules:
+    driver: local
 
 services:
   # -------------------------------------------------------------------
@@ -73,6 +75,7 @@ services:
       - pnpm-workspace-modules:/workspace/node_modules
       - pnpm-app-modules:/workspace/apps/trader-app/node_modules
       - pnpm-ui-modules:/workspace/packages/ui/node_modules
+      - pnpm-theme-modules:/workspace/packages/theme/node_modules
     # Replace the base host:8080 mapping — Vite serves on 5173, and keeping
     # host==container port lets HMR's websocket connect without extra config.
     ports: !override

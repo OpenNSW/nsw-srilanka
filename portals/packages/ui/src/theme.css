@@ -1,5 +1,9 @@
-/* The design tokens every portal paints with: Tailwind theme variables,
- * the color schemes, and Radix's accent scale derived from the brand color.
+/* The design tokens every portal paints with, as Tailwind theme variables.
+ * Each color token names a role (primary, error-strong, border) and the
+ * Radix step that plays it; the steps' values come from the app's theme
+ * (@portals/theme), so this file holds no brand colors and works with any.
+ * Without a theme, or with one that names no accent, the accent is Radix's
+ * default, indigo (see the fallback after @theme).
  *
  * An app imports this after Tailwind:
  *
@@ -19,14 +23,14 @@
   /* =========================================================================
    * COLOR TOKENS — every one is a Radix Themes color, so Tailwind utilities
    * and Radix components paint from the same scales. Radix defines the raw
-   * steps (--slate-N, --red-N, ...) on :root, where these resolve. Each role
+   * steps (--red-N, ...) on :root, and the theme sets --accent-N and
+   * --gray-N there too, so these resolve. Each role
    * uses the steps Radix gives that job:
    *   -subtle  → step 3, tinted fill
    *   (base)   → step 9, solid fill / dot
    *   -strong  → step 11, text and icons on white or on -subtle
-   * The one color that isn't a Radix step is each scheme's brand,
-   * --color-primary, from which Radix's accent scale is derived (see the
-   * "Radix accent" block below).
+   * Primary is the accent scale (--accent-N) and the neutrals the gray
+   * scale (--gray-N), whichever scales the theme picks.
    *
    * Tailwind's own palette is switched off, so a bg-red-600 or text-gray-500
    * generates nothing: a color has to be one of these.
@@ -39,15 +43,11 @@
    * third-party font CDN (this app also has to run on restricted networks). */
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* Brand (primary). --color-primary is the "Modern" scheme's, the default
-   * whenever no `data-theme` override applies — see the color-scheme block
-   * below for the other options and the trader app's colorSchemeContextCore.ts for
-   * how <Theme accentColor> is kept in sync with whichever one is active.
-   * The other rungs are the accent steps derived from it. -dark is for deep
-   * surfaces (gradients, hero overlays); the bright base pops against it,
-   * and bright-at-opacity gives visible hovers. */
+  /* Brand (primary): the accent scale. -dark is for deep surfaces
+   * (gradients, hero overlays); the bright base pops against it, and
+   * bright-at-opacity gives visible hovers. */
   --color-primary-subtle: var(--accent-3);
-  --color-primary: #5b5bd6;
+  --color-primary: var(--accent-9);
   --color-primary-hover: var(--accent-10);
   --color-primary-dark: var(--accent-12);
 
@@ -71,42 +71,53 @@
   --color-info: var(--blue-9);
   --color-info-strong: var(--blue-11);
 
-  /* Neutrals: Radix's slate, the Theme's grayColor. NOTE: named app-* to
+  /* Neutrals: the gray scale. NOTE: named app-* to
    * avoid a collision with Radix Themes' own --color-background and
    * --color-surface variables (defined on .radix-themes), which were
    * shadowing these. Utilities: bg-app-bg / bg-app-surface / bg-app-surface-muted.
    * The surface is white, Radix's solid panel color in light mode. */
-  --color-app-bg: var(--slate-2);
+  --color-app-bg: var(--gray-2);
   --color-app-surface: white;
-  --color-app-surface-muted: var(--slate-3);
+  --color-app-surface-muted: var(--gray-3);
 
-  /* Form fields. An editable field is white with a visible border (slate-9,
-   * 3.3:1 on white, over the 3:1 a control's edge needs); a read-only one is
-   * flat grey with no border, so the two can't be confused. Used by the
+  /* Form fields. An editable field is white with a visible border (gray-9;
+   * Radix's slate-9 is 3.3:1 on white, over the 3:1 a control's edge
+   * needs); a read-only one is flat grey with no border, so the two can't
+   * be confused. Used by the
    * Radix TextField/Select/TextArea override in the app's index.css, which is what every
    * JSONForms field renders through. */
-  --color-field-border: var(--slate-9);
-  --color-field-border-hover: var(--slate-10);
-  --color-field-readonly-bg: var(--slate-3);
+  --color-field-border: var(--gray-9);
+  --color-field-border-hover: var(--gray-10);
+  --color-field-readonly-bg: var(--gray-3);
 
-  /* Neutrals / text: Radix's two text steps. Muted (slate-11) reads at 5.6:1
-   * on the page background. */
-  --color-foreground: var(--slate-12);
-  --color-foreground-muted: var(--slate-11);
+  /* Neutrals / text: Radix's two text steps. Muted (gray-11; Radix's
+   * slate-11 reads at 5.6:1) on the page background. */
+  --color-foreground: var(--gray-12);
+  --color-foreground-muted: var(--gray-11);
 
   /* Neutrals / borders */
-  --color-border: var(--slate-6);
-  --color-border-strong: var(--slate-7);
+  --color-border: var(--gray-6);
+  --color-border-strong: var(--gray-7);
 
-  /* Shadows — slate-tinted rather than pure black, and softer/wider than the
-   * default Tailwind ramp. Colored, diffuse shadows read as more "designed"
-   * and less like a default framework drop-shadow. */
-  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
-  --shadow: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
-  --shadow-md: 0 4px 8px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.05);
-  --shadow-lg: 0 12px 20px -6px rgb(15 23 42 / 0.1), 0 4px 8px -4px rgb(15 23 42 / 0.06);
-  --shadow-xl: 0 20px 32px -8px rgb(15 23 42 / 0.14), 0 8px 12px -6px rgb(15 23 42 / 0.08);
-  --shadow-2xl: 0 28px 56px -16px rgb(15 23 42 / 0.28);
+  /* Shadows — tinted with the gray scale's darkest step rather than pure
+   * black, and softer/wider than the default Tailwind ramp. Colored, diffuse
+   * shadows read as more "designed" and less like a default framework
+   * drop-shadow. -up lifts a bar pinned to the bottom of a panel. */
+  --shadow-sm: 0 1px 2px 0 color-mix(in srgb, var(--gray-12) 4%, transparent);
+  --shadow:
+    0 1px 3px 0 color-mix(in srgb, var(--gray-12) 6%, transparent),
+    0 1px 2px -1px color-mix(in srgb, var(--gray-12) 4%, transparent);
+  --shadow-md:
+    0 4px 8px -2px color-mix(in srgb, var(--gray-12) 8%, transparent),
+    0 2px 4px -2px color-mix(in srgb, var(--gray-12) 5%, transparent);
+  --shadow-lg:
+    0 12px 20px -6px color-mix(in srgb, var(--gray-12) 10%, transparent),
+    0 4px 8px -4px color-mix(in srgb, var(--gray-12) 6%, transparent);
+  --shadow-xl:
+    0 20px 32px -8px color-mix(in srgb, var(--gray-12) 14%, transparent),
+    0 8px 12px -6px color-mix(in srgb, var(--gray-12) 8%, transparent);
+  --shadow-2xl: 0 28px 56px -16px color-mix(in srgb, var(--gray-12) 28%, transparent);
+  --shadow-up: 0 -8px 20px -8px color-mix(in srgb, var(--gray-12) 8%, transparent);
 
   /* Border Radius — rounder across the board for a friendlier, more
    * consumer-app feel (kept in step with the Theme radius="large" in the
@@ -129,96 +140,39 @@
   --animate-loading-bar: loading-bar 2s ease-in-out infinite;
 }
 
-/* =========================================================================
- * COLOR SCHEMES — alternates to the "Modern" default above, switched at
- * runtime by the app's ColorSchemeProvider setting `data-theme` on <html>. Each
- * block only sets the brand color (the other rungs, and all the
- * semantic/neutral tokens, follow), so every component built on bg-primary/text-primary/
- * border-primary-subtle/etc. — cards, buttons, badges, gradients, and every
- * JSONForms field's focus ring — repaints automatically.
- * Radix's own components read them too: the accent block below derives
- * Radix's accent scale from --color-primary.
- * ========================================================================= */
-
-/* Maritime Trade — navy & slate, a conventional customs/trade-portal look. */
-:root[data-theme='maritime'] {
-  --color-primary: #1e3a8a;
-}
-
-/* Ceylon Regal — maroon & gold, echoing the national flag's lion panel. */
-:root[data-theme='regal'] {
-  --color-primary: #7a2430;
-}
-
-/* Emerald Trade — deep teal-green. */
-:root[data-theme='emerald'] {
-  --color-primary: #0f6a52;
-}
-
-/* =========================================================================
- * RADIX ACCENT = THE SCHEME'S BRAND. Radix ships only named palettes, so the
- * accentColor a scheme picks ('blue' for Maritime's navy) is only the nearest
- * hue, and its solid buttons failed contrast (white on Radix blue is 3.26:1;
- * on Maritime's navy it is 10.36:1). Deriving the whole accent scale from
- * --color-primary paints buttons, checkboxes, focus rings and every JSONForms
- * control in the brand color, in every scheme. Components given their own
- * color (color="red") keep that palette.
- *
- * The hover and dark rungs are the brand darkened toward black, so a scheme
- * sets only --color-primary.
- *
- * `:root .radix-themes` outranks Radix's `[data-accent-color='…']` rule on
- * the Theme root without !important; every Theme root (the app's and each
- * dialog portal's) carries the class. The scale is also set on <html>
- * (`html:root`, which outranks Radix's own `:root` rule for the status steps
- * below), because the Tailwind color tokens resolve there.
- * ========================================================================= */
-html:root,
-:root .radix-themes {
-  --accent-1: color-mix(in srgb, var(--color-primary) 1%, white);
-  --accent-2: color-mix(in srgb, var(--color-primary) 3%, white);
-  --accent-3: color-mix(in srgb, var(--color-primary) 7%, white);
-  --accent-4: color-mix(in srgb, var(--color-primary) 11%, white);
-  --accent-5: color-mix(in srgb, var(--color-primary) 16%, white);
-  --accent-6: color-mix(in srgb, var(--color-primary) 22%, white);
-  --accent-7: color-mix(in srgb, var(--color-primary) 30%, white);
-  --accent-8: color-mix(in srgb, var(--color-primary) 45%, white);
-  --accent-9: var(--color-primary);
-  --accent-10: color-mix(in srgb, var(--color-primary) 85%, black);
-  /* Text on the accent's own soft tints: the hover rung, for 4.5:1 in every scheme. */
-  --accent-11: var(--accent-10);
-  --accent-12: color-mix(in srgb, var(--color-primary) 45%, black);
-  --accent-a1: color-mix(in srgb, var(--color-primary) 1%, transparent);
-  --accent-a2: color-mix(in srgb, var(--color-primary) 3%, transparent);
-  --accent-a3: color-mix(in srgb, var(--color-primary) 7%, transparent);
-  --accent-a4: color-mix(in srgb, var(--color-primary) 11%, transparent);
-  --accent-a5: color-mix(in srgb, var(--color-primary) 16%, transparent);
-  --accent-a6: color-mix(in srgb, var(--color-primary) 22%, transparent);
-  --accent-a7: color-mix(in srgb, var(--color-primary) 30%, transparent);
-  --accent-a8: color-mix(in srgb, var(--color-primary) 45%, transparent);
-  --accent-a9: var(--color-primary);
-  --accent-a10: var(--accent-10);
-  --accent-a11: var(--accent-10);
-  --accent-a12: var(--accent-12);
-  --accent-contrast: #ffffff;
-  --accent-surface: color-mix(in srgb, var(--color-primary) 4%, white);
-  --accent-indicator: var(--color-primary);
-  --accent-track: var(--color-primary);
-
-  /* Status text (soft badges, colored Text). Radix's step 11 for these hues
-   * reads at 3.6-4.3:1 on a soft badge over the page background; each is
-   * darkened just enough for 4.5:1 there, keeping its hue. The -strong
-   * Tailwind tokens are these steps too. */
-  --blue-11: #0b66b6;
-  --blue-a11: #0b66b6;
-  --orange-11: #b04300;
-  --orange-a11: #b04300;
-  --green-11: #1b734c;
-  --green-a11: #1b734c;
-  --red-11: #c1262b;
-  --red-a11: #c1262b;
-  --amber-11: #995a00;
-  --amber-a11: #995a00;
+/* Radix defines --accent-N only on a Theme root, not on :root where the
+ * tokens above resolve. This points them at Radix's default accent, indigo,
+ * so the tokens hold with no theme, or one that names no accent; a theme's
+ * own rule outranks it. */
+:root {
+  --accent-1: var(--indigo-1);
+  --accent-2: var(--indigo-2);
+  --accent-3: var(--indigo-3);
+  --accent-4: var(--indigo-4);
+  --accent-5: var(--indigo-5);
+  --accent-6: var(--indigo-6);
+  --accent-7: var(--indigo-7);
+  --accent-8: var(--indigo-8);
+  --accent-9: var(--indigo-9);
+  --accent-10: var(--indigo-10);
+  --accent-11: var(--indigo-11);
+  --accent-12: var(--indigo-12);
+  --accent-a1: var(--indigo-a1);
+  --accent-a2: var(--indigo-a2);
+  --accent-a3: var(--indigo-a3);
+  --accent-a4: var(--indigo-a4);
+  --accent-a5: var(--indigo-a5);
+  --accent-a6: var(--indigo-a6);
+  --accent-a7: var(--indigo-a7);
+  --accent-a8: var(--indigo-a8);
+  --accent-a9: var(--indigo-a9);
+  --accent-a10: var(--indigo-a10);
+  --accent-a11: var(--indigo-a11);
+  --accent-a12: var(--indigo-a12);
+  --accent-contrast: var(--indigo-contrast);
+  --accent-surface: var(--indigo-surface);
+  --accent-indicator: var(--indigo-indicator);
+  --accent-track: var(--indigo-track);
 }
 
 /* Animation Keyframes */

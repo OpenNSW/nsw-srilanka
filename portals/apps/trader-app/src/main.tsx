@@ -11,12 +11,15 @@ import { TranslatedUiLabels } from './components/TranslatedUiLabels'
 import { logger } from './utils/logger'
 import { AuthProvider } from 'react-oidc-context'
 import { userManager } from './oidcUserManager'
-import { initAppConfig } from './config'
-import { ColorSchemeProvider } from './services/ColorSchemeContext'
+import { appConfig, initAppConfig } from './config'
+import { applyTheme } from '@portals/theme'
+import { appTheme } from './theme'
 import { ThemedShell } from './components/ThemedShell'
 
 initAppConfig()
   .then(() => {
+    // Before the first render, so nothing paints in another theme first.
+    applyTheme(appTheme(appConfig.branding.theme))
     // A data router, not <BrowserRouter>: useBlocker (the unsaved-form guard)
     // only works under one. App keeps its own <Routes>, under a single splat.
     const router = createBrowserRouter([{ path: '*', element: <App /> }])
@@ -32,13 +35,11 @@ initAppConfig()
               window.history.replaceState({}, document.title, window.location.pathname)
             }}
           >
-            <ColorSchemeProvider>
-              <ThemedShell>
-                <TranslatedUiLabels>
-                  <RouterProvider router={router} />
-                </TranslatedUiLabels>
-              </ThemedShell>
-            </ColorSchemeProvider>
+            <ThemedShell>
+              <TranslatedUiLabels>
+                <RouterProvider router={router} />
+              </TranslatedUiLabels>
+            </ThemedShell>
           </AuthProvider>
         </ErrorBoundary>
       </StrictMode>,

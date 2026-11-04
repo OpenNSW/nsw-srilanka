@@ -714,8 +714,6 @@ frontend:
         title: "NSW Administrator"
         description: "Administers consignments across all traders."
     SHOW_AUTOFILL_BUTTON: "false"
-    # "true" shows the demo color-scheme picker in the footer; leave it off in a real deployment.
-    SHOW_COLOR_SCHEME_SWITCHER: "false"
     # "tnsw" (default) lists consignments; "agency" lists an agency's cases instead.
     APP_MODE: "tnsw"
 
@@ -735,6 +733,13 @@ frontend:
       - key: support
         url: "https://gov.example.lk/support"
     copyrightNotice: "© 2026 Trader Portal. All rights reserved."
+    # Optional colors; without them, the portal's default navy. See the
+    # chart README's "Frontend branding" section.
+    # theme:
+    #   accent: blue
+    #   gray: slate
+    #   colors:
+    #     accent-9: "#1e3a8a"
 
   # Expose the portal. Enable the one that matches your platform.
   #

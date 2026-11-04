@@ -313,7 +313,6 @@ const en = {
     },
 
     common: {
-      colorScheme: 'Color scheme',
       breadcrumb: 'Breadcrumb',
       copied: 'Copied',
       copyNamed: 'Copy {{name}}',

@@ -1,24 +1,15 @@
 import type { ReactNode } from 'react'
 import { Theme } from '@radix-ui/themes'
-import { useColorScheme } from '@/services/useColorScheme'
+import { THEME_ROOT_PROPS } from '@portals/theme'
 
-// Reads the active color scheme so <Theme accentColor> stays in sync with
-// the CSS variable overrides the scheme applies (see ColorSchemeContext +
-// the `[data-theme]` blocks in @portals/ui's theme.css). Split out from main.tsx because
-// it needs to be inside ColorSchemeProvider to read the context, while
-// <Theme> itself needs to wrap everything else in the app.
+// Radix's root for the whole app. @portals/theme sets every --accent-* and
+// --gray-* variable on each Theme root from the deployment's branding.json,
+// outranking the scale Radix would pick; THEME_ROOT_PROPS are the props it
+// needs on the root. Components given their own color (color="red") keep
+// that palette.
 export function ThemedShell({ children }: { children: ReactNode }) {
-  const { scheme } = useColorScheme()
-
   return (
-    <Theme
-      accentColor={scheme.accentColor}
-      grayColor="slate"
-      radius="large"
-      scaling="105%"
-      panelBackground="solid"
-      appearance="light"
-    >
+    <Theme {...THEME_ROOT_PROPS} radius="large" scaling="105%" panelBackground="solid" appearance="light">
       {children}
     </Theme>
   )

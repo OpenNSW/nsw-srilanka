@@ -307,7 +307,6 @@ const ta: Locale = {
       },
     },
     common: {
-      colorScheme: 'வர்ணத் திட்டம்',
       breadcrumb: 'பிரட்கிரம்ப் (Breadcrumb)',
       copied: 'பிரதிசெய்யப்பட்டது',
       copyNamed: 'பிரதி {{name}}',
