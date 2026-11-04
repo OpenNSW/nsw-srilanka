@@ -46,9 +46,11 @@ const (
 	errInvalidPayload       = "submission does not match the form"
 )
 
-// TaskFetcher is the narrow surface HandleGetTask needs from the task store.
+// TaskFetcher is the narrow surface HandleGetTask needs from the task store. GetTask's
+// error wraps store.ErrTaskNotFound when there is no such task; any other error means the
+// task could not be read.
 type TaskFetcher interface {
-	GetTask(ctx context.Context, taskID string) (store.TaskRecord, bool)
+	GetTask(ctx context.Context, taskID string) (store.TaskRecord, error)
 }
 
 type HTTPHandler struct {
@@ -127,9 +129,13 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	record, ok := h.Store.GetTask(ctx, taskID)
-	if !ok {
+	record, err := h.Store.GetTask(ctx, taskID)
+	if errors.Is(err, store.ErrTaskNotFound) {
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+		return
+	}
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to read task", err, "taskId", taskID)
 		return
 	}
 
@@ -414,9 +420,14 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, log
 // record both carry. On failure it writes the response and returns false.
 func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskID, stepID string, payload map[string]any, auditAttrs []any) bool {
 	ctx := r.Context()
-	record, ok := h.Store.GetTask(ctx, taskID)
-	if !ok {
+	record, err := h.Store.GetTask(ctx, taskID)
+	if errors.Is(err, store.ErrTaskNotFound) {
 		h.rejectFiles(w, r, taskID, http.StatusNotFound, errTaskNotFound, "task_not_found", auditAttrs...)
+		return false
+	}
+	if err != nil {
+		h.auditTaskUpdate(ctx, taskID, true, taskAuditMeta(http.StatusInternalServerError, "task_read_failed", auditAttrs...))
+		httputil.InternalServerError(w, r, "tasks: failed to read task", err, "taskId", taskID)
 		return false
 	}
 	// Which fields hold files depends on the step. Core rejects a submission
@@ -429,7 +440,7 @@ func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskI
 	}
 
 	p, _ := authn.FromContext(ctx)
-	err := h.Files.FromCaller(ctx, record, payload, p)
+	err = h.Files.FromCaller(ctx, record, payload, p)
 	switch {
 	case err == nil:
 		return true

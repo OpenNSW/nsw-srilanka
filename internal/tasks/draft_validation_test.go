@@ -30,13 +30,13 @@ type memTaskStore struct {
 	record store.TaskRecord
 }
 
-func (s *memTaskStore) GetTask(_ context.Context, taskID string) (store.TaskRecord, bool) {
+func (s *memTaskStore) GetTask(_ context.Context, taskID string) (store.TaskRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if taskID != s.record.TaskID {
-		return store.TaskRecord{}, false
+		return store.TaskRecord{}, store.ErrTaskNotFound
 	}
-	return s.record.DeepCopy(), true
+	return s.record.DeepCopy(), nil
 }
 
 func (s *memTaskStore) WriteDraft(_ context.Context, taskID, stepID string, seq int64, data map[string]any) (int64, error) {
@@ -61,10 +61,10 @@ func (s *memTaskStore) PersistSubmission(_ context.Context, taskID, stepID strin
 
 // The task manager calls none of these on a submission or a draft.
 func (s *memTaskStore) InitTask(context.Context, store.TaskRecord) error { panic("not used") }
-func (s *memTaskStore) GetTaskByWorkflowID(context.Context, string) (store.TaskRecord, bool) {
+func (s *memTaskStore) GetTaskByWorkflowID(context.Context, string) (store.TaskRecord, error) {
 	panic("not used")
 }
-func (s *memTaskStore) GetTasks(context.Context, store.TaskFilter) []store.TaskRecord {
+func (s *memTaskStore) GetTasks(context.Context, store.TaskFilter) ([]store.TaskRecord, error) {
 	panic("not used")
 }
 func (s *memTaskStore) ClaimStep(context.Context, string, store.StepClaim) (int64, error) {

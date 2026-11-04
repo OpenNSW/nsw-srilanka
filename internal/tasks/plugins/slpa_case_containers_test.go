@@ -3,6 +3,8 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,15 +14,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeCaseTasks answers with the tasks it holds, and records the filter asked with.
+// fakeCaseTasks answers with the tasks it holds, and records the filter asked with and
+// the tasks read. Like core's store, a listing leaves each task's Data out.
 type fakeCaseTasks struct {
-	tasks  []store.TaskRecord
-	filter store.TaskFilter
+	tasks   []store.TaskRecord
+	filter  store.TaskFilter
+	read    []string
+	listErr error
+	readErr error
 }
 
-func (f *fakeCaseTasks) GetTasks(_ context.Context, filter store.TaskFilter) []store.TaskRecord {
+func (f *fakeCaseTasks) GetTasks(_ context.Context, filter store.TaskFilter) ([]store.TaskRecord, error) {
 	f.filter = filter
-	return f.tasks
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]store.TaskRecord, 0, len(f.tasks))
+	for _, t := range f.tasks {
+		t.Data = nil
+		out = append(out, t)
+	}
+	return out, nil
+}
+
+func (f *fakeCaseTasks) GetTask(_ context.Context, taskID string) (store.TaskRecord, error) {
+	f.read = append(f.read, taskID)
+	if f.readErr != nil {
+		return store.TaskRecord{}, f.readErr
+	}
+	for _, t := range f.tasks {
+		if t.TaskID == taskID {
+			return t, nil
+		}
+	}
+	return store.TaskRecord{}, store.ErrTaskNotFound
 }
 
 const caseContainersConfig = `{
@@ -46,6 +73,9 @@ func ecdnTask(minutes int, dummies ...string) store.TaskRecord {
 
 func runCaseContainers(t *testing.T, tasks ...store.TaskRecord) (*fakeCaseTasks, []any) {
 	t.Helper()
+	for i := range tasks {
+		tasks[i].TaskID = fmt.Sprintf("task-%d", i)
+	}
 	source := &fakeCaseTasks{tasks: tasks}
 	ctx := plugins.PluginContext{
 		Context:         context.Background(),
@@ -105,9 +135,32 @@ func TestSLPACaseContainers_ListsEachDummyOnce(t *testing.T) {
 
 // Nothing registered yet still opens the form: the trader types the number.
 func TestSLPACaseContainers_RecordsAnEmptyListForACaseWithNoContainers(t *testing.T) {
-	_, got := runCaseContainers(t, task("slpa-sundry-order-flow", 0, map[string]any{}))
+	source, got := runCaseContainers(t, task("slpa-sundry-order-flow", 0, map[string]any{}))
 
 	assert.Empty(t, got)
+	assert.Empty(t, source.read, "only the registration and pairing tasks' data is read")
+}
+
+// Tasks that could not be read fail the step rather than show an empty list, which
+// would read as a case with nothing registered.
+func TestSLPACaseContainers_FailsWhenTheTasksCannotBeRead(t *testing.T) {
+	for name, source := range map[string]*fakeCaseTasks{
+		"listing": {listErr: errors.New("db down")},
+		"a task":  {tasks: []store.TaskRecord{{TaskID: "ecdn", TaskTemplateID: "slpa-ecdn-submission-flow"}}, readErr: errors.New("db down")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := plugins.PluginContext{
+				Context:         context.Background(),
+				Record:          &store.TaskRecord{TaskID: "sundry-1", CaseID: "consignment-1"},
+				OutputNamespace: "containers",
+			}
+
+			err := NewSLPACaseContainersPlugin(source).Execute(ctx, json.RawMessage(caseContainersConfig))
+
+			require.ErrorContains(t, err, "db down")
+			assert.Nil(t, ctx.Record.Data)
+		})
+	}
 }
 
 func TestSLPACaseContainers_RequiresItsConfig(t *testing.T) {

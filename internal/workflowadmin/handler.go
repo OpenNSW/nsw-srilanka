@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
@@ -394,8 +395,12 @@ func (h *Handler) auditTaskWorkflowEvent(ctx context.Context, e nswaudit.Event) 
 	}
 	caseID := ""
 	if h.svc.taskStore != nil {
-		if record, ok := h.svc.taskStore.GetTaskByWorkflowID(ctx, e.TargetID); ok {
+		record, err := h.svc.taskStore.GetTaskByWorkflowID(ctx, e.TargetID)
+		switch {
+		case err == nil:
 			caseID = record.CaseID
+		case !errors.Is(err, store.ErrTaskNotFound):
+			slog.WarnContext(ctx, "workflowadmin: case unavailable for task workflow audit", "workflowId", e.TargetID, "error", err)
 		}
 	}
 	h.auditFlowEventWithCaseID(ctx, e, caseID)

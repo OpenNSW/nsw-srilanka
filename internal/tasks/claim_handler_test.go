@@ -140,6 +140,7 @@ func TestHandleClaimTask_RefusedBeforeTheManager(t *testing.T) {
 		{"client", pendingHSCodeTask(), client, http.StatusForbidden, errClaimUsersOnly},
 		{"user without a user id", pendingHSCodeTask(), &noUserID, http.StatusUnauthorized, errAuthenticationReq},
 		{"missing task", &fakeTaskFetcher{}, chaUser(), http.StatusNotFound, errTaskNotFound},
+		{"task could not be read", &fakeTaskFetcher{err: errors.New("db down")}, chaUser(), http.StatusInternalServerError, ""},
 		{"cannot read the task", pendingHSCodeTask(), &notOwner, http.StatusNotFound, errTaskNotFound},
 		{"read policy excludes the role", traderOnlyTask(), deniedByPolicy, http.StatusNotFound, errTaskNotFound},
 	}

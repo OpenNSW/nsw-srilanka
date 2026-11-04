@@ -15,10 +15,12 @@ import (
 // SLPA, for a form that orders something against one of them.
 const TaskTypeSLPACaseContainers = "SLPA_CASE_CONTAINERS"
 
-// CaseTasks lists tasks; the plugin passes only a CaseID, so it gets every task of the
-// case whatever its read roles. core's task store satisfies it.
+// CaseTasks lists and reads tasks; the plugin passes only a CaseID, so it gets every task
+// of the case whatever its read roles. A listing leaves each task's Data out, so the plugin
+// reads the tasks it needs the data of one by one. core's task store satisfies it.
 type CaseTasks interface {
-	GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord
+	GetTasks(ctx context.Context, filter store.TaskFilter) ([]store.TaskRecord, error)
+	GetTask(ctx context.Context, taskID string) (store.TaskRecord, error)
 }
 
 // SLPACaseContainersPlugin reads the consignment's containers from the case's
@@ -72,7 +74,10 @@ func (p *SLPACaseContainersPlugin) Execute(ctx pluginContext, configRaw json.Raw
 
 	var tasks []store.TaskRecord
 	if ctx.Record.CaseID != "" {
-		tasks = p.tasks.GetTasks(ctx.Context, store.TaskFilter{CaseID: ctx.Record.CaseID})
+		var err error
+		if tasks, err = p.containerTasks(ctx.Context, ctx.Record.CaseID, cfg); err != nil {
+			return fmt.Errorf("slpa_case_containers: %w", err)
+		}
 	}
 
 	if ctx.Record.Data == nil {
@@ -82,6 +87,26 @@ func (p *SLPACaseContainersPlugin) Execute(ctx pluginContext, configRaw json.Raw
 		"containers": caseContainers(tasks, cfg),
 	}
 	return nil
+}
+
+// containerTasks returns the case's registration and pairing tasks, with their data.
+func (p *SLPACaseContainersPlugin) containerTasks(ctx context.Context, caseID string, cfg slpaCaseContainersConfig) ([]store.TaskRecord, error) {
+	listed, err := p.tasks.GetTasks(ctx, store.TaskFilter{CaseID: caseID})
+	if err != nil {
+		return nil, fmt.Errorf("list tasks of case %s: %w", caseID, err)
+	}
+	var tasks []store.TaskRecord
+	for _, t := range listed {
+		if t.TaskTemplateID != cfg.RegistrationTemplateID && !slices.Contains(cfg.PairingTemplateIDs, t.TaskTemplateID) {
+			continue
+		}
+		full, err := p.tasks.GetTask(ctx, t.TaskID)
+		if err != nil {
+			return nil, fmt.Errorf("read task %s: %w", t.TaskID, err)
+		}
+		tasks = append(tasks, full)
+	}
+	return tasks, nil
 }
 
 // caseContainers pairs each registered dummy number with its real container.

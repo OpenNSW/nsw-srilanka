@@ -16,15 +16,19 @@ type MockTaskStore struct {
 	mock.Mock
 }
 
-func (m *MockTaskStore) GetTaskByWorkflowID(ctx context.Context, workflowID string) (store.TaskRecord, bool) {
+func (m *MockTaskStore) GetTaskByWorkflowID(ctx context.Context, workflowID string) (store.TaskRecord, error) {
 	args := m.Called(ctx, workflowID)
-	return args.Get(0).(store.TaskRecord), args.Bool(1)
+	return args.Get(0).(store.TaskRecord), args.Error(1)
 }
 
-func (m *MockTaskStore) GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord {
+// GetTasks returns the tasks the expectation was set up with, and its error when it was given one.
+func (m *MockTaskStore) GetTasks(ctx context.Context, filter store.TaskFilter) ([]store.TaskRecord, error) {
 	args := m.Called(ctx, filter)
 	tasks, _ := args.Get(0).([]store.TaskRecord)
-	return tasks
+	if len(args) > 1 {
+		return tasks, args.Error(1)
+	}
+	return tasks, nil
 }
 
 // MockWM implements workflow.Manager for testing.

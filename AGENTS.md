@@ -31,6 +31,8 @@ Use Go 1.27+, Docker with BuildKit and Compose v2, Node.js 24.15+, and pnpm 12.1
 
 Follow `.editorconfig`: tabs for Go and Makefiles; two spaces for TypeScript, JSON, and YAML. Use `gofmt`, goimports, and `.golangci.yml`. Frontend Prettier uses single quotes, no semicolons, and trailing commas. Use PascalCase React components and `useX` hook names. Follow existing package boundaries and ESLint import rules. Do not add license headers.
 
+Write comments about the code as it is now, not about how it got there. Don't mention earlier behavior, where code used to live, what was renamed, or the issues and PRs that changed it, and don't use words like "now", "no longer" or "used to". That history belongs in the commit message and the PR. A reference to an open issue for planned work belongs in a `TODO(#NNN)` comment.
+
 ## API Contracts
 
 The OpenAPI specs in `api/*.openapi.yaml` are the HTTP API's contract; nothing generates them, so they drift unless edited by hand. Change the spec in the same PR as any change to a path, parameter, request or response field, or status code. A field can appear in several schemas and specs (e.g. a summary and a detail DTO, or the consignment and admin APIs), so grep `api/` for its name and update every one. Note a removed or renamed field in the PR's Deployment Notes and mark it breaking with `!`.

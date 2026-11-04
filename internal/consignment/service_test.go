@@ -582,6 +582,16 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_NilStore(t *testing.T) 
 	assert.Contains(t, err.Error(), "task store not initialized")
 }
 
+// Tasks that could not be read fail the detail rather than show a consignment with none.
+func TestConsignmentService_buildNodeDTOsFromTaskRecords_FailedRead(t *testing.T) {
+	mockTaskStore := new(MockTaskStore)
+	svc := mustNewService(t, nil, nil, nil, nil, nil, mockTaskStore)
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: "cons-1"}).Return(nil, errors.New("db down"))
+
+	_, err := svc.buildNodeDTOsFromTaskRecords(context.Background(), "cons-1")
+	assert.ErrorContains(t, err, "db down")
+}
+
 func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
 	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{

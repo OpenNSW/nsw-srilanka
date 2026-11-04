@@ -222,7 +222,9 @@ const hsCodeTaskReadRoles = `["cha", "trader"]`
 type fakeTaskFetcher struct {
 	record store.TaskRecord
 	found  bool
-	calls  int
+	// err, when set, is a failed read: GetTask returns it whatever found says.
+	err   error
+	calls int
 	// renderConfig is the render config of record's task template, testTaskTemplateID.
 	renderConfig string
 	// readRoles is that task template's read.roles, as a JSON array, or "" for none.
@@ -261,9 +263,15 @@ func (f *fakeTaskFetcher) renderConfigOf(t *testing.T) (RenderConfigOf, *artifac
 	}, set
 }
 
-func (f *fakeTaskFetcher) GetTask(context.Context, string) (store.TaskRecord, bool) {
+func (f *fakeTaskFetcher) GetTask(_ context.Context, taskID string) (store.TaskRecord, error) {
 	f.calls++
-	return f.record, f.found
+	if f.err != nil {
+		return store.TaskRecord{}, f.err
+	}
+	if !f.found {
+		return store.TaskRecord{}, fmt.Errorf("%w: %s", store.ErrTaskNotFound, taskID)
+	}
+	return f.record, nil
 }
 
 type stubTemplates struct{ calls int }
@@ -380,6 +388,16 @@ func TestHandleGetTask_MissingTask(t *testing.T) {
 
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("got %d, want 404", recorder.Code)
+	}
+}
+
+// A task that could not be read is a server error, so the client retries, not a 404.
+func TestHandleGetTask_FailedReadIsNotMissing(t *testing.T) {
+	in := ownerInput("Trader", "trader")
+	recorder := getTask(t, getTaskHandler(t, &fakeTaskFetcher{err: errors.New("db down")}, &stubTemplates{}), &in)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d, want 500", recorder.Code)
 	}
 }
 
@@ -862,6 +880,7 @@ func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 		wantStatus int
 	}{
 		{"missing task", &fakeTaskFetcher{}, "step-1", map[string]any{}, http.StatusNotFound},
+		{"task could not be read", &fakeTaskFetcher{err: errors.New("db down")}, "step-1", map[string]any{}, http.StatusInternalServerError},
 		{"step no longer active", pendingFileTask(), "step-0", map[string]any{"invoice": alicesRef}, http.StatusConflict},
 		{"someone else's file", pendingFileTask(), "step-1", map[string]any{"invoice": alicesRef}, http.StatusForbidden},
 		{"a raw storage key", pendingFileTask(), "step-1", map[string]any{"invoice": "stored-invoice-key"}, http.StatusBadRequest},
