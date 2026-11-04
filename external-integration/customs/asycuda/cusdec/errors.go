@@ -11,6 +11,11 @@ var ErrWorkflowNotFoundByEdgeID = errors.New("workflow not found by edgeId")
 // as soon as SLC Edge accepts the submission, so the caller should retry.
 var ErrDeclarationNotRecorded = errors.New("no declaration recorded for edgeId")
 
+// ErrTaskNotParked indicates an integration result arrived for a declaration
+// whose workflow has not yet parked the review task it answers. Transient: the
+// declaration is left SUBMITTED, so a retry completes the task once it waits.
+var ErrTaskNotParked = errors.New("external review task not parked yet")
+
 // ErrCusdecNotFoundByRef indicates no Customs Declaration matches the given reference.
 // This can be a transient condition if an event callback arrives before the integration
 // result callback has finished processing — the caller should retry.

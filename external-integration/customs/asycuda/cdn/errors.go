@@ -22,7 +22,7 @@ var ErrInvalidCallbackPayload = errors.New("invalid callback payload")
 
 // ErrTaskNotParked indicates a callback arrived for a dispatch note whose
 // workflow has not yet parked the task it answers. Transient: answered with a
-// 503, so SLC Edge retries (§2) once the task is waiting.
+// 503, and retried by SLC Edge (§2) and by the handler until the task waits.
 var ErrTaskNotParked = errors.New("dispatch note task not parked yet")
 
 // ErrCaseNotRecorded indicates the dispatch note a notification names was never

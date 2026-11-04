@@ -1,6 +1,7 @@
 package asycuda
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -37,6 +38,7 @@ type Handler struct {
 	auditor       nswaudit.Auditor
 	declarations  cusdec.DeclarationRepository
 	dispatchNotes cdn.DispatchNoteRepository
+	retries       *taskRetries
 }
 
 // NewHandler creates a new central SLCE webhook handler.
@@ -44,6 +46,7 @@ func NewHandler(cusdecService cusdec.WebhookService, cdnService cdn.CDNWebhookSe
 	return &Handler{
 		cusdecService: cusdecService,
 		cdnService:    cdnService,
+		retries:       newTaskRetries(taskRetryBackoff),
 	}
 }
 
@@ -148,6 +151,19 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 			slog.WarnContext(r.Context(), "slce: CusDec integration result arrived before its submission was recorded; retry",
 				"edge_id", req.EdgeID)
 			httputil.Error(w, r, http.StatusServiceUnavailable, errDeclarationNotFoundRetry)
+			return
+		}
+		if errors.Is(err, cusdec.ErrTaskNotParked) {
+			slog.WarnContext(r.Context(), "slce: CusDec integration result arrived before its task was waiting; retry",
+				"edge_id", req.EdgeID)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			h.retries.schedule(r.Context(), "CUSDEC_INTEGRATED "+req.EdgeID, func(ctx context.Context) error {
+				err := h.cusdecService.ProcessIntegrationResult(ctx, req)
+				if errors.Is(err, cusdec.ErrDuplicateIntegrationResult) {
+					return nil
+				}
+				return err
+			}, isCusdecTaskNotParked)
 			return
 		}
 		if errors.Is(err, cusdec.ErrWorkflowNotFoundByEdgeID) {
@@ -306,6 +322,9 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 			slog.WarnContext(r.Context(), "slce: CDN integration result arrived before its task was waiting; retry",
 				"edge_id", req.Payload.EdgeID)
 			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			h.retries.schedule(r.Context(), "CDN_INTEGRATED "+req.Payload.EdgeID, func(ctx context.Context) error {
+				return h.cdnService.ProcessIntegrationResult(ctx, req)
+			}, isCDNTaskNotParked)
 			return
 		}
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByEdgeID) {
@@ -346,6 +365,9 @@ func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request
 			slog.WarnContext(r.Context(), "slce: CDN acknowledgment arrived before its task was waiting; retry",
 				"cdn_ref", req.Payload.CDNRef)
 			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			h.retries.schedule(r.Context(), "CDN_ACKNOWLEDGED "+req.Payload.CDNRef.String(), func(ctx context.Context) error {
+				return h.cdnService.ProcessAcknowledgment(ctx, req)
+			}, isCDNTaskNotParked)
 			return
 		}
 		httputil.InternalServerError(w, r, "slce: failed to process CDN acknowledgment", err, "cdn_ref", req.Payload.CDNRef)
@@ -421,6 +443,9 @@ func (h *Handler) handleCDNCancellation(w http.ResponseWriter, r *http.Request, 
 			slog.WarnContext(r.Context(), "slce: CDN cancellation arrived before its task was waiting; retry",
 				"cdn_ref", ref)
 			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			h.retries.schedule(r.Context(), cdn.EventCDNCancelled+" "+ref.String(), func(ctx context.Context) error {
+				return h.cdnService.ProcessCancellation(ctx, req)
+			}, isCDNTaskNotParked)
 			return
 		}
 		httputil.InternalServerError(w, r, "slce: failed to process CDN cancellation", err, "cdn_ref", ref)
@@ -429,3 +454,9 @@ func (h *Handler) handleCDNCancellation(w http.ResponseWriter, r *http.Request, 
 
 	w.WriteHeader(http.StatusOK)
 }
+
+// isCusdecTaskNotParked and isCDNTaskNotParked tell a retry to keep going: the
+// task the callback answers is still not waiting.
+func isCusdecTaskNotParked(err error) bool { return errors.Is(err, cusdec.ErrTaskNotParked) }
+
+func isCDNTaskNotParked(err error) bool { return errors.Is(err, cdn.ErrTaskNotParked) }
