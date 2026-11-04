@@ -6,6 +6,54 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-beta] - 2026-11-04
+
+This is the first release for production, published as a beta of 1.0.0. A new deployment starts from this release's example config, Helm values and `idp/bootstrap/`, and from an empty database, which the single `000001` migration builds. The upgrade notes below are for a deployment already on 0.15.0. This release removes `GET /api/v1/chas` and the `cha:read` scope, and adds a dark appearance to the Trader Portal.
+
+### Upgrade notes
+
+#### Remove `cha:read` ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106))
+
+- `GET /api/v1/chas` is removed and answers 404. No portal or integration calls it. A client that does should use `GET /api/v1/companies?has_cha=true`.
+- The `cha:read` scope is removed. In each deployment, in this order:
+  1. Remove `cha:read` from the Trader Portal's `IDP_SCOPES` (`config.js`; Helm: `frontend.config`).
+  2. In the IdP, remove the `cha` resource from the NSW API resource server, and the `cha:read` permission from the `Trader` and `CHA` roles and from the TraderApp application. A live IdP does not read `idp/bootstrap/`, so change it by hand.
+- A new deployment from this release's `idp/bootstrap/` and examples never has the scope.
+
+#### Dark mode (optional) ([#1107](https://github.com/OpenNSW/nsw-srilanka/pull/1107))
+
+- The Trader Portal follows each user's OS appearance by default, so a user whose OS is in dark mode sees it dark. There is no deployment setting for the default, and each user can switch.
+- `logoUrlDark` and `systemLogoUrlDark` in `branding.json` (Helm: `frontend.branding`) are new and optional. Set them when a logo doesn't read on a dark background. Without them, the dark appearance uses `logoUrl` and `systemLogoUrl`. Existing files keep working.
+- A deployment with its own `branding.theme` should check that white text on `accent-9` reads at 4.5:1 in dark too, and set `theme.dark.colors` if it doesn't. See the chart README's "Frontend branding" section.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`88f0e88`](https://github.com/OpenNSW/one-trade-artifacts/commit/88f0e8857ccaf206991ae93062b84817093c024b) (4 November 2026), for TNSW and for each agency. It holds one change since the 0.15.0 pin: [one-trade-artifacts#343](https://github.com/OpenNSW/one-trade-artifacts/pull/343), the CusDec download is written in ASYCUDA's order and with the fields SLTB requires, which are the exporter's name, the number of items and the destination country name. SLTB's system answers "invalid format" to a download without them.
+
+#### Local Docker Compose ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106))
+
+- `make setup` doesn't overwrite an existing `portals/apps/trader-app/public/config.js`: remove `cha:read` from its `IDP_SCOPES`.
+
+### Added
+
+- **Dark appearance in the Trader Portal.** The portal follows the user's OS appearance, and a user can switch it. A deployment can set a dark logo with `logoUrlDark` and `systemLogoUrlDark`. ([#1107](https://github.com/OpenNSW/nsw-srilanka/pull/1107))
+
+### Changed
+
+- `GET /api/v1/chas` and the `cha:read` scope are removed. See the upgrade notes. ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106))
+
+### Known issues
+
+- With the `github` artifact loader, workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment, and they are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines exported over OTLP whatever `server.logLevel` is, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks, and authenticated SLC Edge callbacks, are audited. Payments and the storage module's own events are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Cancelling a Cargo Dispatch Note in TNSW does not cancel it in ASYCUDA World, which NSW has no call for: the note stays registered there. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
+
 ## [0.15.0] - 2026-11-04
 
 This release changes how TNSW starts an agency's flows and who owns a case. TNSW now starts them on a new route, `POST /api/v1/internal/cases/{caseId}/flows`, and `POST /api/v1/inject` is gone. A case is owned by the OU of its trader, its CHA and its agency, not by a company record. The 38 migrations are folded into one, so this release installs into an empty database only: drop and recreate the database of TNSW and of every agency, and nothing in them is carried over. TNSW, every agency, the pinned artifacts and each agency's new `flows.clients` section must change in the same deployment. The OTLP endpoint is validated more strictly, and the portal's colors, role menu and screens follow the new `branding.theme`, `IDP_ROLE_LABELS` and the token's scopes. It also adds the agency admin routes, case names from the trader company, SLPA containers on the sundry order, and a stored copy of SLPA's payment slip.
@@ -1380,7 +1428,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-beta...HEAD
+[1.0.0-beta]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...v1.0.0-beta
 [0.15.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.12.0...v0.13.0
