@@ -18,6 +18,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
 const (
@@ -255,6 +256,10 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	if !slices.Contains(p.Scopes, scopes.ConsignmentFlowWrite) {
+		consignment.StartableFlows = []FlowOption{}
+	}
+
 	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{
 		"callerCompanyId": userCompany.ID,
 	}))
@@ -366,6 +371,10 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 		}
 		httputil.InternalServerError(w, r, "failed to retrieve consignment", err)
 		return
+	}
+
+	if !slices.Contains(p.Scopes, scopes.ConsignmentFlowWrite) {
+		consignment.StartableFlows = []FlowOption{}
 	}
 
 	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{"view": "admin"}))

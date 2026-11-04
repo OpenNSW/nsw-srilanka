@@ -460,7 +460,8 @@ components:
           description: >-
             The flows the caller may start on the consignment with
             `POST /api/v1/consignments/{id}/flows`: those listed for a role
-            the caller owns it in.
+            the caller owns it in. Empty if the caller lacks
+            `consignment:flow:write`.
           items:
             $ref: '#/components/schemas/FlowOption'
 

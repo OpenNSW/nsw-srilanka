@@ -20,7 +20,6 @@ import {
   RefreshButton,
   Surface,
 } from '@portals/ui'
-import { Can } from '@/components/Can'
 
 interface ConsignmentDetailScreenProps {
   // Keeps this view's results apart from other views of the same consignment.
@@ -157,11 +156,7 @@ export function ConsignmentDetailScreen({
         </div>
       </Surface>
 
-      {canStartFlows && (
-        <Can I="consignment.startFlow">
-          <AuxiliaryServices flows={consignment.startableFlows ?? []} onStart={startFlow} />
-        </Can>
-      )}
+      {canStartFlows && <AuxiliaryServices flows={consignment.startableFlows ?? []} onStart={startFlow} />}
     </div>
   )
 }
