@@ -2,6 +2,7 @@ import type { MouseEvent } from 'react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { useUpload } from '@opennsw/jsonforms-renderers'
 import type { ZoneRendererProps } from '@/features/zone/types'
+import { CopyableCode } from './CopyableCode'
 
 // A template links to a task's file as [label](files:<ref>), where <ref> is the
 // file field's value: a reference the backend issued to this reader.
@@ -92,11 +93,7 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
           ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 text-foreground-muted">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 text-foreground-muted">{children}</ol>,
           li: ({ children }) => <li>{children}</li>,
-          code: ({ children }) => (
-            <code className="bg-app-surface-muted text-primary-strong px-1.5 py-0.5 rounded text-xs font-mono">
-              {children}
-            </code>
-          ),
+          code: ({ children }) => <CopyableCode>{children}</CopyableCode>,
           blockquote: ({ children }) => (
             <blockquote className="border-l-4 border-border pl-4 italic text-foreground-muted">{children}</blockquote>
           ),
