@@ -20,6 +20,8 @@ export interface UseConsignmentOptions {
   // Part of the query key, so views of one consignment through different endpoints (the
   // trader's and the admin's) never share a result.
   scope?: string
+  // The API filters startableFlows by this scope, so a grant change reloads the detail.
+  hasFlowWriteScope?: boolean
   // Defaults to the trader/CHA-facing, ownership-checked getConsignment.
   fetcher?: (consignmentId: string, signal?: AbortSignal) => Promise<ConsignmentDetail | null>
 }
@@ -40,7 +42,7 @@ export interface UseConsignmentResult {
 
 export function useConsignment(
   consignmentId: string | undefined,
-  { scope = 'trader', fetcher = getConsignment }: UseConsignmentOptions = {},
+  { scope = 'trader', fetcher = getConsignment, hasFlowWriteScope = false }: UseConsignmentOptions = {},
 ): UseConsignmentResult {
   // The step IDs shown when a flow was started, or null when no start is pending. Polling
   // continues until a step outside this set (the new flow's first) appears.
@@ -48,7 +50,7 @@ export function useConsignment(
   const [pollReason, setPollReason] = useState<PollReason | null>(null)
 
   const query = useQuery(
-    consignmentId ? ['consignment', scope, consignmentId] : null,
+    consignmentId ? ['consignment', scope, consignmentId, hasFlowWriteScope] : null,
     (signal) => fetcher(consignmentId!, signal),
     {
       // Called after every fetch, and with the last result after a failed poll, so a transient

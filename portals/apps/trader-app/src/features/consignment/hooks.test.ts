@@ -221,6 +221,27 @@ describe('useConsignment', () => {
     expect(result.current.refreshing).toBe(false)
   })
 
+  it('reloads startable flows when the flow-write grant changes', async () => {
+    const detail = makeConsignment(['n-1'])
+    const flows = [{ templateId: 'fee', label: 'Fee' }]
+    mockGetConsignment
+      .mockResolvedValueOnce({ ...detail, startableFlows: flows })
+      .mockResolvedValueOnce({ ...detail, startableFlows: [] })
+      .mockResolvedValueOnce({ ...detail, startableFlows: flows })
+
+    const { result, rerender } = renderHook(({ hasFlowWriteScope }) => useConsignment('c-1', { hasFlowWriteScope }), {
+      initialProps: { hasFlowWriteScope: true },
+    })
+    await waitFor(() => expect(result.current.consignment?.startableFlows).toEqual(flows))
+
+    rerender({ hasFlowWriteScope: false })
+    await waitFor(() => expect(result.current.consignment?.startableFlows).toEqual([]))
+
+    rerender({ hasFlowWriteScope: true })
+    await waitFor(() => expect(result.current.consignment?.startableFlows).toEqual(flows))
+    expect(mockGetConsignment).toHaveBeenCalledTimes(3)
+  })
+
   it('fetches through the given fetcher, keyed by scope', async () => {
     const adminFetcher = vi.fn().mockResolvedValue(makeConsignment(['n-1']))
 
