@@ -16,9 +16,10 @@ exclude = [
   # Placeholder hosts in examples.
   '^https?://([^/]*\.)?example\.(com|org)',
   # This repo's release tags. A release PR's CHANGELOG section links to the tag
-  # it is about to create, which exists only once the PR merges.
-  '^https://github\.com/OpenNSW/nsw-srilanka/(blob|tree)/v\d+\.\d+\.\d+/',
-  '^https://github\.com/OpenNSW/nsw-srilanka/compare/v\d+\.\d+\.\d+\.\.\.',
+  # it is about to create, which exists only once the PR merges. A pre-release
+  # tag (v1.0.0-rc.1) counts too.
+  '^https://github\.com/OpenNSW/nsw-srilanka/(blob|tree)/v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?/',
+  '^https://github\.com/OpenNSW/nsw-srilanka/compare/v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?\.\.\.',
 ]
 
 exclude_path = ['(^|/)tmp/', '(^|/)node_modules/', '(^|/)\.claude/worktrees/']
