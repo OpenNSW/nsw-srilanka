@@ -221,6 +221,12 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
+	stopWarm := warmArtifacts(ctx, artifacts)
+	defer func() {
+		if err != nil {
+			stopWarm()
+		}
+	}()
 
 	chaService := cha.NewService(db)
 	companyService := company.NewService(db)
@@ -620,6 +626,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	closeFn := func() error {
 		var closeErrs []error
 
+		stopWarm()
 		if err := stopParentRunner(); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to stop parent runner: %w", err))
 		}
@@ -1119,4 +1126,23 @@ func initArtifacts(ctx context.Context, cfg *config.Config) (*artifact.Set, erro
 	}
 
 	return artifacts, nil
+}
+
+// warmArtifacts fetches the current manifest version's artifact files into the file cache in
+// the background, so startup doesn't wait on them. A lookup that comes first fetches its file
+// on demand, so a slow or failed warm-up only costs latency and is logged, not returned. The
+// returned stop cancels the warm-up and waits for it to finish.
+func warmArtifacts(ctx context.Context, artifacts *artifact.Set) (stop func()) {
+	warmCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := artifacts.Warm(warmCtx, artifacts.Current()); err != nil && warmCtx.Err() == nil {
+			slog.Warn("failed to warm the artifact file cache", "version", artifacts.Current(), "error", err)
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
