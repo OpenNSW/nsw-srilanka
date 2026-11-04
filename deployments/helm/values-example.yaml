@@ -505,6 +505,13 @@ backend:
                 - {type: literal, value: "90"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}", padding: 6}
+            # The year that goes with the registration number, in the reference
+            # the tea flow writes onto each blend sheet. Drawn in the same
+            # step. Produces: 2026
+            - idType: cusdec_year
+              timezone: Asia/Colombo
+              segments:
+                - {type: date, format: "yyyy"}
         - issuer: CDA
           formats:
             # A CDA fee's payment reference: <registration number><main
