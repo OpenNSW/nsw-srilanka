@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button, Text } from '@radix-ui/themes'
 import { PageState } from '@portals/ui'
-import { getConsignmentForAdmin } from '@/features/admin/service'
+import { getCaseForAdmin, getConsignmentForAdmin } from '@/features/admin/service'
 import type { AdminConsignmentDetail } from '@/features/admin/types'
 import { formatDateTime } from '@/features/consignment/utils'
+import { isAgencyMode } from '@/features/case/mode'
 import { EngineStatusView } from '@/features/admin/components/engine/EngineStatusView'
 import type { FetchError } from '@/features/admin/components/engine/shared'
 import { FlowList } from '@/features/admin/components/flows/FlowList'
@@ -12,8 +13,14 @@ import { ROUTES } from '@/constants'
 import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
 import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
 
-// The consignment's business-side detail and its flows. The flow on screen is ?flow=<workflowId>
-// (so a link can point at one), else the first flow, which is the export flow.
+// getConsignmentForAdmin in TNSW, getCaseForAdmin in an agency — same AdminConsignmentDetail
+// shape either way (see getCaseForAdmin), minus the trade-only fields this screen hides below
+// when isAgencyMode.
+const fetchDetail = isAgencyMode ? getCaseForAdmin : getConsignmentForAdmin
+
+// The consignment's (or case's) business-side detail and its flows. The flow on screen is
+// ?flow=<workflowId> (so a link can point at one), else the first flow, which in TNSW is the
+// export flow.
 export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }) {
   const [consignment, setConsignment] = useState<AdminConsignmentDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -22,7 +29,7 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
 
   const reload = useCallback(async () => {
     try {
-      const result = await getConsignmentForAdmin(consignmentId)
+      const result = await fetchDetail(consignmentId)
       setConsignment(result)
       setError(result ? null : 'notFound')
     } catch (err) {
@@ -33,7 +40,7 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
 
   useEffect(() => {
     let cancelled = false
-    getConsignmentForAdmin(consignmentId)
+    fetchDetail(consignmentId)
       .then((result) => {
         if (cancelled) return
         setConsignment(result)
@@ -55,7 +62,7 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
   if (loading) {
     return (
       <div className="p-6">
-        <PageState variant="loading" title="Loading consignment…" />
+        <PageState variant="loading" title={isAgencyMode ? 'Loading case…' : 'Loading consignment…'} />
       </div>
     )
   }
@@ -66,7 +73,15 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
         <div className="bg-app-surface rounded-lg shadow">
           <PageState
             variant="error"
-            title={error === 'notFound' ? 'Consignment not found' : 'Failed to load consignment'}
+            title={
+              error === 'notFound'
+                ? isAgencyMode
+                  ? 'Case not found'
+                  : 'Consignment not found'
+                : isAgencyMode
+                  ? 'Failed to load case'
+                  : 'Failed to load consignment'
+            }
             onRetry={() => void reload()}
           />
         </div>
@@ -83,26 +98,32 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
   return (
     <div className="p-4 md:p-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Consignment Debugger</h1>
-        <Button variant="soft" color="gray" size="2" asChild>
-          <Link to={ROUTES.ADMIN_CONSIGNMENT_VIEW(consignmentId)}>View consignment</Link>
-        </Button>
+        <h1 className="text-xl font-semibold text-foreground">
+          {isAgencyMode ? 'Case Debugger' : 'Consignment Debugger'}
+        </h1>
+        {!isAgencyMode && (
+          <Button variant="soft" color="gray" size="2" asChild>
+            <Link to={ROUTES.ADMIN_CONSIGNMENT_VIEW(consignmentId)}>View consignment</Link>
+          </Button>
+        )}
       </div>
 
       <div className="mb-2 flex items-center gap-2 flex-wrap">
         <Text size="3" weight="medium" className="text-foreground">
-          {consignment.name || 'Untitled consignment'}
+          {consignment.name || (isAgencyMode ? 'Untitled case' : 'Untitled consignment')}
         </Text>
         <ConsignmentStateBadge state={consignment.state} />
-        <TradeFlowBadge flow={consignment.flow} />
+        {!isAgencyMode && <TradeFlowBadge flow={consignment.flow} />}
       </div>
 
       <div className="mb-6 flex items-center gap-4 flex-wrap">
         <p className="text-xs font-mono text-foreground-muted">{consignmentId}</p>
         <p className="text-xs text-foreground-muted">Created {formatDateTime(consignment.createdAt)}</p>
-        <p className="text-xs text-foreground-muted">
-          Trader <span className="font-mono">{consignment.traderId}</span>
-        </p>
+        {!isAgencyMode && (
+          <p className="text-xs text-foreground-muted">
+            Trader <span className="font-mono">{consignment.traderId}</span>
+          </p>
+        )}
       </div>
 
       <FlowList
@@ -120,7 +141,7 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
         />
       ) : (
         <Text size="2" color="gray">
-          No flow has started on this consignment.
+          No flow has started on this {isAgencyMode ? 'case' : 'consignment'}.
         </Text>
       )}
     </div>

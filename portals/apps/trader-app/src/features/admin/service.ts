@@ -94,3 +94,12 @@ export function getConsignmentForAdmin(
 ): Promise<AdminConsignmentDetail | null> {
   return fetchOrNull(`${API_BASE_URL}/api/v1/admin/consignments/${encodeURIComponent(consignmentId)}`, signal)
 }
+
+// Ops/admin view of any case plus its flows, no ownership check. Typed as AdminConsignmentDetail
+// so ConsignmentDebugger can take it as its fetcher in agency mode — see case/service.ts's
+// getCase for the same convention. The backend returns the same field names but none of the
+// trade-only ones (flow, traderId, traderCompanyId, chaId, chaCompanyId, startableFlows), which
+// the debugger hides in agency mode.
+export function getCaseForAdmin(caseId: string, signal?: AbortSignal): Promise<AdminConsignmentDetail | null> {
+  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/cases/${encodeURIComponent(caseId)}`, signal)
+}
