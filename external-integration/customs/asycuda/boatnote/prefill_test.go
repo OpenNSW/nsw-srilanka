@@ -116,7 +116,8 @@ func TestPrefill_FillsTheBoatNoteFromCustoms(t *testing.T) {
 		"consignee":                 "COCO WORLD SDN BHD, 125, PUTRAJAYA",
 		"exporters_registration_no": "900000000001",
 		"vessel":                    "CMA CGM MARCO POLO",
-		"voyage_no_date":            "V092 / 2026-06-25",
+		"voyage_no":                 "V092",
+		"voyage_date":               "2026-06-25",
 		"port_of_loading":           "LKCMB",
 		"port_of_discharge":         "DEHAM",
 		"vessel_op_code":            "OP-MSC",
@@ -170,6 +171,8 @@ func TestPrefill_NoNoteRetrievedIsNotRetrieved(t *testing.T) {
 
 	require.Len(t, got.Form["containers"], 2)
 	assert.False(t, got.Retrieved)
+	assert.Equal(t, "MARCO POLO", got.Form["voyage_no"], "the declaration's voyage name")
+	assert.NotContains(t, got.Form, "voyage_date", "the declaration carries no voyage date")
 }
 
 // Without a retrieved declaration (the retrieve failed, or answered without
@@ -197,4 +200,20 @@ func TestPrefill_NoNotesListedKeepsTheConsignmentRows(t *testing.T) {
 	assert.True(t, got.Retrieved)
 	assert.Equal(t, "EVER GIVEN", got.Form["vessel"])
 	assert.Equal(t, retrievedInput(t, declaration).Fallback, got.Form["containers"])
+}
+
+// A dispatch note's voyage date fills the date field as yyyy-MM-dd, from any of
+// the shapes it may come in; one in no known shape is left for the trader.
+func TestIsoDate(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"2026-06-25", "2026-06-25"},
+		{" 2026-06-25 ", "2026-06-25"},
+		{"25/06/2026", "2026-06-25"},
+		{"2026-06-25T00:00:00Z", "2026-06-25"},
+		{"2026-06-25T10:30:00", "2026-06-25"},
+		{"25-Jun-26", ""},
+		{"", ""},
+	} {
+		assert.Equal(t, c.want, isoDate(c.in), c.in)
+	}
 }
