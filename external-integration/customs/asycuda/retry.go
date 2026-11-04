@@ -7,14 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"sync"
 	"time"
-
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
@@ -22,32 +17,22 @@ import (
 
 // A callback that arrives before what it answers is there (its declaration or
 // dispatch note not recorded yet, or the task not parked) is accepted with a
-// 202 and handed to a Temporal workflow, which applies it once it can. SLC Edge
-// stops retrying on the 202, so the hand-off is durable: the workflow survives a
-// restart, and the 202 is only sent once Temporal has the callback.
-const (
-	// CallbackQueue is the Temporal task queue the callback retries run on.
-	CallbackQueue = "SLCE_CALLBACK_QUEUE"
+// 202 and retried in the background until it lands. SLC Edge stops retrying on
+// the 202, so these retries are what deliver it. They live in this process
+// only: a restart drops the ones still pending.
 
-	callbackWorkflowName = "SLCECallbackRetry"
-	callbackActivityName = "ApplySLCECallback"
+// callbackRetryTiming is how a held callback is retried: first after Initial,
+// doubling up to every Max, until Window has passed since it was held.
+type callbackRetryTiming struct {
+	Initial, Max, Window time.Duration
+}
 
-	// callbackRetryWindow is how long a callback is retried before it is given
-	// up: long enough for a callback that raced the integration result of the
-	// same document, or a delivery of it SLC Edge retried late, to land first.
-	callbackRetryWindow = 24 * time.Hour
-
-	// errTypePermanent marks a callback a retry cannot fix.
-	errTypePermanent = "permanent"
-)
-
-// callbackRetryPolicy retries a callback after 5s, doubling up to every 10
-// minutes, until callbackRetryWindow runs out.
-var callbackRetryPolicy = &temporal.RetryPolicy{
-	InitialInterval:        5 * time.Second,
-	BackoffCoefficient:     2,
-	MaximumInterval:        10 * time.Minute,
-	NonRetryableErrorTypes: []string{errTypePermanent},
+// defaultCallbackRetryTiming gives a callback that raced the integration result
+// of its document, or whose task was slow to park, a day to land.
+var defaultCallbackRetryTiming = callbackRetryTiming{
+	Initial: 5 * time.Second,
+	Max:     10 * time.Minute,
+	Window:  24 * time.Hour,
 }
 
 // Callback is a callback held for retry: its event type and the body SLC Edge
@@ -57,72 +42,78 @@ type Callback struct {
 	Body      []byte
 }
 
-// CallbackScheduler hands a callback to the retry workflow.
-type CallbackScheduler interface {
-	Schedule(ctx context.Context, cb Callback) error
+// callbackScheduler holds a callback for retry.
+type callbackScheduler interface {
+	schedule(ctx context.Context, cb Callback)
 }
 
-// TemporalCallbacks starts the retry workflow for a callback.
-type TemporalCallbacks struct {
-	client client.Client
+// callbackRetries retries each held callback in a goroutine of its own.
+type callbackRetries struct {
+	apply  func(context.Context, string, []byte) error
+	timing callbackRetryTiming
+	// pending holds the key of each callback being retried, so a redelivery
+	// while one is pending does not start a second retry.
+	pending sync.Map
+	wg      sync.WaitGroup
 }
 
-// NewTemporalCallbacks returns a scheduler that starts retries through c.
-func NewTemporalCallbacks(c client.Client) TemporalCallbacks { return TemporalCallbacks{client: c} }
+func newCallbackRetries(apply func(context.Context, string, []byte) error, timing callbackRetryTiming) *callbackRetries {
+	return &callbackRetries{apply: apply, timing: timing}
+}
 
-// Schedule starts the retry workflow for cb. The workflow ID names the callback
-// by its body, so a redelivery while a retry is running joins that retry, while
-// two different callbacks for the same document never merge.
-func (t TemporalCallbacks) Schedule(ctx context.Context, cb Callback) error {
+// schedule starts retrying cb. A callback is named by its body, so an identical
+// redelivery while it is pending joins that retry, while two different callbacks
+// for the same document are retried apart.
+func (c *callbackRetries) schedule(ctx context.Context, cb Callback) {
 	sum := sha256.Sum256(cb.Body)
-	_, err := t.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                       "slce-callback-" + cb.EventType + "-" + hex.EncodeToString(sum[:12]),
-		TaskQueue:                CallbackQueue,
-		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-	}, callbackWorkflowName, cb)
-	if err != nil {
-		return fmt.Errorf("start the retry of %s: %w", cb.EventType, err)
+	key := cb.EventType + " " + hex.EncodeToString(sum[:12])
+	if _, running := c.pending.LoadOrStore(key, struct{}{}); running {
+		slog.DebugContext(ctx, "slce: callback already held for retry", "callback", key)
+		return
 	}
-	return nil
+	// The retries outlive the request, but keep its trace and log values.
+	ctx = context.WithoutCancel(ctx)
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		defer c.pending.Delete(key)
+		defer func() {
+			if p := recover(); p != nil {
+				slog.ErrorContext(ctx, "slce: retry of held callback panicked", "callback", key, "panic", p)
+			}
+		}()
+		c.retry(ctx, key, cb)
+	}()
 }
 
-// NewCallbackWorker returns the worker that runs the callback retries, applying
-// each through h's services. The caller starts and stops it.
-func NewCallbackWorker(c client.Client, h *Handler) worker.Worker {
-	w := worker.New(c, CallbackQueue, worker.Options{})
-	w.RegisterWorkflowWithOptions(callbackWorkflow, workflow.RegisterOptions{Name: callbackWorkflowName})
-	w.RegisterActivityWithOptions(h.applyCallbackActivity, activityRegisterOptions())
-	return w
-}
-
-func activityRegisterOptions() activity.RegisterOptions {
-	return activity.RegisterOptions{Name: callbackActivityName}
-}
-
-// callbackWorkflow applies a callback, retrying it until it lands or the retry
-// window runs out.
-func callbackWorkflow(ctx workflow.Context, cb Callback) error {
-	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout:    time.Minute,
-		ScheduleToCloseTimeout: callbackRetryWindow,
-		RetryPolicy:            callbackRetryPolicy,
-	})
-	err := workflow.ExecuteActivity(ctx, callbackActivityName, cb).Get(ctx, nil)
-	if err != nil {
-		workflow.GetLogger(ctx).Error("slce: gave up applying callback", "eventType", cb.EventType, "error", err)
+func (c *callbackRetries) retry(ctx context.Context, key string, cb Callback) {
+	giveUpAt := time.Now().Add(c.timing.Window)
+	wait := c.timing.Initial
+	for attempt := 1; ; attempt++ {
+		time.Sleep(wait)
+		err := c.apply(ctx, cb.EventType, cb.Body)
+		switch {
+		case err == nil:
+			slog.InfoContext(ctx, "slce: held callback applied", "callback", key, "attempt", attempt)
+			return
+		case isPermanent(err):
+			slog.ErrorContext(ctx, "slce: held callback cannot be applied; giving up",
+				"callback", key, "attempt", attempt, "error", err)
+			return
+		}
+		wait = min(2*wait, c.timing.Max)
+		if time.Now().Add(wait).After(giveUpAt) {
+			slog.ErrorContext(ctx, "slce: held callback still not applied; giving up",
+				"callback", key, "attempts", attempt, "error", err)
+			return
+		}
+		slog.DebugContext(ctx, "slce: held callback not applied yet; will retry",
+			"callback", key, "attempt", attempt, "retryIn", wait, "error", err)
 	}
-	return err
 }
 
-// applyCallbackActivity applies a held callback. A callback still early returns
-// a retryable error; one a retry cannot fix is marked permanent.
-func (h *Handler) applyCallbackActivity(ctx context.Context, cb Callback) error {
-	err := h.applyCallback(ctx, cb.EventType, cb.Body)
-	if err != nil && isPermanent(err) {
-		return temporal.NewNonRetryableApplicationError(err.Error(), errTypePermanent, err)
-	}
-	return err
-}
+// wait blocks until every held callback has been applied or given up.
+func (c *callbackRetries) wait() { c.wg.Wait() }
 
 // errInvalidCallback is a held callback that no longer decodes or validates.
 var errInvalidCallback = errors.New("invalid callback")

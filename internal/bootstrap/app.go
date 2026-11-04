@@ -74,7 +74,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/workflowadmin"
 
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
 	"gorm.io/gorm"
 )
 
@@ -438,11 +437,9 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
 		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
-		// A callback that arrives before what it answers is there is accepted
-		// and applied later by a Temporal workflow, started below.
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService).
 			WithAuditor(auditor, cusdecRepo, cdnRepo).
-			WithCallbackRetries(asycuda.NewTemporalCallbacks(temporalClient))
+			WithCallbackRetries()
 
 		// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
 		// presenting an IdP token, so this handler owns its own authentication and
@@ -628,28 +625,10 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	handler := trace.TraceMiddleware(systemlog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", systemlog.CaptureRoute(mux)))))
 	server := newHTTPServer(cfg.Server, handler)
 
-	// Started last, once nothing else can fail: it applies the SLCE callbacks
-	// the handler held for retry.
-	var callbackWorker worker.Worker
-	if slceHandler != nil {
-		callbackWorker = asycuda.NewCallbackWorker(temporalClient, slceHandler)
-		if err := callbackWorker.Start(); err != nil {
-			_ = stopParentRunner()
-			_ = stopTask()
-			temporalClient.Close()
-			_ = authnManager.Close()
-			_ = database.Close(db)
-			return nil, fmt.Errorf("failed to start SLCE callback worker: %w", err)
-		}
-	}
-
 	closeFn := func() error {
 		var closeErrs []error
 
 		stopWarm()
-		if callbackWorker != nil {
-			callbackWorker.Stop()
-		}
 		if err := stopParentRunner(); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to stop parent runner: %w", err))
 		}

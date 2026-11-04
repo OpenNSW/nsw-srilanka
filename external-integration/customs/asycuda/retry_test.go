@@ -6,13 +6,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/testsuite"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
@@ -21,15 +21,17 @@ import (
 // fakeScheduler records the callbacks the handler holds for retry.
 type fakeScheduler struct {
 	held []Callback
-	err  error
 }
 
-func (f *fakeScheduler) Schedule(_ context.Context, cb Callback) error {
-	if f.err != nil {
-		return f.err
-	}
+func (f *fakeScheduler) schedule(_ context.Context, cb Callback) {
 	f.held = append(f.held, cb)
-	return nil
+}
+
+// withHeld returns h holding its early callbacks in a fakeScheduler.
+func withHeld(h *Handler) (*Handler, *fakeScheduler) {
+	held := &fakeScheduler{}
+	h.callbacks = held
+	return h, held
 }
 
 func post(h *Handler, body string) int {
@@ -85,8 +87,7 @@ func TestSLCEHandler_EarlyCallbackHeldForRetry(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cusdecSvc, cdnSvc := new(mockCusdecService), new(mockCDNService)
 			tc.setup(cusdecSvc, cdnSvc)
-			held := &fakeScheduler{}
-			h := NewHandler(cusdecSvc, cdnSvc).WithCallbackRetries(held)
+			h, held := withHeld(NewHandler(cusdecSvc, cdnSvc))
 
 			assert.Equal(t, http.StatusAccepted, post(h, tc.body))
 			require.Len(t, held.held, 1)
@@ -96,46 +97,59 @@ func TestSLCEHandler_EarlyCallbackHeldForRetry(t *testing.T) {
 	}
 }
 
-// When the retry cannot be started, the callback is answered 503 so that SLC
-// Edge retries it: it is never acknowledged without being held.
-func TestSLCEHandler_EarlyCallbackNotHeldAsksSLCEdgeToRetry(t *testing.T) {
+// Without retries configured, an early callback is answered 503 as before, for
+// SLC Edge to retry.
+func TestSLCEHandler_EarlyCallbackWithoutRetries(t *testing.T) {
 	cdnSvc := new(mockCDNService)
 	cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(cdn.ErrDispatchNoteNotFoundByCDNRef)
-	h := NewHandler(new(mockCusdecService), cdnSvc).WithCallbackRetries(&fakeScheduler{err: errors.New("temporal down")})
 
-	assert.Equal(t, http.StatusServiceUnavailable, post(h, cdnAcknowledgedPayload))
+	assert.Equal(t, http.StatusServiceUnavailable, post(NewHandler(new(mockCusdecService), cdnSvc), cdnAcknowledgedPayload))
 }
 
 // A callback that failed for another reason is answered as before, not held.
 func TestSLCEHandler_OtherErrorsNotHeld(t *testing.T) {
 	cusdecSvc := new(mockCusdecService)
 	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cusdec.ErrWorkflowNotFoundByEdgeID)
-	held := &fakeScheduler{}
-	h := NewHandler(cusdecSvc, new(mockCDNService)).WithCallbackRetries(held)
+	h, held := withHeld(NewHandler(cusdecSvc, new(mockCDNService)))
 
 	assert.Equal(t, http.StatusNotFound, post(h, cusdecIntegratedPayload))
 	assert.Empty(t, held.held)
 }
 
+// The handler's retries apply a held callback through its services.
+func TestSLCEHandler_HeldCallbackApplied(t *testing.T) {
+	cdnSvc := new(mockCDNService)
+	cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(cdn.ErrDispatchNoteNotFoundByCDNRef).Once()
+	cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(nil).Once()
+	h := NewHandler(new(mockCusdecService), cdnSvc)
+	retries := newCallbackRetries(h.applyCallback, timing(time.Minute))
+	h.callbacks = retries
+
+	assert.Equal(t, http.StatusAccepted, post(h, cdnAcknowledgedPayload))
+	retries.wait()
+
+	cdnSvc.AssertNumberOfCalls(t, "ProcessAcknowledgment", 2)
+}
+
 // A held callback is applied through the service the handler would have used.
 // One already applied counts as done; one a retry cannot fix is permanent.
-func TestApplyCallbackActivity(t *testing.T) {
+func TestApplyCallback(t *testing.T) {
 	t.Run("applied", func(t *testing.T) {
 		cdnSvc := new(mockCDNService)
 		cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(nil)
 		h := NewHandler(new(mockCusdecService), cdnSvc)
 
-		require.NoError(t, h.applyCallbackActivity(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)}))
+		require.NoError(t, h.applyCallback(context.Background(), "CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)))
 	})
 
-	t.Run("event sets the expected type", func(t *testing.T) {
+	t.Run("event takes its type from the callback", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cusdecSvc.On("ProcessEvent", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecEventRequest) bool {
 			return r.Event == "PAYMENT_CONFIRMED"
 		})).Return(nil)
 		h := NewHandler(cusdecSvc, new(mockCDNService))
 
-		require.NoError(t, h.applyCallbackActivity(context.Background(), Callback{"PAYMENT_CONFIRMED", []byte(paymentConfirmedPayload)}))
+		require.NoError(t, h.applyCallback(context.Background(), "PAYMENT_CONFIRMED", []byte(paymentConfirmedPayload)))
 	})
 
 	t.Run("duplicates are done", func(t *testing.T) {
@@ -144,8 +158,8 @@ func TestApplyCallbackActivity(t *testing.T) {
 		cusdecSvc.On("ProcessEvent", mock.Anything, mock.Anything).Return(cusdec.ErrDuplicateEvent)
 		h := NewHandler(cusdecSvc, new(mockCDNService))
 
-		require.NoError(t, h.applyCallbackActivity(context.Background(), Callback{"CUSDEC_INTEGRATED", []byte(cusdecIntegratedPayload)}))
-		require.NoError(t, h.applyCallbackActivity(context.Background(), Callback{"PAYMENT_CONFIRMED", []byte(paymentConfirmedPayload)}))
+		require.NoError(t, h.applyCallback(context.Background(), "CUSDEC_INTEGRATED", []byte(cusdecIntegratedPayload)))
+		require.NoError(t, h.applyCallback(context.Background(), "PAYMENT_CONFIRMED", []byte(paymentConfirmedPayload)))
 	})
 
 	t.Run("still early is retried", func(t *testing.T) {
@@ -153,9 +167,9 @@ func TestApplyCallbackActivity(t *testing.T) {
 		cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(cdn.ErrDispatchNoteNotFoundByCDNRef)
 		h := NewHandler(new(mockCusdecService), cdnSvc)
 
-		err := h.applyCallbackActivity(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+		err := h.applyCallback(context.Background(), "CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload))
 		require.ErrorIs(t, err, cdn.ErrDispatchNoteNotFoundByCDNRef)
-		assert.False(t, isNonRetryable(err))
+		assert.False(t, isPermanent(err))
 	})
 
 	for name, cb := range map[string]Callback{
@@ -164,7 +178,7 @@ func TestApplyCallbackActivity(t *testing.T) {
 	} {
 		t.Run(name+" is permanent", func(t *testing.T) {
 			h := NewHandler(new(mockCusdecService), new(mockCDNService))
-			assert.True(t, isNonRetryable(h.applyCallbackActivity(context.Background(), cb)))
+			assert.True(t, isPermanent(h.applyCallback(context.Background(), cb.EventType, cb.Body)))
 		})
 	}
 
@@ -173,62 +187,121 @@ func TestApplyCallbackActivity(t *testing.T) {
 		cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cusdec.ErrWorkflowNotFoundByEdgeID)
 		h := NewHandler(cusdecSvc, new(mockCDNService))
 
-		assert.True(t, isNonRetryable(h.applyCallbackActivity(context.Background(), Callback{"CUSDEC_INTEGRATED", []byte(cusdecIntegratedPayload)})))
+		assert.True(t, isPermanent(h.applyCallback(context.Background(), "CUSDEC_INTEGRATED", []byte(cusdecIntegratedPayload))))
 	})
 }
 
-func isNonRetryable(err error) bool {
-	var appErr *temporal.ApplicationError
-	return errors.As(err, &appErr) && appErr.NonRetryable()
+func timing(window time.Duration) callbackRetryTiming {
+	return callbackRetryTiming{Initial: time.Millisecond, Max: 4 * time.Millisecond, Window: window}
 }
 
-func callbackEnv(t *testing.T, h *Handler) *testsuite.TestWorkflowEnvironment {
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflow(callbackWorkflow)
-	env.RegisterActivityWithOptions(h.applyCallbackActivity, activityRegisterOptions())
-	t.Cleanup(func() { env.AssertExpectations(t) })
-	return env
+// Each attempt returns the next of results; any past the last return its last.
+func attempts(results ...error) (func(context.Context, string, []byte) error, *atomic.Int32) {
+	var calls atomic.Int32
+	return func(context.Context, string, []byte) error {
+		n := int(calls.Add(1))
+		return results[min(n, len(results))-1]
+	}, &calls
 }
 
-// The workflow retries a callback that is still early until it lands.
-func TestCallbackWorkflow_RetriesUntilApplied(t *testing.T) {
-	cdnSvc := new(mockCDNService)
-	cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(cdn.ErrDispatchNoteNotFoundByCDNRef).Twice()
-	cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(nil).Once()
-	env := callbackEnv(t, NewHandler(new(mockCusdecService), cdnSvc))
+var errEarly = cdn.ErrDispatchNoteNotFoundByCDNRef
 
-	env.ExecuteWorkflow(callbackWorkflow, Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+// A held callback is retried while it is still early, until it lands.
+func TestCallbackRetries_RetryUntilApplied(t *testing.T) {
+	apply, calls := attempts(errEarly, errEarly, nil)
+	retries := newCallbackRetries(apply, timing(time.Minute))
 
-	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
-	cdnSvc.AssertNumberOfCalls(t, "ProcessAcknowledgment", 3)
+	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.wait()
+
+	assert.Equal(t, int32(3), calls.Load())
+}
+
+// A failed read is retried like an early callback.
+func TestCallbackRetries_RetryOtherErrors(t *testing.T) {
+	apply, calls := attempts(errors.New("database down"), nil)
+	retries := newCallbackRetries(apply, timing(time.Minute))
+
+	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.wait()
+
+	assert.Equal(t, int32(2), calls.Load())
 }
 
 // A callback a retry cannot fix is given up at once.
-func TestCallbackWorkflow_StopsOnAPermanentError(t *testing.T) {
-	cdnSvc := new(mockCDNService)
-	cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cdn.ErrDispatchNoteNotFoundByEdgeID)
-	env := callbackEnv(t, NewHandler(new(mockCusdecService), cdnSvc))
+func TestCallbackRetries_StopOnAPermanentError(t *testing.T) {
+	apply, calls := attempts(errEarly, cdn.ErrDispatchNoteNotFoundByEdgeID)
+	retries := newCallbackRetries(apply, timing(time.Minute))
 
-	env.ExecuteWorkflow(callbackWorkflow, Callback{"CDN_INTEGRATED", []byte(cdnIntegratedPayload)})
+	retries.schedule(context.Background(), Callback{"CDN_INTEGRATED", []byte(cdnIntegratedPayload)})
+	retries.wait()
 
-	require.True(t, env.IsWorkflowCompleted())
-	require.Error(t, env.GetWorkflowError())
-	cdnSvc.AssertNumberOfCalls(t, "ProcessIntegrationResult", 1)
+	assert.Equal(t, int32(2), calls.Load())
 }
 
-// A callback that stays early is given up. A Temporal server retries it until
-// callbackRetryWindow runs out; the test environment stops after 10 attempts.
-func TestCallbackWorkflow_GivesUpWhenItStaysEarly(t *testing.T) {
-	cdnSvc := new(mockCDNService)
-	cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(cdn.ErrDispatchNoteNotFoundByCDNRef)
-	env := callbackEnv(t, NewHandler(new(mockCusdecService), cdnSvc))
+// A callback that stays early is given up once the window has passed.
+func TestCallbackRetries_GiveUpAfterTheWindow(t *testing.T) {
+	apply, calls := attempts(errEarly)
+	retries := newCallbackRetries(apply, timing(30*time.Millisecond))
 
-	env.ExecuteWorkflow(callbackWorkflow, Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.wait()
 
-	require.True(t, env.IsWorkflowCompleted())
-	require.Error(t, env.GetWorkflowError())
-	assert.Contains(t, env.GetWorkflowError().Error(), cdn.ErrDispatchNoteNotFoundByCDNRef.Error())
-	assert.Greater(t, len(cdnSvc.Calls), 1)
+	// 1ms, then every 2 to 4ms, inside 30ms.
+	assert.Greater(t, calls.Load(), int32(3))
+	assert.Less(t, calls.Load(), int32(30))
+}
+
+// A redelivery while a callback is held joins its retry; a different callback
+// is retried on its own.
+func TestCallbackRetries_OneRetryPerCallback(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	retries := newCallbackRetries(func(context.Context, string, []byte) error {
+		calls.Add(1)
+		<-release
+		return nil
+	}, timing(time.Minute))
+
+	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.schedule(context.Background(), Callback{"CDN_CANCELLED", []byte(cdnCancelledPayload)})
+	close(release)
+	retries.wait()
+
+	assert.Equal(t, int32(2), calls.Load())
+}
+
+// A retry outlives the request that held it.
+func TestCallbackRetries_OutliveTheRequest(t *testing.T) {
+	var sawCancel atomic.Bool
+	retries := newCallbackRetries(func(ctx context.Context, _ string, _ []byte) error {
+		sawCancel.Store(ctx.Err() != nil)
+		return nil
+	}, timing(time.Minute))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	retries.schedule(ctx, Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.wait()
+
+	assert.False(t, sawCancel.Load())
+}
+
+// A panic in a retry is recovered and releases the callback.
+func TestCallbackRetries_RecoverAPanic(t *testing.T) {
+	var calls atomic.Int32
+	retries := newCallbackRetries(func(context.Context, string, []byte) error {
+		if calls.Add(1) == 1 {
+			panic("boom")
+		}
+		return nil
+	}, timing(time.Minute))
+
+	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.wait()
+	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
+	retries.wait()
+
+	assert.Equal(t, int32(2), calls.Load())
 }

@@ -37,7 +37,7 @@ type Handler struct {
 	auditor       nswaudit.Auditor
 	declarations  cusdec.DeclarationRepository
 	dispatchNotes cdn.DispatchNoteRepository
-	callbacks     CallbackScheduler
+	callbacks     callbackScheduler
 }
 
 // NewHandler creates a new central SLCE webhook handler.
@@ -49,26 +49,22 @@ func NewHandler(cusdecService cusdec.WebhookService, cdnService cdn.CDNWebhookSe
 }
 
 // WithCallbackRetries has a callback that arrives before what it answers is
-// there accepted with a 202 and applied later through s. Without it, such a
-// callback is answered 503 for SLC Edge to retry (§2). Configure it before
-// serving requests.
-func (h *Handler) WithCallbackRetries(s CallbackScheduler) *Handler {
-	h.callbacks = s
+// there accepted with a 202 and retried in the background (see retry.go).
+// Without it, such a callback is answered 503 for SLC Edge to retry (§2).
+// Configure it before serving requests.
+func (h *Handler) WithCallbackRetries() *Handler {
+	h.callbacks = newCallbackRetries(h.applyCallback, defaultCallbackRetryTiming)
 	return h
 }
 
 // holdIfEarly accepts a callback whose processing failed with err for retry,
-// when err means it arrived early and the retry could be started, answering
-// 202. It reports whether it did; if not, the caller answers err as usual.
+// when err means it arrived early, answering 202. It reports whether it did; if
+// not, the caller answers err as usual.
 func (h *Handler) holdIfEarly(w http.ResponseWriter, r *http.Request, eventType string, body []byte, err error) bool {
 	if h.callbacks == nil || !isEarly(err) {
 		return false
 	}
-	if schedErr := h.callbacks.Schedule(r.Context(), Callback{EventType: eventType, Body: body}); schedErr != nil {
-		slog.ErrorContext(r.Context(), "slce: could not hold early callback for retry; asking SLC Edge to retry",
-			"event", eventType, "reason", err, "error", schedErr)
-		return false
-	}
+	h.callbacks.schedule(r.Context(), Callback{EventType: eventType, Body: body})
 	slog.InfoContext(r.Context(), "slce: callback arrived early; accepted and held for retry",
 		"event", eventType, "reason", err)
 	w.WriteHeader(http.StatusAccepted)

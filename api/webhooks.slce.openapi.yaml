@@ -267,8 +267,9 @@ paths:
                     example: "workflow not found"
         '503':
           description: |
-            Service Unavailable. The callback arrived early (see 202), but
-            TNSW could not hold it for retry. Transient: SLC Edge should retry.
+            Service Unavailable. The callback arrived early (see 202) and this
+            server does not hold callbacks for retry. Transient: SLC Edge
+            should retry.
           content:
             application/json:
               schema:
