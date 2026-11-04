@@ -12,10 +12,10 @@ This is the first release for production, published as a beta of 1.0.0. A new de
 
 ### Upgrade notes
 
-#### Remove `cha:read` ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106))
+#### Drop the unused `chas` route and the `cha:read` scope (optional) ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106))
 
 - `GET /api/v1/chas` is removed and answers 404. No portal or integration calls it. A client that does should use `GET /api/v1/companies?has_cha=true`.
-- The `cha:read` scope is removed. In each deployment, in this order:
+- No route checks `cha:read` any more, so nothing fails if a deployment keeps it. To clean it up, in this order:
   1. Remove `cha:read` from the Trader Portal's `IDP_SCOPES` (`config.js`; Helm: `frontend.config`).
   2. In the IdP, remove the `cha` resource from the NSW API resource server, and the `cha:read` permission from the `Trader` and `CHA` roles and from the TraderApp application. A live IdP does not read `idp/bootstrap/`, so change it by hand.
 - A new deployment from this release's `idp/bootstrap/` and examples never has the scope.
@@ -32,7 +32,7 @@ This is the first release for production, published as a beta of 1.0.0. A new de
 
 #### Local Docker Compose ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106))
 
-- `make setup` doesn't overwrite an existing `portals/apps/trader-app/public/config.js`: remove `cha:read` from its `IDP_SCOPES`.
+- `make setup` doesn't overwrite an existing `portals/apps/trader-app/public/config.js`: you can remove `cha:read` from its `IDP_SCOPES`.
 
 ### Added
 
