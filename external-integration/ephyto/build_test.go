@@ -1,6 +1,7 @@
 package ephyto
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -942,5 +943,54 @@ func TestCountryCode(t *testing.T) {
 	}
 	if got := countryCode(map[string]any{"value": "NZ", "label": "New Zealand"}); got != "NZ" {
 		t.Errorf("countryCode(dropdown answer) = %q, want NZ", got)
+	}
+}
+
+// A replacement names the certificate it replaces in the four ePhyto notes. The
+// Hub writes them into the replacement statement it prints, so each one has to
+// be there: ADRPN the number, ADRD the issue date and ADRPR the reason.
+func TestBuildCertXML_NamesTheReplacedCertificate(t *testing.T) {
+	xml, err := BuildCertXML(BuildInput(map[string]any{
+		"userform":       sampleUserform(),
+		"certificate_id": "PC-2026-0005",
+		ReplacementInput: map[string]any{
+			"replaced_number":     "PC-2026-0004",
+			"reason":              "Change in consignee.",
+			"replaced_issue_date": "2026-11-03",
+		},
+	}))
+	if err != nil {
+		t.Fatalf("BuildCertXML: %v", err)
+	}
+	xml = regexp.MustCompile(`>\s+<`).ReplaceAllString(xml, "><")
+
+	for _, want := range []string{
+		"<ram:Subject>ADRP</ram:Subject><ram:Content>4</ram:Content>",
+		"<ram:Subject>ADRPN</ram:Subject><ram:Content>PC-2026-0004</ram:Content>",
+		`<ram:Subject>ADRPR</ram:Subject><ram:Content languageID="en">Change in consignee.</ram:Content>`,
+		"<ram:Subject>ADRD</ram:Subject><ram:Content>2026-11-03T00:00:00Z</ram:Content>",
+	} {
+		if !strings.Contains(xml, want) {
+			t.Errorf("certificate is missing %q", want)
+		}
+	}
+}
+
+func TestBuildInput_AnOrdinaryCertificateReplacesNothing(t *testing.T) {
+	in := BuildInput(map[string]any{"userform": sampleUserform(), "certificate_id": "PC-2026-0004"})
+	if in.Certificate.Replacement != nil {
+		t.Errorf("Replacement = %+v, want none", in.Certificate.Replacement)
+	}
+}
+
+func TestW3DateTime(t *testing.T) {
+	for in, want := range map[string]string{
+		"2026-11-03":                "2026-11-03T00:00:00Z",
+		"2026-11-03T10:15:00+05:30": "2026-11-03T10:15:00+05:30",
+		"":                          "",
+	} {
+		if got := w3DateTime(in); got != want {
+			t.Errorf("w3DateTime(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

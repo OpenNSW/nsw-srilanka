@@ -67,7 +67,7 @@ func BuildInput(inputs map[string]any) spscert.Input {
 //	"replacement": {
 //	  "replaced_number":     "…", // the replaced certificate's number (required)
 //	  "reason":              "…", // why it is replaced, as the trader put it
-//	  "replaced_issue_date": "…"  // when the replaced certificate was issued (optional)
+//	  "replaced_issue_date": "…"  // when the replaced certificate was issued, a date or W3 datetime (optional)
 //	}
 //
 // Absent, the submission is an ordinary certificate.
@@ -93,9 +93,21 @@ func buildReplacement(inputs map[string]any) *spscert.Replacement {
 		StatementCode:     replacementStatementCode,
 		ReplacedNumber:    replaced,
 		Reason:            strings.TrimSpace(asString(r["reason"])),
-		ReplacedIssueDate: strings.TrimSpace(asString(r["replaced_issue_date"])),
+		ReplacedIssueDate: w3DateTime(asString(r["replaced_issue_date"])),
 		LanguageID:        "en",
 	}
+}
+
+// w3DateTime writes an issue date as the W3 datetime (YYYY-MM-DDThh:mm:ssTZD)
+// the ePhyto mapping requires of ADRD. The NPQS officer records a certificate's
+// issue date as a day alone, which is sent as the start of that day in UTC; a
+// value already carrying a time, or one that is not a date, is sent as it is.
+func w3DateTime(s string) string {
+	d, err := time.Parse(time.DateOnly, s)
+	if err != nil {
+		return s
+	}
+	return d.Format(time.RFC3339)
 }
 
 // withdrawn turns the certificate in into the one that withdraws it: the same
