@@ -105,6 +105,9 @@ flows:
   clients:
     enabled: true
     ouHandle: efc
+    # The case name officers see in the case list: the trader company TNSW sends
+    # in the case's attributes.
+    caseColumns: { name: /traderCompany/name }
     workflows:
       - { id: efc_boat_note_approval, clients: [tnsw], owner: officer }
 

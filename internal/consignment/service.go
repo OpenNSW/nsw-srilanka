@@ -152,6 +152,7 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		CaseID:     consignment.ID,
 		TemplateID: templateID,
 		Vars:       initialVars,
+		Case:       &caseflow.CaseInfo{Attributes: caseAttributes(traderCompany)},
 	}); err != nil {
 		return nil, fmt.Errorf("failed to start the export flow: %w", err)
 	}
@@ -583,6 +584,18 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 		})
 	}
 	return dtos, nil
+}
+
+// SharedCaseAttributes are the keys of a case's attributes that EXTERNAL_REVIEW sends to
+// the agencies it starts flows on (see caseflow.SharedAttributes). A key not listed here
+// never leaves TNSW, whatever writes it to cases.attributes.
+var SharedCaseAttributes = []string{"traderCompany"}
+
+// caseAttributes are the attributes of the consignment's case (cases.attributes). Their
+// keys are in SharedCaseAttributes, so only values every agency may see go in: the trader
+// company's name, but not its id or data, nor the consignment's own name.
+func caseAttributes(trader *company.Record) map[string]any {
+	return map[string]any{"traderCompany": map[string]any{"name": trader.Name}}
 }
 
 // companyRecordToMap converts a company.Record to a map[string]any via its JSON tags.

@@ -59,6 +59,7 @@ flows:
   clients:
     enabled: true
     ouHandle: cda
+    caseColumns: { name: /traderCompany/name }
     workflows:
       - { id: cda_officer_verification, clients: [tnsw], owner: officer }
 artifactLoader:
@@ -111,14 +112,17 @@ gives it. The list is for display only; the screens and buttons follow the scope
 ## Flow
 
 1. TNSW calls `POST /api/v1/internal/cases/{caseId}/flows` with
-   `{workflowId, flowId, input, callbackToken}`. `caseId` is the consignment's id.
+   `{workflowId, flowId, input, callbackToken, attributes}`. `caseId` is the consignment's
+   id, and `attributes` the case's (see [Cases](#cases)), when it has any.
 2. The caller must be a client the catalog maps, and `flows.clients` must list
    `workflowId` for it. Anything else is a `404 flow not found`, as for a flow that
    does not exist, and the reason is logged.
 3. `caseflow.StartFlow` records the flow in `case_flows` (creating the case if it is
    new, and reopening it if it had finished) and, in the same transaction, the agency's
    own OU (`flows.clients.ouHandle`) as an owner of the case in the flow's `owner` role
-   (`case_parties`), so a recorded flow always has its owner. It then starts `workflowId`
+   (`case_parties`), so a recorded flow always has its owner. The same transaction
+   merges `attributes` into the case's and fills the columns `flows.clients.caseColumns`
+   maps from them. It then starts `workflowId`
    with `flowId` as the workflow instance ID, on the manifest version current when the
    flow was first recorded. The workflow is seeded with `taskId` (the flow ID), `taskCode` (the
    workflow), `consignmentId` (the case), `notification` (the input) and, when the
@@ -203,6 +207,14 @@ flows:
       - { id: cda_payment_review_receipt, clients: [tnsw], owner: accountant }
 ```
 
+`caseColumns` fills `cases` columns from the attributes a flow is started with. Each key
+is a column and each value the JSON Pointer (RFC 6901) of a string in the attributes.
+`name` is the only column it can fill: `caseColumns: { name: /traderCompany/name }` makes
+the trader company's name the case's name, which the case list shows over the case id. A
+value that is missing, blank, or longer than the 255 characters `cases.name` holds leaves
+the name as it is. The server refuses to start if a column is not `name` or a value is not
+a JSON Pointer. The attributes are stored whether or not anything maps them.
+
 `owner` decides who sees the case and its tasks: a role every officer holds for an
 open case, or a narrower one (an accounts division's `accountant`) for a closed one.
 The case detail titles each task by its render config. TNSW has no client flows: it
@@ -271,7 +283,18 @@ only those (see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
 
 `state` is `IN_PROGRESS` on creation and becomes `FINISHED` once **every** workflow of
 the case has completed. A new flow started on a finished case reopens it
-(`IN_PROGRESS`). `name` is empty until a caller or UI supplies one.
+(`IN_PROGRESS`). `name` is empty until a caller or UI supplies one: in an agency,
+`flows.clients.caseColumns` fills it from the attributes TNSW sends.
+
+`attributes` is a JSON object of values about the case that the systems its flows run on
+may see. TNSW sets it when it creates a consignment, to the trader company's name
+(`{"traderCompany": {"name": "…"}}`), and `EXTERNAL_REVIEW` sends it with every flow it
+starts on an agency. Only the top-level keys `consignment.SharedCaseAttributes` lists are
+sent (`traderCompany` today), so a key written to TNSW's `cases.attributes` stays in TNSW
+until it is listed there. The trader company's id and data, and the consignment's own
+name, are never written. An agency merges the attributes a new flow
+starts with into its own case, by top-level key. A new key needs no migration and no
+agency change. Cases created before this have none, and keep showing their id.
 
 Both modes start and complete flows through `internal/caseflow` (`case_flows`): its
 completion callback marks the flow `COMPLETED`, and its case finished if it was the

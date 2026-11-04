@@ -104,6 +104,9 @@ flows:
   clients:
     enabled: true
     ouHandle: cda
+    # The case name officers see in the case list: the trader company TNSW sends
+    # in the case's attributes.
+    caseColumns: { name: /traderCompany/name }
     workflows:
       - { id: cda_officer_verification, clients: [tnsw], owner: officer }
       - { id: cda_lot_adjustment_review, clients: [tnsw], owner: officer }

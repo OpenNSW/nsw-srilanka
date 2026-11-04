@@ -34,6 +34,11 @@ func TestConfigValidate(t *testing.T) {
 		"client without owner":     {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}}}}}, "owner is required"},
 		"owner not in catalog":     {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}, Owner: "officer"}}}}, `owner names "officer"`},
 		"client flows without OU":  {Config{Clients: ClientFlows{Workflows: []ClientFlow{client}}}, "clients.ouHandle is required"},
+		"case name mapped":         {Config{Clients: ClientFlows{CaseColumns: map[string]string{"name": "/traderCompany/name"}}}, ""},
+		"unknown case column":      {Config{Clients: ClientFlows{CaseColumns: map[string]string{"state": "/flow"}}}, `caseColumns names "state"`},
+		"case column without path": {Config{Clients: ClientFlows{CaseColumns: map[string]string{"name": ""}}}, "is not a JSON Pointer"},
+		"case column dot path":     {Config{Clients: ClientFlows{CaseColumns: map[string]string{"name": "traderCompany.name"}}}, "is not a JSON Pointer"},
+		"case column bad escape":   {Config{Clients: ClientFlows{CaseColumns: map[string]string{"name": "/trader~2"}}}, "is not a JSON Pointer"},
 		// The two lists are apart: a workflow may be in both.
 		"in both lists": {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "notice", Label: "Notice", Roles: []string{"cha"}}}}, Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{client}}}, ""},
 	} {

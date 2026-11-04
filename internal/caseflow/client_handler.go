@@ -6,8 +6,11 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/core/json/jsonpointer"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
@@ -38,6 +41,10 @@ type ClientStartRequest struct {
 	// CallbackToken is the opaque token the caller expects the decision back on. It names
 	// the caller's step, so the flow hands it back unchanged.
 	CallbackToken string `json:"callbackToken"`
+	// Attributes are values about the case, such as its trader company. A new flow stores
+	// them in cases.attributes, and fills the columns flows.clients.caseColumns maps from
+	// them.
+	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
 // ClientHandler serves the route another system starts a flow on: it creates the case if it
@@ -94,7 +101,10 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	// The owner is recorded with the flow, so a flow that is recorded is owned, and a
 	// retry of a failed start finds both.
 	owner := &Owner{Role: flow.Owner, OUHandle: h.list.OUHandle}
-	f, err := h.flows.StartFlow(ctx, StartRequest{CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars, Owner: owner})
+	f, err := h.flows.StartFlow(ctx, StartRequest{
+		CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars, Owner: owner,
+		Case: caseInfo(req.Attributes, h.list.CaseColumns),
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidRequest):
@@ -132,6 +142,32 @@ func (h *ClientHandler) allowed(ctx context.Context, workflowID, caseID string) 
 		return ClientFlow{}, false
 	}
 	return flow, true
+}
+
+// maxCaseNameLength is the most characters cases.name holds (varchar(255)).
+const maxCaseNameLength = 255
+
+// caseInfo is the CaseInfo for attrs: the attributes, and the name columns maps from them.
+// Nil when attrs is empty. A name that is missing, not a string, blank or longer than
+// maxCaseNameLength leaves the case's name as it is: a longer one would fail the write, and
+// with it the flow's start.
+func caseInfo(attrs map[string]any, columns map[string]string) *CaseInfo {
+	if len(attrs) == 0 {
+		return nil
+	}
+	info := &CaseInfo{Attributes: attrs}
+	// TODO: the name is one attribute copied as it is. Make it configurable from several,
+	// such as the trader company and the destination country.
+	if pointer, ok := columns[CaseColumnName]; ok {
+		if v, ok := jsonpointer.Get(attrs, pointer); ok {
+			if name, ok := v.(string); ok {
+				if name = strings.TrimSpace(name); utf8.RuneCountInString(name) <= maxCaseNameLength {
+					info.Name = name
+				}
+			}
+		}
+	}
+	return info
 }
 
 // clientVars seeds a client flow's variables under the names the agencies' workflows map

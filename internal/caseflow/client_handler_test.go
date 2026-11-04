@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -70,6 +71,66 @@ func TestClientHandlerStartsTheFlow(t *testing.T) {
 	}
 }
 
+// The request's attributes are stored with the flow, and caseColumns fills the case's
+// name from them.
+func TestClientHandlerRecordsTheCaseAttributes(t *testing.T) {
+	list := clientFlows
+	list.CaseColumns = map[string]string{CaseColumnName: "/traderCompany/name"}
+	// cases.name holds 255 characters, which a multibyte name passes at twice the bytes.
+	atLimit, tooLong := strings.Repeat("é", maxCaseNameLength), strings.Repeat("a", maxCaseNameLength+1)
+	for name, tc := range map[string]struct {
+		attributes string
+		wantName   string
+	}{
+		"name mapped":     {`{"traderCompany":{"name":" Adam PVT LTD "}}`, "Adam PVT LTD"},
+		"no such value":   {`{"flow":"EXPORT"}`, ""},
+		"not a string":    {`{"traderCompany":{"name":7}}`, ""},
+		"not an object":   {`{"traderCompany":"Adam PVT LTD"}`, ""},
+		"blank":           {`{"traderCompany":{"name":"  "}}`, ""},
+		"unmapped stored": {`{"traderCompany":{"name":"Adam PVT LTD"},"destination":"MY"}`, "Adam PVT LTD"},
+		"at the limit":    {`{"traderCompany":{"name":"` + atLimit + `"}}`, atLimit},
+		"too long":        {`{"traderCompany":{"name":"` + tooLong + `"}}`, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, repo, _ := newClientHandler(t, list)
+			body := `{"workflowId":"notice","flowId":"task-1","attributes":` + tc.attributes + `}`
+			if rec := post(h, tnsw, body); rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+			}
+			if len(repo.cases) != 1 {
+				t.Fatalf("case info = %v, want one", repo.cases)
+			}
+			var want map[string]any
+			if err := json.Unmarshal([]byte(tc.attributes), &want); err != nil {
+				t.Fatal(err)
+			}
+			if got := repo.cases[0]; !reflect.DeepEqual(got.Attributes, want) || got.Name != tc.wantName {
+				t.Errorf("case info = %+v, want attributes %v and name %q", got, want, tc.wantName)
+			}
+		})
+	}
+}
+
+// Without caseColumns the attributes are stored and no column is filled; without
+// attributes nothing is written to the case.
+func TestClientHandlerCaseAttributesUnmapped(t *testing.T) {
+	h, repo, _ := newClientHandler(t, clientFlows)
+	if rec := post(h, tnsw, `{"workflowId":"notice","flowId":"task-1","attributes":{"traderCompany":{"name":"Adam PVT LTD"}}}`); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+	}
+	if len(repo.cases) != 1 || repo.cases[0].Name != "" || repo.cases[0].Attributes == nil {
+		t.Errorf("case info = %v, want the attributes and no name", repo.cases)
+	}
+
+	h, repo, _ = newClientHandler(t, clientFlows)
+	if rec := post(h, tnsw, startBody); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+	}
+	if len(repo.cases) != 0 {
+		t.Errorf("case info = %v, want none", repo.cases)
+	}
+}
+
 // No callback token, no variable: a workflow that calls back by it fails at the start.
 func TestClientHandlerWithoutCallbackToken(t *testing.T) {
 	h, _, wm := newClientHandler(t, clientFlows)
@@ -131,6 +192,7 @@ func TestClientHandlerBadRequests(t *testing.T) {
 		"no workflowId":   `{"flowId":"task-1"}`,
 		"no flowId":       `{"workflowId":"notice"}`,
 		"slash in flowId": `{"workflowId":"notice","flowId":"a/b"}`,
+		"bad attributes":  `{"workflowId":"notice","flowId":"task-1","attributes":["Adam PVT LTD"]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			h, _, wm := newClientHandler(t, clientFlows)

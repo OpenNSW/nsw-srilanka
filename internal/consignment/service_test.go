@@ -461,7 +461,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	returnedID := uuid.NewString()
 
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
-	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, OUHandle: "trader-ou", Data: []byte(`{}`)}, nil)
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Name: "Adam PVT LTD", OUHandle: "trader-ou", Data: []byte(`{"cmsKey":"secret"}`)}, nil)
 
 	expectCreateConsignment(sqlMock)
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases`).
@@ -485,6 +485,9 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	assert.Empty(t, req.WorkflowID)
 	assert.Equal(t, defaultExportWorkflowTemplateID, req.TemplateID)
 	assert.Contains(t, req.Vars, "traderCompany")
+	// The case's attributes, which every agency is sent, hold the trader company's name
+	// alone: not its id or data.
+	assert.Equal(t, &caseflow.CaseInfo{Attributes: map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}}, req.Case)
 
 	mockUser.AssertExpectations(t)
 	mockCompany.AssertExpectations(t)

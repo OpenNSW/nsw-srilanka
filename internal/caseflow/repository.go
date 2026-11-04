@@ -60,9 +60,12 @@ type Repository interface {
 	// Record inserts the row for f.WorkflowID, and its case if new, on first sight and is
 	// a no-op afterwards, so the first payload and manifest version are the ones the
 	// workflow is started with.
-	// A new flow reopens a case that had finished, and makes owner, if set, the holder of
-	// its role on the case, in the same transaction.
-	Record(ctx context.Context, f Flow, owner *Owner) error
+	// A new flow reopens a case that had finished, makes owner, if set, the holder of its
+	// role on the case, and writes info, if set, to the case, in the same transaction.
+	Record(ctx context.Context, f Flow, owner *Owner, info *CaseInfo) error
+	// CaseAttributes returns the case's attributes (cases.attributes), empty when it has
+	// none or there is no such case.
+	CaseAttributes(ctx context.Context, caseID string) (map[string]any, error)
 	MarkStarted(ctx context.Context, workflowID string) error
 	Get(ctx context.Context, workflowID string) (*Flow, error)
 	// ListByCase returns a case's flows, oldest first.
@@ -108,7 +111,7 @@ func (r *repository) EnsureCase(ctx context.Context, caseID string) error {
 	return err
 }
 
-func (r *repository) Record(ctx context.Context, f Flow, owner *Owner) error {
+func (r *repository) Record(ctx context.Context, f Flow, owner *Owner, info *CaseInfo) error {
 	const insertFlow = `
 		INSERT INTO case_flows (workflow_id, case_id, template_id, manifest_version, status, payload, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, now(), now())
@@ -118,6 +121,13 @@ func (r *repository) Record(ctx context.Context, f Flow, owner *Owner) error {
 	var payload any
 	if len(f.Payload) > 0 {
 		payload = []byte(f.Payload)
+	}
+	var attrs []byte
+	if info != nil {
+		var err error
+		if attrs, err = caseAttributesJSON(info.Attributes); err != nil {
+			return err
+		}
 	}
 	return r.withTx(ctx, func(tx *sql.Tx) error {
 		caseResult, err := tx.ExecContext(ctx, insertCase, f.CaseID)
@@ -156,12 +166,83 @@ func (r *repository) Record(ctx context.Context, f Flow, owner *Owner) error {
 		// A new flow reopens a case that had finished.
 		_, err = tx.ExecContext(ctx, `UPDATE cases SET state = $1, updated_at = now() WHERE id = $2 AND state <> $1`,
 			CaseInProgress, f.CaseID)
-		if err != nil || owner == nil {
+		if err != nil {
 			return err
+		}
+		if info != nil {
+			if _, err := tx.ExecContext(ctx, mergeCaseInfo, attrs, info.Name, f.CaseID); err != nil {
+				return err
+			}
+		}
+		if owner == nil {
+			return nil
 		}
 		_, err = tx.ExecContext(ctx, upsertOwner, f.CaseID, owner.Role, caseparty.TypeOU, owner.OUHandle)
 		return err
 	})
+}
+
+// mergeCaseInfo writes a CaseInfo to its case: the attributes merged by top-level key, and
+// the name when it is not empty.
+const mergeCaseInfo = `
+	UPDATE cases
+	SET attributes = attributes || $1::jsonb, name = COALESCE(NULLIF($2, ''), name), updated_at = now()
+	WHERE id = $3
+`
+
+// caseAttributesJSON encodes attrs for mergeCaseInfo. None is {}, not null: null merged
+// into an object would make an array.
+func caseAttributesJSON(attrs map[string]any) ([]byte, error) {
+	if len(attrs) == 0 {
+		return []byte(`{}`), nil
+	}
+	b, err := json.Marshal(attrs)
+	if err != nil {
+		return nil, fmt.Errorf("%w: case attributes are not JSON: %w", ErrInvalidRequest, err)
+	}
+	return b, nil
+}
+
+// SharedAttributes reads the attributes of a case that may be sent to another system: only
+// the top-level keys Keys lists, so a key written to cases.attributes stays here until it
+// is listed.
+type SharedAttributes struct {
+	Repo Repository
+	Keys []string
+}
+
+// CaseAttributes returns caseID's attributes under the listed keys, nil when it has none.
+func (s SharedAttributes) CaseAttributes(ctx context.Context, caseID string) (map[string]any, error) {
+	attrs, err := s.Repo.CaseAttributes(ctx, caseID)
+	if err != nil {
+		return nil, err
+	}
+	var shared map[string]any
+	for _, key := range s.Keys {
+		if v, ok := attrs[key]; ok {
+			if shared == nil {
+				shared = map[string]any{}
+			}
+			shared[key] = v
+		}
+	}
+	return shared, nil
+}
+
+func (r *repository) CaseAttributes(ctx context.Context, caseID string) (map[string]any, error) {
+	var raw []byte
+	err := r.db.QueryRowContext(ctx, `SELECT attributes FROM cases WHERE id = $1`, caseID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var attrs map[string]any
+	if err := json.Unmarshal(raw, &attrs); err != nil {
+		return nil, fmt.Errorf("case %s has attributes that are not a JSON object: %w", caseID, err)
+	}
+	return attrs, nil
 }
 
 // upsertOwner makes an OU the holder of a role on a case, replacing any earlier holder, as
