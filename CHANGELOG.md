@@ -84,7 +84,7 @@ A live IdP does not read `idp/bootstrap/`, so make these changes by hand.
 
 #### Workflow artifacts
 
-- Pin `artifactLoader.github.ref` to one-trade-artifacts [`95cff88`](https://github.com/OpenNSW/one-trade-artifacts/commit/95cff8880a83f2fa6bcc964e13bfdaf438663fad) (4 November 2026), for TNSW and for each agency. It holds the artifact changes this release depends on:
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`461909e`](https://github.com/OpenNSW/one-trade-artifacts/commit/461909ec208d7d2fffd936ca06aee53d7349883a) (4 November 2026), for TNSW and for each agency. It holds the artifact changes this release depends on:
   - [one-trade-artifacts#331](https://github.com/OpenNSW/one-trade-artifacts/pull/331): each agency review starts as a client flow, and `task_config` is dropped. It needs [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), and each agency's `flows.clients` must list its workflows;
   - [one-trade-artifacts#317](https://github.com/OpenNSW/one-trade-artifacts/pull/317): the SLPA sundry order picks its containers from the consignment. It needs the `SLPA_CASE_CONTAINERS` task type from [#1028](https://github.com/OpenNSW/nsw-srilanka/pull/1028), and a flow that reaches an unknown task type fails;
   - [one-trade-artifacts#311](https://github.com/OpenNSW/one-trade-artifacts/pull/311): SLPA's payment slip is stored in our storage, for invoices issued after the upgrade. It needs [#1019](https://github.com/OpenNSW/nsw-srilanka/pull/1019).
@@ -93,7 +93,8 @@ A live IdP does not read `idp/bootstrap/`, so make these changes by hand.
   - [one-trade-artifacts#326](https://github.com/OpenNSW/one-trade-artifacts/pull/326), [#307](https://github.com/OpenNSW/one-trade-artifacts/pull/307) and [#327](https://github.com/OpenNSW/one-trade-artifacts/pull/327): the SLTB tea flow is reworked, with the blend sheet levy on the officer review and a CusDec check before it is submitted to Customs;
   - [one-trade-artifacts#299](https://github.com/OpenNSW/one-trade-artifacts/pull/299), [#333](https://github.com/OpenNSW/one-trade-artifacts/pull/333), [#338](https://github.com/OpenNSW/one-trade-artifacts/pull/338) and [#339](https://github.com/OpenNSW/one-trade-artifacts/pull/339): NPQS fills in the non-ePhyto print copy and its attached sheet, gives out a withdrawn certificate, and adds the emblem and logos to the certificates;
   - [one-trade-artifacts#332](https://github.com/OpenNSW/one-trade-artifacts/pull/332) and [#340](https://github.com/OpenNSW/one-trade-artifacts/pull/340): the trader application forms import and download XML, and the HS code selection can be searched;
-  - [one-trade-artifacts#344](https://github.com/OpenNSW/one-trade-artifacts/pull/344): the boat note prints the CusDec number in box 9, and its section 22 charges table is optional.
+  - [one-trade-artifacts#344](https://github.com/OpenNSW/one-trade-artifacts/pull/344): the boat note prints the CusDec number in box 9, and its section 22 charges table is optional;
+  - [one-trade-artifacts#345](https://github.com/OpenNSW/one-trade-artifacts/pull/345): NPQS offers "With PQS Supervision" for an item's treatment.
 
 #### Local Docker Compose ([#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1084](https://github.com/OpenNSW/nsw-srilanka/pull/1084), [#1082](https://github.com/OpenNSW/nsw-srilanka/pull/1082))
 
