@@ -511,12 +511,13 @@ backend:
         - issuer: SLTB
           formats:
             # A blend sheet's number, drawn when the trader submits: the year,
-            # then a sequence that restarts every year. Produces: 2026/00001
+            # then a sequence that restarts every year, digits only because
+            # SLTB's system takes the blend sheet XML's id as a number.
+            # Produces: 202600001
             - idType: blend_sheet_no
               timezone: Asia/Colombo
               segments:
                 - {type: date, format: "yyyy"}
-                - {type: literal, value: "/"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyy}", padding: 5}
             # The reference the trader pays the SLTB levy (Tea Board CESS)

@@ -173,7 +173,7 @@ func TestCommittedRefIDFormats_UseColomboTime(t *testing.T) {
 		params  map[string]string
 		want    string
 	}{
-		{name: "SLTB blend sheet number", configs: tnswConfigs, issuer: "SLTB", idType: "blend_sheet_no", want: "2027/00001"},
+		{name: "SLTB blend sheet number", configs: tnswConfigs, issuer: "SLTB", idType: "blend_sheet_no", want: "202700001"},
 		{name: "NPQS payment ref", configs: tnswConfigs, issuer: "NPQS", idType: "npqs_payment_ref", want: "NPQS-2027-01-00001"},
 		{
 			name: "CDA application ref", configs: cdaConfigs, issuer: "CDA", idType: "pqc_application_ref",

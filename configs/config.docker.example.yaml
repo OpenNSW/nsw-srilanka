@@ -489,14 +489,13 @@ refid:
       formats:
         # blend_sheet_no — a blend sheet's number, drawn for each blend sheet
         # when the trader submits the application: the year, then a sequence
-        # that restarts every year. Produces: 2026/00001
+        # that restarts every year, digits only because SLTB's system takes
+        # the blend sheet XML's id as a number. Produces: 202600001
         - idType: blend_sheet_no
           timezone: Asia/Colombo
           segments:
             - type: date
               format: "yyyy"
-            - type: literal
-              value: "/"
             - type: sequence
               sequence:
                 scopeKey: "{issuer}:{idType}:{yyyy}"
