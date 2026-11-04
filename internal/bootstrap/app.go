@@ -1130,14 +1130,14 @@ func initArtifacts(ctx context.Context, cfg *config.Config) (*artifact.Set, erro
 
 // warmArtifacts fetches the current manifest version's artifact files into the file cache in
 // the background, so startup doesn't wait on them. A lookup that comes first fetches its file
-// on demand, so a slow or failed warm-up only costs latency and is logged, not returned. The
-// returned stop cancels the warm-up and waits for it to finish.
+// on demand, so a slow, failed or cut-short warm-up only costs latency and is logged, not
+// returned. The returned stop cancels the warm-up and waits for it to finish.
 func warmArtifacts(ctx context.Context, artifacts *artifact.Set) (stop func()) {
 	warmCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := artifacts.Warm(warmCtx, artifacts.Current()); err != nil && warmCtx.Err() == nil {
+		if err := artifacts.Warm(warmCtx, artifacts.Current()); err != nil {
 			slog.Warn("failed to warm the artifact file cache", "version", artifacts.Current(), "error", err)
 		}
 	}()

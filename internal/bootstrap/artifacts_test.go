@@ -1,7 +1,9 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,7 +85,9 @@ func TestInitArtifacts(t *testing.T) {
 }
 
 // gatedLoader serves manifests at once and holds every other file until release is closed or
-// the caller's context ends. It counts the file loads and closes started on the first one.
+// the caller's context ends. Once release is closed it always serves the file, even if the
+// context has ended too, so a test that releases the load before calling stop sees it cached.
+// It counts the file loads and closes started on the first one.
 type gatedLoader struct {
 	testutil.MemLoader
 	started chan struct{}
@@ -113,7 +117,12 @@ func (l *gatedLoader) Load(ctx context.Context, path string) ([]byte, error) {
 	case <-l.release:
 		return l.MemLoader.Load(ctx, path)
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		select {
+		case <-l.release:
+			return l.MemLoader.Load(ctx, path)
+		default:
+			return nil, ctx.Err()
+		}
 	}
 }
 
@@ -140,8 +149,13 @@ func TestWarmArtifactsRunsInTheBackground(t *testing.T) {
 	}
 }
 
-// stop cancels a warm-up that is still loading and waits for it to end.
+// stop cancels a warm-up that is still loading, waits for it to end, and the cut-short warm-up
+// is logged as a warning.
 func TestWarmArtifactsStopCancels(t *testing.T) {
+	var logs bytes.Buffer
+	defer slog.SetDefault(slog.Default())
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+
 	l := newGatedLoader()
 	set, err := artifact.LoadSet(context.Background(), l)
 	if err != nil {
@@ -160,6 +174,9 @@ func TestWarmArtifactsStopCancels(t *testing.T) {
 	case <-stopped:
 	case <-time.After(5 * time.Second):
 		t.Fatal("stop did not return while the warm-up was loading")
+	}
+	if out := logs.String(); !strings.Contains(out, "level=WARN") || !strings.Contains(out, "failed to warm the artifact file cache") {
+		t.Fatalf("logs = %q, want a warning for the cut-short warm-up", out)
 	}
 	stop() // a second stop, as from both a failed Build and Close, returns at once
 }
