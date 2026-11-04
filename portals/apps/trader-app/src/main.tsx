@@ -15,6 +15,7 @@ import { appConfig, initAppConfig } from './config'
 import { applyTheme } from '@portals/theme'
 import { appTheme } from './theme'
 import { ThemedShell } from './components/ThemedShell'
+import { AppearanceProvider } from './services/AppearanceContext'
 
 initAppConfig()
   .then(() => {
@@ -35,11 +36,13 @@ initAppConfig()
               window.history.replaceState({}, document.title, window.location.pathname)
             }}
           >
-            <ThemedShell>
-              <TranslatedUiLabels>
-                <RouterProvider router={router} />
-              </TranslatedUiLabels>
-            </ThemedShell>
+            <AppearanceProvider>
+              <ThemedShell>
+                <TranslatedUiLabels>
+                  <RouterProvider router={router} />
+                </TranslatedUiLabels>
+              </ThemedShell>
+            </AppearanceProvider>
           </AuthProvider>
         </ErrorBoundary>
       </StrictMode>,

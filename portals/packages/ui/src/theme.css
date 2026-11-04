@@ -5,6 +5,12 @@
  * Without a theme, or with one that names no accent, the accent is Radix's
  * default, indigo (see the fallback after @theme).
  *
+ * Light and dark: the Radix steps change with the appearance on their own.
+ * The few roles that need a different step in dark (the page and surface
+ * colors, the deep brand, the shadow tint) read the --app-* variables set
+ * per appearance after @theme. `dark:` utilities follow the `dark` class on
+ * <html>, not the OS, so they match the appearance the user chose.
+ *
  * An app imports this after Tailwind:
  *
  *   @import 'tailwindcss';
@@ -18,6 +24,8 @@
  * scans the app, not its dependencies. Without this, a class used only by a
  * component in this package would be missing from the app's CSS. */
 @source './';
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   /* =========================================================================
@@ -44,12 +52,17 @@
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* Brand (primary): the accent scale. -dark is for deep surfaces
-   * (gradients, hero overlays); the bright base pops against it, and
-   * bright-at-opacity gives visible hovers. */
+   * (gradients, hero overlays) in both appearances; the bright base pops
+   * against it, and bright-at-opacity gives visible hovers. -strong is the
+   * brand as text and icons (step 11, like the status -strong tokens: step 9
+   * is a fill, and as text it can fall short of 4.5:1). -contrast is text
+   * and icons on the solid base. */
   --color-primary-subtle: var(--accent-3);
   --color-primary: var(--accent-9);
   --color-primary-hover: var(--accent-10);
-  --color-primary-dark: var(--accent-12);
+  --color-primary-strong: var(--accent-11);
+  --color-primary-dark: var(--app-primary-deep);
+  --color-primary-contrast: var(--accent-contrast);
 
   /* Status - success (green) */
   --color-success-subtle: var(--green-3);
@@ -75,17 +88,18 @@
    * avoid a collision with Radix Themes' own --color-background and
    * --color-surface variables (defined on .radix-themes), which were
    * shadowing these. Utilities: bg-app-bg / bg-app-surface / bg-app-surface-muted.
-   * The surface is white, Radix's solid panel color in light mode. */
-  --color-app-bg: var(--gray-2);
-  --color-app-surface: white;
+   * The surface is Radix's solid panel color in each appearance, and the
+   * page sits a step behind it. */
+  --color-app-bg: var(--app-bg);
+  --color-app-surface: var(--app-surface);
   --color-app-surface-muted: var(--gray-3);
 
-  /* Form fields. An editable field is white with a visible border (gray-9;
-   * Radix's slate-9 is 3.3:1 on white, over the 3:1 a control's edge
-   * needs); a read-only one is flat grey with no border, so the two can't
-   * be confused. Used by the
-   * Radix TextField/Select/TextArea override in the app's index.css, which is what every
-   * JSONForms field renders through. */
+  /* Form fields. An editable field is the surface color with a visible
+   * border (gray-9; Radix's slate-9 is 3.3:1 on white and 3.4:1 on the dark
+   * surface, over the 3:1 a control's edge needs); a read-only one is flat
+   * grey with no border, so the two can't be confused. Used by the Radix
+   * TextField/Select/TextArea override in the app's index.css, which is
+   * what every JSONForms field renders through. */
   --color-field-border: var(--gray-9);
   --color-field-border-hover: var(--gray-10);
   --color-field-readonly-bg: var(--gray-3);
@@ -100,24 +114,25 @@
   --color-border-strong: var(--gray-7);
 
   /* Shadows — tinted with the gray scale's darkest step rather than pure
-   * black, and softer/wider than the default Tailwind ramp. Colored, diffuse
+   * black (black in dark, where that step is light), and softer/wider than
+   * the default Tailwind ramp. Colored, diffuse
    * shadows read as more "designed" and less like a default framework
    * drop-shadow. -up lifts a bar pinned to the bottom of a panel. */
-  --shadow-sm: 0 1px 2px 0 color-mix(in srgb, var(--gray-12) 4%, transparent);
+  --shadow-sm: 0 1px 2px 0 color-mix(in srgb, var(--app-shadow-tint) 4%, transparent);
   --shadow:
-    0 1px 3px 0 color-mix(in srgb, var(--gray-12) 6%, transparent),
-    0 1px 2px -1px color-mix(in srgb, var(--gray-12) 4%, transparent);
+    0 1px 3px 0 color-mix(in srgb, var(--app-shadow-tint) 6%, transparent),
+    0 1px 2px -1px color-mix(in srgb, var(--app-shadow-tint) 4%, transparent);
   --shadow-md:
-    0 4px 8px -2px color-mix(in srgb, var(--gray-12) 8%, transparent),
-    0 2px 4px -2px color-mix(in srgb, var(--gray-12) 5%, transparent);
+    0 4px 8px -2px color-mix(in srgb, var(--app-shadow-tint) 8%, transparent),
+    0 2px 4px -2px color-mix(in srgb, var(--app-shadow-tint) 5%, transparent);
   --shadow-lg:
-    0 12px 20px -6px color-mix(in srgb, var(--gray-12) 10%, transparent),
-    0 4px 8px -4px color-mix(in srgb, var(--gray-12) 6%, transparent);
+    0 12px 20px -6px color-mix(in srgb, var(--app-shadow-tint) 10%, transparent),
+    0 4px 8px -4px color-mix(in srgb, var(--app-shadow-tint) 6%, transparent);
   --shadow-xl:
-    0 20px 32px -8px color-mix(in srgb, var(--gray-12) 14%, transparent),
-    0 8px 12px -6px color-mix(in srgb, var(--gray-12) 8%, transparent);
-  --shadow-2xl: 0 28px 56px -16px color-mix(in srgb, var(--gray-12) 28%, transparent);
-  --shadow-up: 0 -8px 20px -8px color-mix(in srgb, var(--gray-12) 8%, transparent);
+    0 20px 32px -8px color-mix(in srgb, var(--app-shadow-tint) 14%, transparent),
+    0 8px 12px -6px color-mix(in srgb, var(--app-shadow-tint) 8%, transparent);
+  --shadow-2xl: 0 28px 56px -16px color-mix(in srgb, var(--app-shadow-tint) 28%, transparent);
+  --shadow-up: 0 -8px 20px -8px color-mix(in srgb, var(--app-shadow-tint) 8%, transparent);
 
   /* Border Radius — rounder across the board for a friendlier, more
    * consumer-app feel (kept in step with the Theme radius="large" in the
@@ -138,6 +153,25 @@
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-fade-in-delayed: fade-in 0.8s ease-out 0.3s both;
   --animate-loading-bar: loading-bar 2s ease-in-out infinite;
+}
+
+/* The roles that take a different step in each appearance. Radix's own
+ * surface variables (--color-panel-solid, --color-background) live on the
+ * Theme root, not on :root where the tokens above resolve, so these follow
+ * the same steps here: a white surface on gray-2 in light, gray-2 on gray-1
+ * in dark. The deep brand is step 12 in light; in dark that step is the
+ * lightest, so it takes step 4, the scale's deep tint there. */
+:root {
+  --app-bg: var(--gray-2);
+  --app-surface: white;
+  --app-primary-deep: var(--accent-12);
+  --app-shadow-tint: var(--gray-12);
+}
+:root.dark {
+  --app-bg: var(--gray-1);
+  --app-surface: var(--gray-2);
+  --app-primary-deep: var(--accent-4);
+  --app-shadow-tint: black;
 }
 
 /* Radix defines --accent-N only on a Theme root, not on :root where the

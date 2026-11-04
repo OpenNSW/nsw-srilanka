@@ -2,8 +2,9 @@ import { useEffect, useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { useTranslation } from 'react-i18next'
 import { appConfig, displayName } from '@/config'
+import { AppearanceSwitcher } from '@/components/Layout/AppearanceSwitcher'
 import { LanguageSwitcher } from '@/components/Layout/LanguageSwitcher'
-import { supportedLanguages } from '@/i18n'
+import { useAppearance } from '@/services/useAppearance'
 import { Banner } from '@portals/ui'
 
 export function LoginScreen() {
@@ -19,18 +20,18 @@ export function LoginScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const { systemName, appName, logoUrl, description, tagline, heroImageUrl, partnerLogos } = appConfig.branding
+  const { appearance } = useAppearance()
+  const { systemName, appName, description, tagline, heroImageUrl, partnerLogos } = appConfig.branding
+  const logoUrl = (appearance === 'dark' && appConfig.branding.logoUrlDark) || appConfig.branding.logoUrl
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-app-surface lg:overflow-hidden overflow-y-auto">
-      {/* Frosted so it's legible over both the white identity panel and the dark hero image behind it.
-          Only rendered when there's an actual choice — LanguageSwitcher itself returns null otherwise,
-          which would leave this an empty floating box. */}
-      {supportedLanguages.length > 1 && (
-        <div className="fixed top-4 right-4 z-40 rounded-lg bg-white/90 shadow-sm backdrop-blur-sm">
-          <LanguageSwitcher />
-        </div>
-      )}
+      {/* Frosted so it's legible over both the identity panel and the dark hero image behind it.
+          LanguageSwitcher renders nothing when there's only one language. */}
+      <div className="fixed top-4 right-4 z-40 flex rounded-lg bg-app-surface/90 shadow-sm backdrop-blur-sm">
+        <LanguageSwitcher />
+        <AppearanceSwitcher />
+      </div>
 
       {/* Mobile logo strip — full-width box at the very top, hidden on desktop */}
       {logoUrl && (
@@ -69,7 +70,7 @@ export function LoginScreen() {
 
               <button
                 onClick={() => void auth.signinRedirect()}
-                className="bg-primary hover:bg-primary-hover text-white px-10 py-3 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
+                className="bg-primary hover:bg-primary-hover text-primary-contrast px-10 py-3 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
               >
                 {t('auth.login.button')}
               </button>

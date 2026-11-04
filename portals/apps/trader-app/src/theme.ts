@@ -36,6 +36,20 @@ export const DEFAULT_THEME: ThemeConfig = {
     'accent-indicator': '#1e3a8a',
     'accent-track': '#1e3a8a',
   },
+  // Dark keeps Radix's dark blue scale, except the solid fill: blue-9
+  // (#0090ff) carries white text at only 3.3:1, so the fill and its hover
+  // take the scale's own deeper steps 8 and 7, which carry it at 5.1:1 and
+  // 6.5:1.
+  dark: {
+    colors: {
+      'accent-9': '#2870bd',
+      'accent-a9': '#2870bd',
+      'accent-10': '#205d9e',
+      'accent-a10': '#205d9e',
+      'accent-indicator': '#2870bd',
+      'accent-track': '#2870bd',
+    },
+  },
 }
 
 // Status text (soft badges, colored Text) in light. Radix's step 11 for

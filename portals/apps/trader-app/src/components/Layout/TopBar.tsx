@@ -4,18 +4,23 @@ import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SignedIn, SignedOut, SignInButton, UserDropdown } from '@/components/Auth'
 import { useSignOutHandler } from '@/hooks/useSignOutHandler'
+import { AppearanceSwitcher } from './AppearanceSwitcher'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { NavMenu } from './NavMenu'
 import { appConfig, displayName } from '@/config'
+import { useAppearance } from '@/services/useAppearance'
 import { useProfile } from '@/services/useProfile'
 
 function BrandMark() {
-  if (appConfig.branding.systemLogoUrl) {
-    return <img src={appConfig.branding.systemLogoUrl} alt={displayName} className="h-8 w-auto object-contain" />
+  const { appearance } = useAppearance()
+  const { systemLogoUrl, systemLogoUrlDark } = appConfig.branding
+  const logoUrl = (appearance === 'dark' && systemLogoUrlDark) || systemLogoUrl
+  if (logoUrl) {
+    return <img src={logoUrl} alt={displayName} className="h-8 w-auto object-contain" />
   }
   const initial = displayName.trim().charAt(0).toUpperCase() || 'N'
   return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-sm font-bold text-white shadow-md shadow-primary/30">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-sm font-bold text-primary-contrast shadow-md shadow-primary/30">
       {initial}
     </span>
   )
@@ -64,7 +69,10 @@ function SmallScreenMenu() {
         <Flex direction="column" gap="3" align="start">
           <NavMenu onNavigate={() => setOpen(false)} />
           <CompanyName />
-          <LanguageSwitcher />
+          <Flex gap="2" wrap="wrap">
+            <LanguageSwitcher />
+            <AppearanceSwitcher />
+          </Flex>
         </Flex>
       </Popover.Content>
     </Popover.Root>
@@ -111,6 +119,7 @@ export function TopBar() {
     <TopBarShell>
       <div className="hidden items-center gap-5 lg:flex">
         <LanguageSwitcher />
+        <AppearanceSwitcher />
         <CompanyName />
       </div>
       <div className="lg:hidden">

@@ -733,6 +733,11 @@ frontend:
       - key: support
         url: "https://gov.example.lk/support"
     copyrightNotice: "© 2026 Trader Portal. All rights reserved."
+    # Optional logos for the dark appearance, for a logo that doesn't read on
+    # a dark background; without them, the dark appearance uses logoUrl and
+    # systemLogoUrl.
+    # logoUrlDark: /branding/logo-dark.png
+    # systemLogoUrlDark: /branding/system-logo-dark.png
     # Optional colors; without them, the portal's default navy. See the
     # chart README's "Frontend branding" section.
     # theme:

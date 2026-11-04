@@ -77,7 +77,7 @@ export function TaskRow({
         <Link
           to={href}
           aria-label={t('workflow.viewTask', { name })}
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          className="inline-flex items-center gap-1 text-sm font-medium text-primary-strong hover:underline"
         >
           {t('workflow.view')}
           <ChevronRightIcon aria-hidden />

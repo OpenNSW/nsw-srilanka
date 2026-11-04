@@ -30,6 +30,10 @@ export const UIConfigSchema = z.object({
     appName: z.string().min(1),
     logoUrl: z.string().optional(),
     systemLogoUrl: z.string().optional(),
+    // Optional. Shown in place of logoUrl / systemLogoUrl in the dark
+    // appearance, for a logo that doesn't read on a dark background.
+    logoUrlDark: z.string().optional(),
+    systemLogoUrlDark: z.string().optional(),
     favicon: z.string().optional(),
     portalName: z.string().optional(),
     description: z.string().optional(),

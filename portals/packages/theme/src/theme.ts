@@ -70,11 +70,13 @@ const SELECTORS: Record<Appearance, string> = {
 
 const STYLE_ID = 'portals-theme'
 
-// Props every Radix <Theme> root must get for applyTheme to work.
-// grayColor="gray" is the one gray Radix doesn't remap (the default, auto,
-// would swap in slate), so a theme whose gray scale is gray keeps Radix's
-// own --gray-N, which themeVariables leaves alone.
-export const THEME_ROOT_PROPS = { grayColor: 'gray' } as const
+// Props every Radix <Theme> root must get for applyTheme and applyAppearance
+// to work. grayColor="gray" is the one gray Radix doesn't remap (the
+// default, auto, would swap in slate), so a theme whose gray scale is gray
+// keeps Radix's own --gray-N, which themeVariables leaves alone. An
+// inherited appearance follows the `dark` class applyAppearance puts on
+// <html>, so the document has one appearance, set in one place.
+export const THEME_ROOT_PROPS = { grayColor: 'gray', appearance: 'inherit' } as const
 
 // The CSS variables (names without dashes) one appearance of a theme sets,
 // in the order they apply: the named scales, then any colors given.
