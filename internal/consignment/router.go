@@ -372,42 +372,6 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
-// HandleGetConsignmentAgency handles GET /api/v1/consignments/{id}/agency.
-// Authenticated M2M (or user) callers with consignment:read may fetch the
-// allowlisted display names. Knowing the unguessable UUID is sufficient; there
-// is no trader/CHA company ownership check. Access is audit-logged.
-func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	if _, ok := authn.FromContext(ctx); !ok {
-		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
-		return
-	}
-	consignmentID := r.PathValue("id")
-	if consignmentID == "" {
-		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
-		return
-	}
-
-	dto, err := c.cs.GetAgencySummary(ctx, consignmentID)
-	if err != nil {
-		if errors.Is(err, ErrConsignmentNotFound) {
-			c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, true, map[string]any{
-				"view":  "agency",
-				"error": errConsignmentNotFound,
-			}))
-			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
-			return
-		}
-		httputil.InternalServerError(w, r, "failed to retrieve consignment agency summary", err)
-		return
-	}
-
-	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{
-		"view": "agency",
-	}))
-	httputil.JSON(w, http.StatusOK, dto)
-}
-
 func (c *Router) auditEvent(ctx context.Context, e nswaudit.Event) {
 	if c.audit != nil {
 		c.audit.Audit(ctx, e)

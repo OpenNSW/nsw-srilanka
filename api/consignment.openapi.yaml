@@ -282,51 +282,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/consignments/{id}/agency:
-    get:
-      summary: Get the allowlisted agency-facing summary of a consignment
-      description: |
-        Returns a small, allowlisted projection of a consignment for
-        authenticated M2M (or user) callers. Knowing the unguessable UUID is
-        sufficient — there is no trader/CHA company ownership check. Access
-        is audit-logged.
-
-        Requires scope `consignment:read`.
-      operationId: getConsignmentAgency
-      parameters:
-        - $ref: '#/components/parameters/ConsignmentID'
-      responses:
-        '200':
-          description: OK.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgencyDTO'
-        '400':
-          description: Missing consignment ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Unauthorized. No usable principal on the request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: No such consignment.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
 components:
   securitySchemes:
     BearerAuth:
@@ -428,18 +383,6 @@ components:
           type: integer
         limit:
           type: integer
-
-    AgencyDTO:
-      type: object
-      required:
-        - consignmentId
-        - traderCompanyName
-      properties:
-        consignmentId:
-          type: string
-          format: uuid
-        traderCompanyName:
-          type: string
 
     WorkflowNodeTemplateResponseDTO:
       type: object
