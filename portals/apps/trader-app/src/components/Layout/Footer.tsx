@@ -44,9 +44,9 @@ export function Footer() {
 
   return (
     <footer
-      className={`${onTaskPage ? 'relative' : 'fixed inset-x-0 bottom-0'} z-30 flex h-16 flex-col items-center justify-center gap-1 bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:text-base sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0`}
+      className={`${onTaskPage ? 'relative' : 'fixed inset-x-0 bottom-0'} z-30 flex h-16 flex-col items-center justify-center gap-1 bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0`}
     >
-      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 sm:order-1 sm:flex-nowrap sm:whitespace-nowrap">
         {footerLinks.map((link) => {
           const label = footerLinkLabel(link.key)
           if (!label) return null
@@ -64,7 +64,7 @@ export function Footer() {
           )
         })}
       </div>
-      <div className="flex items-center gap-5 text-foreground">
+      <div className="flex items-center gap-5 text-foreground sm:order-3 sm:shrink-0 sm:whitespace-nowrap">
         <span>
           <Trans
             i18nKey="common.poweredBy"
@@ -77,9 +77,10 @@ export function Footer() {
         {version && <span>{version}</span>}
       </div>
       {/* Last in DOM order so it's bottom-most when the footer stacks on narrow screens; at sm+
-          it's taken out of the row's flow and centered independently of the two groups above. */}
+          it moves between the two groups and takes the space they leave, truncating rather than
+          overlapping either. */}
       {copyrightNotice && (
-        <span className="text-foreground-muted sm:absolute sm:left-1/2 sm:top-1/2 sm:max-w-[40%] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:truncate">
+        <span className="text-foreground-muted sm:order-2 sm:min-w-0 sm:flex-1 sm:truncate sm:text-center">
           {copyrightNotice}
         </span>
       )}
