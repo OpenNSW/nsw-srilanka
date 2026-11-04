@@ -315,12 +315,18 @@ jobs:
           retention-days: 1
 
       # Scans the pushed digest — the manifest list the release tags will point
-      # at — for fixable HIGH and CRITICAL CVEs.
+      # at — for fixable HIGH and CRITICAL CVEs. Pulled from Docker Hub; GitHub's
+      # release CDN has been resolving inconsistently from these runners.
       - name: Setup Trivy
         if: steps.release-mode.outputs.enabled == 'true'
-        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
-        with:
-          version: v0.69.3
+        run: |
+          dir="$HOME/.local/bin/trivy-bin"
+          mkdir -p "$dir"
+          id=$(docker create docker.io/aquasec/trivy:0.69.3)
+          docker cp "$id":/usr/local/bin/trivy "$dir/trivy"
+          docker rm "$id" >/dev/null
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/trivy" --version
 
       # The script scans each platform in PLATFORMS and never fails on findings,
       # so the uploads below always run; "Gate on image CVEs" decides.
