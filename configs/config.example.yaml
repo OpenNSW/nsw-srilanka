@@ -483,6 +483,15 @@ refid:
                 scopeKey: "{issuer}:{idType}"
                 padding: 6
 
+        # cusdec_year — the year that goes with the registration number, in
+        # the reference the tea flow writes onto each blend sheet. Drawn in the
+        # same step. Produces: 2026
+        - idType: cusdec_year
+          timezone: Asia/Colombo
+          segments:
+            - type: date
+              format: "yyyy"
+
     - issuer: CDA
       formats:
         # fee_payment_ref — a CDA fee's payment reference: the exporter's CDA
