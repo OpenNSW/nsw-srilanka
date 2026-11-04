@@ -16,7 +16,7 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// HandleGetCHAs handles GET /api/v1/chas.
+// HandleGetCHAs responds with every CHA. No route mounts it.
 func (h *Handler) HandleGetCHAs(w http.ResponseWriter, r *http.Request) {
 	chas, err := h.svc.List(r.Context())
 	if err != nil {
