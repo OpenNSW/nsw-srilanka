@@ -302,7 +302,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       {/* A stepper lists what is missing on each step itself; the form-wide
           note would stay on screen on steps that are already complete. */}
       {interactive && showErrors && requiredErrors.length > 0 && onLastStep && (
-        <div className="px-6 pt-6">
+        <div className="px-4 pt-4 sm:px-6 sm:pt-6">
           <Banner variant="error">{t('tasks.validation.requiredFields')}</Banner>
         </div>
       )}
@@ -311,7 +311,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           refused on a step shows the field errors, as a refused submit does
           on a single-page form. A form with nothing to change is marked
           data-form-review, so its values show as plain answers (index.css). */}
-      <div className={stepper ? '' : 'p-6'} data-form-review={interactive ? undefined : ''}>
+      <div className={stepper ? '' : 'p-4 sm:p-6'} data-form-review={interactive ? undefined : ''}>
         <FormStepsProvider
           onStepChange={({ last }) => setOnLastStep(last)}
           onInvalidStep={() => setShowErrors(true)}
@@ -338,7 +338,10 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       </div>
       {actions && !stepper && (
         <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-up">
-          <div className="px-6 py-4 flex items-center gap-3">{actions}</div>
+          {/* On a phone the buttons stack, each the full width of the bar. */}
+          <div className="px-4 py-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+            {actions}
+          </div>
         </div>
       )}
     </>
@@ -369,13 +372,21 @@ function FormActions({
   return (
     <>
       {onAutoFill && (
-        <Button type="button" variant="soft" color="gray" size="3" onClick={onAutoFill} disabled={submitting}>
+        <Button
+          type="button"
+          variant="soft"
+          color="gray"
+          size="3"
+          onClick={onAutoFill}
+          disabled={submitting}
+          className={inBar ? 'w-full sm:w-auto' : undefined}
+        >
           Demo - Auto Fill
         </Button>
       )}
-      {inBar && <div className="flex-1" />}
+      {inBar && <div className="hidden flex-1 sm:block" />}
       {draftSaved && (
-        <Text size="2" color="green" role="status" className="inline-flex items-center gap-1">
+        <Text size="2" color="green" role="status" className="inline-flex items-center justify-center gap-1">
           <CheckIcon />
           {t('tasks.draftSaved')}
         </Text>
@@ -387,6 +398,7 @@ function FormActions({
           onClick={onAction}
           submitting={submitting}
           pending={pendingCommand === h.command}
+          fullWidthOnPhone={inBar}
         />
       ))}
     </>
@@ -398,6 +410,7 @@ function HandleButton({
   onClick,
   submitting,
   pending,
+  fullWidthOnPhone,
 }: {
   handle: Handle
   onClick: (h: Handle) => void
@@ -405,6 +418,8 @@ function HandleButton({
   // pending is set on the button whose action is in flight; the others are
   // only disabled.
   pending: boolean
+  // In the form's own action bar, where the buttons stack on a phone.
+  fullWidthOnPhone: boolean
 }) {
   const { t, i18n } = useTranslation()
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
@@ -412,7 +427,14 @@ function HandleButton({
   let label = handleLabel(handle, i18n.resolvedLanguage ?? i18n.language, t)
   if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : t('tasks.submitting')
   return (
-    <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
+    <Button
+      onClick={() => onClick(handle)}
+      size="3"
+      variant={style.variant}
+      color={style.color}
+      disabled={disabled}
+      className={fullWidthOnPhone ? 'w-full sm:w-auto' : undefined}
+    >
       {label}
     </Button>
   )

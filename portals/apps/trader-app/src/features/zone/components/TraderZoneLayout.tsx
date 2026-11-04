@@ -97,7 +97,7 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
         aria-hidden
       />
       <div className="flex-1 min-w-0">
-        <div className="flex items-baseline justify-between gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
           <p className="text-sm text-foreground">
             <span className="font-semibold">{entry.actor}</span>{' '}
             <span className="text-foreground-muted">{entry.event}</span>
@@ -145,9 +145,9 @@ function Header({ task, title }: { task: ZoneView; title?: string }) {
   const statusKey = workflowStatusI18nKey(task.state)
   const statusLabel = statusKey ? t(statusKey) : humanizeStatus(task.state)
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
       <div className="min-w-0">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
           {title || humanizeStatus(task.task_type)}
         </h1>
         <p className="mt-1">

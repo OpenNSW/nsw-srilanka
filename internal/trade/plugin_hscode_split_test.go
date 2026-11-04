@@ -218,6 +218,28 @@ func TestHscodeSplitBuilderFunc_NoChaLeavesThePayloadAsItWas(t *testing.T) {
 	assert.NotContains(t, payload, "cha")
 }
 
+func TestHscodeSplitBuilderFunc_CarriesEveryOtherInputIntoEveryItem(t *testing.T) {
+	config := []byte(`{"mappings": {"0902.30.11": ["sltb-blendsheet-approval", "customs-workflow"]}}`)
+	ctx := newTestContext(map[string]any{
+		"hs_codes":               []any{"0902.30.11"},
+		"company":                map[string]any{"id": "adam-pvt-ltd"},
+		"cusdec_registration_no": "90000001",
+		"cha":                    nil,
+	})
+
+	require.NoError(t, HscodeSplitBuilderFunc(ctx, config))
+
+	splitItems := ctx.Record.Data["split_items"].([]map[string]any)
+	require.Len(t, splitItems, 2)
+	for _, item := range splitItems {
+		payload := item["payload"].(map[string]any)
+		assert.Equal(t, "90000001", payload["cusdec_registration_no"])
+		assert.Equal(t, "adam-pvt-ltd", payload["company"].(map[string]any)["id"])
+		assert.NotContains(t, payload, "hs_codes")
+		assert.NotContains(t, payload, "cha")
+	}
+}
+
 // replacesConfig is the tea case: the SLTB flow submits the CusDec itself, so it
 // takes the place of customs-workflow for the whole consignment.
 const replacesConfig = `{

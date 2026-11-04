@@ -470,6 +470,19 @@ refid:
                 charset: alphanumeric  # numeric | alpha | alphanumeric
                 length: 8
 
+        # cusdec_registration_no — the registration number of the CusDec the
+        # tea flow sends SLTB, drawn once per consignment before the HS codes
+        # are chosen. It stands in for the number ASYCUDA would issue: 90,
+        # then a count that never restarts. Produces: 90000001
+        - idType: cusdec_registration_no
+          segments:
+            - type: literal
+              value: "90"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}"
+                padding: 6
+
     - issuer: CDA
       formats:
         # fee_payment_ref — a CDA fee's payment reference: the exporter's CDA
