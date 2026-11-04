@@ -58,6 +58,8 @@ function lastOffset() {
   return mockGetAll.mock.lastCall?.[0]
 }
 
+// jsdom applies no CSS, so each item renders both as a card (phones) and as a
+// table row (md: up); the tests find an item by its text with the *All queries.
 describe('ConsignmentScreen', () => {
   afterEach(() => {
     mockGetAll.mockReset()
@@ -67,8 +69,26 @@ describe('ConsignmentScreen', () => {
     mockGetAll.mockResolvedValue(page(0, ['CN-1']))
     renderScreen()
 
-    expect(await screen.findByText('Shipment CN-1')).toBeTruthy()
-    expect(mockGetAll).toHaveBeenCalledWith(0, 50, 'all', 'all', '', expect.any(AbortSignal))
+    expect(await screen.findAllByText('Shipment CN-1')).toBeTruthy()
+    expect(mockGetAll).toHaveBeenCalledWith(0, 50, 'all', undefined, '', expect.any(AbortSignal))
+  })
+
+  it('shows each item as a card on a phone and as a table row from md: up, both opening it', async () => {
+    mockGetAll.mockResolvedValue(page(0, ['CN-1']))
+    renderScreen()
+    await screen.findAllByText('Shipment CN-1')
+
+    const card = screen.getByRole('listitem')
+    expect(card.closest('ul')?.className).toContain('md:hidden')
+    expect(within(card).getByRole('link').getAttribute('href')).toBe('/consignments/CN-1')
+
+    const table = screen.getByRole('table')
+    expect(table.closest('.hidden')?.className).toContain('md:block')
+    expect(
+      within(table)
+        .getByRole('link', { name: /Shipment CN-1/ })
+        .getAttribute('href'),
+    ).toBe('/consignments/CN-1')
   })
 
   it('shows a failed load as an error, not an empty list, and retries it', async () => {
@@ -79,19 +99,19 @@ describe('ConsignmentScreen', () => {
     expect(screen.queryByText('consignments.list.empty.none')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Try Again' }))
-    expect(await screen.findByText('Shipment CN-1')).toBeTruthy()
+    expect(await screen.findAllByText('Shipment CN-1')).toBeTruthy()
     expect(screen.queryByText('consignments.list.error.loadFailed')).toBeNull()
   })
 
   it("drops the previous page's rows and count when the next page fails", async () => {
     mockGetAll.mockResolvedValueOnce(page(0, ['CN-1'])).mockRejectedValue(new Error('offline'))
     renderScreen()
-    await screen.findByText('Shipment CN-1')
+    await screen.findAllByText('Shipment CN-1')
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(await screen.findByText('consignments.list.error.loadFailed')).toBeTruthy()
-    expect(screen.queryByText('Shipment CN-1')).toBeNull()
+    expect(screen.queryAllByText('Shipment CN-1')).toHaveLength(0)
     expect(screen.queryByText('120')).toBeNull()
     expect(screen.queryByText('Total: 120')).toBeNull()
   })
@@ -102,25 +122,25 @@ describe('ConsignmentScreen', () => {
       .mockResolvedValueOnce(page(0, ['CN-1']))
       .mockReturnValueOnce(new Promise((resolve) => (resolveNext = resolve)))
     renderScreen()
-    await screen.findByText('Shipment CN-1')
+    await screen.findAllByText('Shipment CN-1')
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
     await waitFor(() => expect(lastOffset()).toBe(50))
     expect(within(screen.getByRole('status')).getByText('consignments.list.loading')).toBeTruthy()
-    expect(screen.getByText('Shipment CN-1')).toBeTruthy()
+    expect(screen.getAllByText('Shipment CN-1')).not.toHaveLength(0)
 
     resolveNext(page(50, ['CN-51']))
-    expect(await screen.findByText('Shipment CN-51')).toBeTruthy()
-    expect(screen.queryByText('Shipment CN-1')).toBeNull()
+    expect(await screen.findAllByText('Shipment CN-51')).toBeTruthy()
+    expect(screen.queryAllByText('Shipment CN-1')).toHaveLength(0)
   })
 
   it('returns to the first page when the search changes', async () => {
     mockGetAll.mockImplementation((offset = 0) => Promise.resolve(page(offset, [`CN-${offset + 1}`])))
     renderScreen()
-    await screen.findByText('Shipment CN-1')
+    await screen.findAllByText('Shipment CN-1')
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-    await screen.findByText('Shipment CN-51')
+    await screen.findAllByText('Shipment CN-51')
 
     fireEvent.change(screen.getByPlaceholderText('consignments.list.searchPlaceholder'), {
       target: { value: 'tea' },
@@ -128,16 +148,16 @@ describe('ConsignmentScreen', () => {
 
     // The search is debounced, so the request waits for typing to pause.
     await waitFor(() =>
-      expect(mockGetAll).toHaveBeenLastCalledWith(0, 50, 'all', 'all', 'tea', expect.any(AbortSignal)),
+      expect(mockGetAll).toHaveBeenLastCalledWith(0, 50, 'all', undefined, 'tea', expect.any(AbortSignal)),
     )
   })
 
   it('returns to the first page when a filter changes', async () => {
     mockGetAll.mockImplementation((offset = 0) => Promise.resolve(page(offset, [`CN-${offset + 1}`])))
     renderScreen()
-    await screen.findByText('Shipment CN-1')
+    await screen.findAllByText('Shipment CN-1')
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-    await screen.findByText('Shipment CN-51')
+    await screen.findAllByText('Shipment CN-51')
 
     const [stateFilter] = screen.getAllByRole('combobox')
     fireEvent.keyDown(stateFilter, { key: 'Enter' })
@@ -146,7 +166,7 @@ describe('ConsignmentScreen', () => {
     })
 
     await waitFor(() =>
-      expect(mockGetAll).toHaveBeenLastCalledWith(0, 50, 'FINISHED', 'all', '', expect.any(AbortSignal)),
+      expect(mockGetAll).toHaveBeenLastCalledWith(0, 50, 'FINISHED', undefined, '', expect.any(AbortSignal)),
     )
   })
 })

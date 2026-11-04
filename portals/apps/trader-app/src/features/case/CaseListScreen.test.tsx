@@ -46,6 +46,8 @@ function renderScreen() {
   )
 }
 
+// jsdom applies no CSS, so each item renders both as a card (phones) and as a
+// table row (md: up); the tests find an item by its text with the *All queries.
 describe('CaseListScreen', () => {
   afterEach(() => {
     mockGetCases.mockReset()
@@ -55,8 +57,26 @@ describe('CaseListScreen', () => {
     mockGetCases.mockResolvedValue(page(0, ['CS-1']))
     renderScreen()
 
-    expect(await screen.findByText('Case CS-1')).toBeTruthy()
+    expect(await screen.findAllByText('Case CS-1')).toBeTruthy()
     expect(mockGetCases).toHaveBeenCalledWith(0, 50, expect.any(AbortSignal))
+  })
+
+  it('shows each item as a card on a phone and as a table row from md: up, both opening it', async () => {
+    mockGetCases.mockResolvedValue(page(0, ['CS-1']))
+    renderScreen()
+    await screen.findAllByText('Case CS-1')
+
+    const card = screen.getByRole('listitem')
+    expect(card.closest('ul')?.className).toContain('md:hidden')
+    expect(within(card).getByRole('link').getAttribute('href')).toBe('/consignments/CS-1')
+
+    const table = screen.getByRole('table')
+    expect(table.closest('.hidden')?.className).toContain('md:block')
+    expect(
+      within(table)
+        .getByRole('link', { name: /Case CS-1/ })
+        .getAttribute('href'),
+    ).toBe('/consignments/CS-1')
   })
 
   it('shows a failed load as an error, not an empty list, and retries it', async () => {
@@ -67,19 +87,19 @@ describe('CaseListScreen', () => {
     expect(screen.queryByText('cases.list.empty')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Try Again' }))
-    expect(await screen.findByText('Case CS-1')).toBeTruthy()
+    expect(await screen.findAllByText('Case CS-1')).toBeTruthy()
     expect(screen.queryByText('cases.list.error')).toBeNull()
   })
 
   it("drops the previous page's rows and count when the next page fails", async () => {
     mockGetCases.mockResolvedValueOnce(page(0, ['CS-1'])).mockRejectedValue(new Error('offline'))
     renderScreen()
-    await screen.findByText('Case CS-1')
+    await screen.findAllByText('Case CS-1')
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
     expect(await screen.findByText('cases.list.error')).toBeTruthy()
-    expect(screen.queryByText('Case CS-1')).toBeNull()
+    expect(screen.queryAllByText('Case CS-1')).toHaveLength(0)
     expect(screen.queryByText('120')).toBeNull()
     expect(screen.queryByText('Total: 120')).toBeNull()
   })
@@ -90,16 +110,16 @@ describe('CaseListScreen', () => {
       .mockResolvedValueOnce(page(0, ['CS-1']))
       .mockReturnValueOnce(new Promise((resolve) => (resolveNext = resolve)))
     renderScreen()
-    await screen.findByText('Case CS-1')
+    await screen.findAllByText('Case CS-1')
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
     await waitFor(() => expect(mockGetCases.mock.lastCall?.[0]).toBe(50))
     expect(within(screen.getByRole('status')).getByText('cases.list.loading')).toBeTruthy()
-    expect(screen.getByText('Case CS-1')).toBeTruthy()
+    expect(screen.getAllByText('Case CS-1')).not.toHaveLength(0)
 
     resolveNext(page(50, ['CS-51']))
-    expect(await screen.findByText('Case CS-51')).toBeTruthy()
-    expect(screen.queryByText('Case CS-1')).toBeNull()
+    expect(await screen.findAllByText('Case CS-51')).toBeTruthy()
+    expect(screen.queryAllByText('Case CS-1')).toHaveLength(0)
   })
 })

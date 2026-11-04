@@ -64,6 +64,7 @@ const si: Locale = {
         loading: 'භාණ්ඩ තොග පිළිබඳ විස්තරය පූරණය වෙමින් පවතී ...',
         title: 'භාණ්ඩ තොග',
         create: 'නව භාණ්ඩ තොග/ නැව්ගත කිරීම්',
+        createShort: 'නව',
         creating: 'සකස් වෙමින් පවතී ...',
         error: {
           loadFailed: 'භාණ්ඩ තොගය පූරණය කළ නොහැක.',
@@ -75,10 +76,6 @@ const si: Locale = {
           allStates: 'සියලු තත්ත්වයන්',
           inProgress: 'ක්‍රියාත්මක වෙමින් පවතී',
           finished: 'අවසන් කරන ලදී',
-          tradeFlowPlaceholder: 'වෙළද ක්‍රියාවලිය',
-          allTypes: 'සියලු ආකාර',
-          export: 'අපනයන',
-          import: 'ආනයන',
         },
         empty: {
           none: 'තවමත් භාණ්ඩ තොග නොමැත',

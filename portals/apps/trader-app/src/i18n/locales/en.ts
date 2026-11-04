@@ -66,6 +66,8 @@ const en = {
         loading: 'Loading Consignments...',
         title: 'Consignments',
         create: 'New Consignment',
+        // The create button's label on a phone, where the full one doesn't fit.
+        createShort: 'New',
         creating: 'Creating...',
         error: {
           loadFailed: 'Could not load consignments.',
@@ -77,10 +79,6 @@ const en = {
           allStates: 'All States',
           inProgress: 'In Progress',
           finished: 'Finished',
-          tradeFlowPlaceholder: 'Trade Flow',
-          allTypes: 'All Types',
-          import: 'Import',
-          export: 'Export',
         },
         empty: {
           none: 'No consignments yet.',

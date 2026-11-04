@@ -6,10 +6,11 @@ import { useNavigate } from 'react-router-dom'
 import { Button, Select, Spinner, Text, TextField } from '@radix-ui/themes'
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { TradeFlow, ConsignmentState } from '@/features/consignment/types.ts'
+import type { ConsignmentState } from '@/features/consignment/types.ts'
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
 import { formatDateTime } from '@/features/consignment/utils.ts'
 import { ConsignmentName } from '@/features/consignment/components/ConsignmentName'
+import { ConsignmentCard } from '@/features/consignment/components/ConsignmentCard'
 import { ROUTES } from '@/constants'
 import { LinkRow, LoadingOverlay, PageHeader, PageState, PaginationControl, RowLink, Surface, Table } from '@portals/ui'
 import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
@@ -25,7 +26,6 @@ export function ConsignmentScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearchQuery = useDebounce(searchQuery, 400)
   const [stateFilter, setStateFilter] = useState<string>('all')
-  const [tradeFlowFilter, setTradeFlowFilter] = useState<string>('all')
 
   const [prevDebouncedSearchQuery, setPrevDebouncedSearchQuery] = useState(debouncedSearchQuery)
   if (debouncedSearchQuery !== prevDebouncedSearchQuery) {
@@ -39,13 +39,14 @@ export function ConsignmentScreen() {
     isFetching: loading,
     refetch,
   } = useQuery(
-    ['consignments', page, stateFilter, tradeFlowFilter, debouncedSearchQuery],
+    ['consignments', page, stateFilter, debouncedSearchQuery],
     (signal) =>
       getAllConsignments(
         page * limit,
         limit,
         stateFilter as ConsignmentState | 'all',
-        tradeFlowFilter as TradeFlow | 'all',
+        // Every trade flow: the list has no trade-flow filter.
+        undefined,
         debouncedSearchQuery,
         signal,
       ),
@@ -67,16 +68,30 @@ export function ConsignmentScreen() {
   }
 
   return (
-    <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
+    <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title={t('consignments.list.title')}
         count={totalCount}
         actions={
           <Can I="consignment.create">
             <div className="flex flex-col items-end gap-2">
-              <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
+              <Button
+                onClick={() => void handleCreateConsignment()}
+                disabled={creating}
+                loading={creating}
+                // Below Radix's xs breakpoint (520px) the button shows the short
+                // label; its name stays the full one.
+                aria-label={creating ? undefined : t('consignments.list.create')}
+              >
                 <PlusIcon />
-                {creating ? t('consignments.list.creating') : t('consignments.list.create')}
+                {creating ? (
+                  t('consignments.list.creating')
+                ) : (
+                  <>
+                    <span className="min-[520px]:hidden">{t('consignments.list.createShort')}</span>
+                    <span className="hidden min-[520px]:inline">{t('consignments.list.create')}</span>
+                  </>
+                )}
               </Button>
               {createError && (
                 <Text size="2" color="red">
@@ -107,7 +122,7 @@ export function ConsignmentScreen() {
                 </TextField.Slot>
               </TextField.Root>
             </div>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap">
               <Select.Root
                 value={stateFilter}
                 onValueChange={(val: string) => {
@@ -122,20 +137,6 @@ export function ConsignmentScreen() {
                   <Select.Item value="FINISHED">{t('consignments.list.filter.finished')}</Select.Item>
                 </Select.Content>
               </Select.Root>
-              <Select.Root
-                value={tradeFlowFilter}
-                onValueChange={(val: string) => {
-                  setTradeFlowFilter(val)
-                  setPage(0)
-                }}
-              >
-                <Select.Trigger placeholder={t('consignments.list.filter.tradeFlowPlaceholder')} />
-                <Select.Content>
-                  <Select.Item value="all">{t('consignments.list.filter.allTypes')}</Select.Item>
-                  <Select.Item value="IMPORT">{t('consignments.list.filter.import')}</Select.Item>
-                  <Select.Item value="EXPORT">{t('consignments.list.filter.export')}</Select.Item>
-                </Select.Content>
-              </Select.Root>
             </div>
           </div>
         </div>
@@ -148,42 +149,59 @@ export function ConsignmentScreen() {
             <PageState
               variant="empty"
               title={
-                debouncedSearchQuery || stateFilter !== 'all' || tradeFlowFilter !== 'all'
+                debouncedSearchQuery || stateFilter !== 'all'
                   ? t('consignments.list.empty.filtered')
                   : t('consignments.list.empty.none')
               }
             />
           ) : (
-            <Table>
-              <Table.Header>
-                <Table.HeaderCell>{t('consignments.list.table.id')}</Table.HeaderCell>
-                <Table.HeaderCell>{t('consignments.list.table.tradeFlow')}</Table.HeaderCell>
-                <Table.HeaderCell>{t('consignments.list.table.state')}</Table.HeaderCell>
-                <Table.HeaderCell>{t('consignments.list.table.created')}</Table.HeaderCell>
-              </Table.Header>
-              <Table.Body>
+            <>
+              <ul className="flex flex-col gap-3 p-4 md:hidden">
                 {consignments.map((consignment) => (
-                  <LinkRow key={consignment.id} to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
-                    <Table.Cell>
-                      <RowLink to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
-                        <ConsignmentName name={consignment.name} id={consignment.id} />
-                      </RowLink>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <TradeFlowBadge flow={consignment.flow} />
-                    </Table.Cell>
-                    <Table.Cell>
-                      <ConsignmentStateBadge state={consignment.state} />
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="2" color="gray">
-                        {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
-                      </Text>
-                    </Table.Cell>
-                  </LinkRow>
+                  <ConsignmentCard
+                    key={consignment.id}
+                    to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}
+                    name={consignment.name}
+                    id={consignment.id}
+                    flow={consignment.flow}
+                    state={consignment.state}
+                    createdAt={consignment.createdAt}
+                  />
                 ))}
-              </Table.Body>
-            </Table>
+              </ul>
+              <div className="hidden md:block">
+                <Table>
+                  <Table.Header>
+                    <Table.HeaderCell>{t('consignments.list.table.id')}</Table.HeaderCell>
+                    <Table.HeaderCell>{t('consignments.list.table.tradeFlow')}</Table.HeaderCell>
+                    <Table.HeaderCell>{t('consignments.list.table.state')}</Table.HeaderCell>
+                    <Table.HeaderCell>{t('consignments.list.table.created')}</Table.HeaderCell>
+                  </Table.Header>
+                  <Table.Body>
+                    {consignments.map((consignment) => (
+                      <LinkRow key={consignment.id} to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
+                        <Table.Cell>
+                          <RowLink to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
+                            <ConsignmentName name={consignment.name} id={consignment.id} />
+                          </RowLink>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <TradeFlowBadge flow={consignment.flow} />
+                        </Table.Cell>
+                        <Table.Cell>
+                          <ConsignmentStateBadge state={consignment.state} />
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Text size="2" color="gray">
+                            {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
+                          </Text>
+                        </Table.Cell>
+                      </LinkRow>
+                    ))}
+                  </Table.Body>
+                </Table>
+              </div>
+            </>
           )}
         </div>
         <div className="bg-app-surface/60">
