@@ -29,7 +29,7 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
   const uploadCtx = useUpload()
 
   return (
-    <div className="p-6 text-sm text-foreground-muted leading-relaxed space-y-3">
+    <div className="p-4 sm:p-6 text-sm text-foreground-muted leading-relaxed space-y-3">
       <ReactMarkdown
         urlTransform={urlTransform}
         components={{

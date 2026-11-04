@@ -20,10 +20,12 @@ export function CopyableId({ label, id }: { label: string; id: string }) {
       .catch((err) => console.error('CopyableId: failed to copy:', err))
   }
   const copyLabel = labels.copyNamed(label)
+  // The ID breaks across lines rather than overflow a narrow screen, so all of
+  // it stays readable.
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-foreground-muted">
-      <span>{label}</span>
-      <span className="font-mono">{id}</span>
+    <span className="inline-flex max-w-full items-center gap-1 text-xs text-foreground-muted">
+      <span className="shrink-0">{label}</span>
+      <span className="min-w-0 break-all font-mono">{id}</span>
       {canCopy && (
         <Tooltip content={copied ? labels.copied : copyLabel}>
           <IconButton type="button" size="1" variant="ghost" color="gray" aria-label={copyLabel} onClick={copy}>

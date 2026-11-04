@@ -496,6 +496,15 @@ backend:
                 - {type: literal, value: "TNSW"}
                 - type: random
                   random: {scopeKey: "{issuer}:{idType}", charset: alphanumeric, length: 8}
+            # The registration number of the CusDec the tea flow sends SLTB,
+            # drawn once per consignment. It stands in for the number ASYCUDA
+            # would issue: 90, then a count that never restarts.
+            # Produces: 90000001
+            - idType: cusdec_registration_no
+              segments:
+                - {type: literal, value: "90"}
+                - type: sequence
+                  sequence: {scopeKey: "{issuer}:{idType}", padding: 6}
         - issuer: CDA
           formats:
             # A CDA fee's payment reference: <registration number><main
@@ -511,12 +520,13 @@ backend:
         - issuer: SLTB
           formats:
             # A blend sheet's number, drawn when the trader submits: the year,
-            # then a sequence that restarts every year. Produces: 2026/00001
+            # then a sequence that restarts every year, digits only because
+            # SLTB's system takes the blend sheet XML's id as a number.
+            # Produces: 202600001
             - idType: blend_sheet_no
               timezone: Asia/Colombo
               segments:
                 - {type: date, format: "yyyy"}
-                - {type: literal, value: "/"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyy}", padding: 5}
             # The reference the trader pays the SLTB levy (Tea Board CESS)

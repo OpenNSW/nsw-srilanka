@@ -62,7 +62,7 @@ export function ConsignmentDetailScreen({
         ? t('consignments.detail.loading.consignment')
         : t('consignments.detail.loading.processing')
     return (
-      <div className="p-6">
+      <div className="px-4 py-6 sm:px-6 lg:px-8">
         <PageState variant="loading" title={message} />
       </div>
     )
@@ -79,7 +79,7 @@ export function ConsignmentDetailScreen({
           : t('consignments.detail.error.notFound')
 
     return (
-      <div className="p-6">
+      <div className="px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-6">
           <Breadcrumb items={[up, { label: untitled }]} />
         </div>
@@ -117,7 +117,9 @@ export function ConsignmentDetailScreen({
       <div className="mt-10 mb-8 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">{consignment.name || untitled}</h1>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
+              {consignment.name || untitled}
+            </h1>
             <ConsignmentStateBadge state={consignment.state} size="2" />
             {/* A case carries no flow. */}
             {consignment.flow && <TradeFlowBadge flow={consignment.flow} />}
