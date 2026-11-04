@@ -8,9 +8,11 @@ import { ROUTES } from '@/constants'
 // see that component). Mounted once in App.tsx alongside <Routes>, so it's
 // the same one instance across every screen.
 //
-// Height contract: h-16 (64px) below sm, sm:h-8 (32px) at sm+ breakpoints.
+// Height contract: h-16 (64px) below lg, lg:h-8 (32px) at lg+ breakpoints. Below lg the groups
+// stack, since the single row only has room for the links, the "Powered by" text and the
+// copyright notice from 1024px up.
 // Every screen (Layout.tsx, LoginScreen.tsx,
-// ZonePreviewScreen.tsx) must reserve space for it with `pb-16 sm:pb-8` so
+// ZonePreviewScreen.tsx) must reserve space for it with `pb-16 lg:pb-8` so
 // the reserve stays in sync with this component.
 //
 // Except on a task page: there the form's action bar sticks to the bottom of
@@ -44,9 +46,9 @@ export function Footer() {
 
   return (
     <footer
-      className={`${onTaskPage ? 'relative' : 'fixed inset-x-0 bottom-0'} z-30 flex h-16 flex-col items-center justify-center gap-1 bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:text-base sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0`}
+      className={`${onTaskPage ? 'relative' : 'fixed inset-x-0 bottom-0'} z-30 flex h-16 flex-col items-center justify-center gap-1 bg-app-surface px-4 py-1.5 text-xs lg:h-8 lg:flex-row lg:justify-between lg:gap-4 lg:px-6 lg:py-0`}
     >
-      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 lg:order-1 lg:flex-nowrap lg:whitespace-nowrap">
         {footerLinks.map((link) => {
           const label = footerLinkLabel(link.key)
           if (!label) return null
@@ -64,7 +66,7 @@ export function Footer() {
           )
         })}
       </div>
-      <div className="flex items-center gap-5 text-foreground">
+      <div className="flex items-center gap-5 text-foreground lg:order-3 lg:shrink-0 lg:whitespace-nowrap">
         <span>
           <Trans
             i18nKey="common.poweredBy"
@@ -76,10 +78,11 @@ export function Footer() {
         </span>
         {version && <span>{version}</span>}
       </div>
-      {/* Last in DOM order so it's bottom-most when the footer stacks on narrow screens; at sm+
-          it's taken out of the row's flow and centered independently of the two groups above. */}
+      {/* Last in DOM order so it's bottom-most when the footer stacks below lg; at lg+
+          it moves between the two groups and takes the space they leave, truncating rather than
+          overlapping either. */}
       {copyrightNotice && (
-        <span className="text-foreground-muted sm:absolute sm:left-1/2 sm:top-1/2 sm:max-w-[40%] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:truncate">
+        <span className="text-foreground-muted lg:order-2 lg:min-w-0 lg:flex-1 lg:truncate lg:text-center">
           {copyrightNotice}
         </span>
       )}

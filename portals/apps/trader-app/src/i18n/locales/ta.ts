@@ -314,7 +314,7 @@ const ta: Locale = {
       copied: 'பிரதிசெய்யப்பட்டது',
       copyNamed: 'பிரதி {{name}}',
       dateTimeAt: '{{date}} அன்று {{time}} மணிக்கு',
-      poweredBy: '<1>இலங்கை மென்பொருள் அறக்கட்டளையின்</1> <0>OpenNSW</0> ஆல் இயக்கப்படுகிறது',
+      poweredBy: '<1>Lanka Software Foundation</1> இன் <0>OpenNSW</0> ஆல் இயக்கப்படுகிறது',
       pagination: {
         total: 'மொத்தம்: {{count}}',
         page: 'பக்கம் {{totalPages}} இல் {{page}}',
