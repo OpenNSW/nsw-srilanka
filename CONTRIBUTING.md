@@ -119,8 +119,8 @@ PostgreSQL 16 with the pinned migrator: a fresh install, and an upgrade from
 `main` in which each new migration is applied, rolled back and compared with the
 schema from before it, then applied again. A new migration therefore needs a
 `@DOWN` that undoes every schema change its `@UP` makes. To run it locally
-against a PostgreSQL, with the migrator installed (see Database migrations in
-the README):
+against a PostgreSQL, with the migrator installed (`go install github.com/OpenNSW/agency/backend/cmd/migrate@<MIGRATE_VERSION>`, the version pinned in the
+`Dockerfile`):
 
 ```bash
 BASE=$(git merge-base origin/main HEAD)

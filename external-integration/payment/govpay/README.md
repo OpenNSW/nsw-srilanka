@@ -76,7 +76,50 @@ The ids are looked up from the current config on every call, not stored on the t
 
 4. **Add the reference format, if the fee has its own.** A step whose `reference` names an `issuer` / `id_type` needs that format under `refid` in `configs/config.example.yaml`, `configs/config.docker.example.yaml` and each deployed config. Check that every `param` the format reads exists in the step's inputs and matches the format's `pattern`.
 5. **Restart the backend.** Startup validates every mapping, so a missing id fails here rather than at payment time.
-6. **Try it.** Run the workflow to `PENDING_PAYMENT`, then simulate GovPay+'s callback with the mapped ids (see [Simulating a payment webhook](../../../README.md#5-simulating-a-payment-webhook-dev-only) in the root README).
+6. **Try it.** Run the workflow to `PENDING_PAYMENT`, then simulate GovPay+'s callback with the mapped ids (see [Simulating a payment webhook](#simulating-a-payment-webhook-dev-only) below).
+
+## Simulating a payment webhook (dev only)
+
+GovPay+ fires no callback in local development. To advance a `PENDING_PAYMENT` task, send it yourself. The route needs a bearer token with the `payment-webhooks:process` scope; locally, the `GOVPAY_TO_NSW` client gets one with the `client_credentials` grant, its secret being `M2M_CLIENT_SECRET` in `idp/.env`.
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/payments/govpay/webhook" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transactionID": "TNSWPYRMTWMY",
+    "subinstId": "sub-001",
+    "serviceid": "FCAU",
+    "serviceName": "FCAU Application Fee",
+    "data": [
+      {
+        "seq": "1",
+        "paramName": "refNo",
+        "value": "TNSWPYRMTWMY"
+      },
+      {
+        "seq": "2",
+        "paramName": "amount",
+        "value": "1500"
+      },
+      {
+        "seq": "3",
+        "paramName": "currency",
+        "value": "LKR"
+      },
+      {
+        "seq": "4",
+        "paramName": "status",
+        "value": "SUCCESS"
+      },
+      {
+        "seq": "5",
+        "paramName": "paymentMethod",
+        "value": "ONLINE_BANKING"
+      }
+    ]
+  }'
+```
 
 ## Troubleshooting
 
