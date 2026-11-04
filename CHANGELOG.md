@@ -8,17 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.15.0] - 2026-11-04
 
-This release changes how TNSW starts an agency's flows and who owns a case. TNSW now starts them on a new route, `POST /api/v1/internal/cases/{caseId}/flows`, and `POST /api/v1/inject` is gone. A case is owned by the OU of its trader, its CHA and its agency, not by a company record. Five migrations run, and two of them delete data: consignments created before the upgrade lose their owners and are no longer listed. TNSW, every agency, the pinned artifacts and each agency's new `flows.clients` section must change in the same deployment. The OTLP endpoint is validated more strictly, and the portal's colors, role menu and screens follow the new `branding.theme`, `IDP_ROLE_LABELS` and the token's scopes. It also adds the agency admin routes, case names from the trader company, SLPA containers on the sundry order, and a stored copy of SLPA's payment slip.
+This release changes how TNSW starts an agency's flows and who owns a case. TNSW now starts them on a new route, `POST /api/v1/internal/cases/{caseId}/flows`, and `POST /api/v1/inject` is gone. A case is owned by the OU of its trader, its CHA and its agency, not by a company record. The 38 migrations are folded into one, so this release installs into an empty database only: drop and recreate the database of TNSW and of every agency, and nothing in them is carried over. TNSW, every agency, the pinned artifacts and each agency's new `flows.clients` section must change in the same deployment. The OTLP endpoint is validated more strictly, and the portal's colors, role menu and screens follow the new `branding.theme`, `IDP_ROLE_LABELS` and the token's scopes. It also adds the agency admin routes, case names from the trader company, SLPA containers on the sundry order, and a stored copy of SLPA's payment slip.
 
 ### Upgrade notes
 
-#### Finish or cancel open work first, and expect older consignments to disappear ([#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073))
+#### Drop and recreate every database: nothing is carried over ([#1103](https://github.com/OpenNSW/nsw-srilanka/pull/1103), [#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073))
 
-- Let open consignments, cases and tasks finish before you upgrade, or cancel them, on TNSW and on each agency. Nothing is backfilled, so after the upgrade:
-  - a consignment created before it has no trader or CHA owner: it no longer shows in a trader's or CHA's list, and its tasks can't be opened. The rows stay in the database. Start new consignments to test;
-  - an agency workflow that was still running has no recorded flow, so its completion fails and retries;
-  - an agency's case detail doesn't list a task started before the upgrade, because it has no recorded read roles.
-- There is no production data to backfill. A deployment that has data it needs to keep should say so before upgrading.
+- Migrations `000001` to `000038` are folded into one `000001_initial_schema`, built from their end state. The migrator records applied migrations by version number, so a database that already has migrations 1 to 38 would skip the new `000001`, and the schema changes of this release (see Migrations) would never run on it. This release installs into an empty database only.
+- Before you deploy, drop and recreate the TNSW database and every agency database, then let the migrate job apply `000001`. Everything in them is lost: consignments, cases, tasks, payments, reference ID counters and company records. Let open work finish first if you need its outcome.
+- Company records go with the TNSW database, so seed them again once `000001` is applied:
+  - **Kubernetes:** apply your companies file inside the backend pod: `kubectl exec -i -n "$NS" "$POD" -- otc company apply -f /dev/stdin < companies.json`. See [onboarding traders and CHAs](https://github.com/OpenNSW/nsw-srilanka/blob/v0.15.0/docs/guides/onboarding-traders-and-chas.md#step-4-register-the-company-with-otc-inside-the-backend-pod).
+  - **Docker Compose:** `docker compose run --rm seed-companies` applies `configs/companies.json`.
+  - If you don't keep a companies file, record each company with `otc company list` and `otc company view <id>` before you drop the database.
+- The retired workflow engine's tables, `workflows`, `workflow_nodes` and `workflow_node_templates`, are gone. Nothing reads them.
 
 #### Upgrade TNSW and every agency together, with the artifacts and the new config ([#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1071](https://github.com/OpenNSW/nsw-srilanka/pull/1071))
 
@@ -39,17 +41,17 @@ This release changes how TNSW starts an agency's flows and who owns a case. TNSW
 - `ouHandle` is recorded as the owner of every case an agency starts, and it decides which officers see the case and its tasks. A renamed OU handle has to be updated in `case_parties` too. `caseColumns` fills the case name in the officers' list from the trader company TNSW sends. Without it, `name` stays empty.
 - Copy each agency's workflow list from [`configs/agency/`](https://github.com/OpenNSW/nsw-srilanka/tree/v0.15.0/configs/agency): CDA lists 12, EFC 1, FCAU 12, NPQS 24 and SLTB 11.
 
-#### Migrations ([#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073), [#1077](https://github.com/OpenNSW/nsw-srilanka/pull/1077), [#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1071](https://github.com/OpenNSW/nsw-srilanka/pull/1071))
+#### Migrations ([#1103](https://github.com/OpenNSW/nsw-srilanka/pull/1103), [#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073), [#1077](https://github.com/OpenNSW/nsw-srilanka/pull/1077), [#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1071](https://github.com/OpenNSW/nsw-srilanka/pull/1071))
 
-Five migrations run before the API starts; the Helm hook and Docker Compose run them. Use the 0.15.0 `tnsw-migrate` image. Each agency's database runs the same migrations. The previous version can't run against a migrated database.
+One migration, `000001_initial_schema`, runs on the empty database before the API starts; the Helm hook and Docker Compose run it. Use the 0.15.0 `tnsw-migrate` image. Each agency's database runs it too. It is the end state of the previous 38, with no seed data, so it holds the schema changes of this release:
 
-- `000034_taskflow_tables` renames `task_records_v2` to `taskflow_tasks`, with its indexes, and creates `taskflow_task_roles`, where each new task records the roles from its template's `read.roles`. Any SQL, dashboard or report outside this repository that reads `task_records_v2` must read `taskflow_tasks`.
-- `000035_rename_refid_random_values` renames `refid_random` to `refid_random_values`, so the values already issued are kept. Without it, every `REFID_GENERATOR` task with a random segment fails.
-- `000036_case_parties_by_ou` deletes the `company` rows of `case_parties` and changes the party type to `ou` or `user`. This is the migration that removes the owners of older consignments.
-- `000037_drop_agency_workflow` drops `agency_workflow`, which holds the workflows the old inject started.
-- `000038_add_cases_attributes` adds `cases.attributes`, the values TNSW sends with each flow it starts on an agency.
+- `taskflow_tasks`, renamed from `task_records_v2` with its indexes, and `taskflow_task_roles`, where each new task records the roles from its template's `read.roles`. Any SQL, dashboard or report outside this repository that reads `task_records_v2` must read `taskflow_tasks`.
+- `refid_random_values`, renamed from `refid_random`, which is the name `core/refid` v0.5.0 reads.
+- `case_parties` names its parties by OU (`ou` or `user`) in place of a company record.
+- No `agency_workflow`: an agency's flows are recorded in `case_flows`, like TNSW's.
+- `cases.attributes`, the values TNSW sends with each flow it starts on an agency.
 
-Rolling back with each migration's `@DOWN` restores the tables, indexes and constraint, and not the rows that `000036` and `000037` deleted.
+Its `@DOWN` drops every table. The next migration will be `000002`.
 
 #### Update the IdP ([#1090](https://github.com/OpenNSW/nsw-srilanka/pull/1090), [#1084](https://github.com/OpenNSW/nsw-srilanka/pull/1084), [#1060](https://github.com/OpenNSW/nsw-srilanka/pull/1060))
 
@@ -98,7 +100,7 @@ A live IdP does not read `idp/bootstrap/`, so make these changes by hand.
 
 #### Local Docker Compose ([#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1084](https://github.com/OpenNSW/nsw-srilanka/pull/1084), [#1082](https://github.com/OpenNSW/nsw-srilanka/pull/1082))
 
-- Run the migrations and rebuild the agency images: `docker compose build migrate && docker compose up migrate`.
+- Recreate the local database volumes, because the migrations are folded into one, rebuild the migrate and agency images, and run the migration: `docker compose build migrate && docker compose up migrate`. Then seed the companies again with `docker compose run --rm seed-companies`.
 - Recreate the IdP volumes (`docker compose down`, remove the `thunderid-db`, `thunderid-certs` and `thunderid-secrets` volumes, `docker compose up`). A plain `up` imports without error but leaves the existing applications in their old OUs. `ADMIN_CLI_SECRET` can be dropped from `idp/.env`.
 - `make setup` doesn't overwrite an existing `portals/apps/trader-app/public/config.js`: remove `hscode:read` from its `IDP_SCOPES` and `SHOW_COLOR_SCHEME_SWITCHER`.
 
@@ -112,6 +114,7 @@ A live IdP does not read `idp/bootstrap/`, so make these changes by hand.
 
 ### Changed
 
+- The 38 migrations are one, `000001_initial_schema`, built from their end state and without the retired workflow engine's tables. It installs into an empty database only. See the upgrade notes. ([#1103](https://github.com/OpenNSW/nsw-srilanka/pull/1103))
 - A case is owned by the OU of its trader, its CHA and its agency, named by the `ouHandle` claim of its users' tokens, in place of a company record. One task gate serves TNSW and the agencies. See the upgrade notes. ([#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016))
 - Tasks record the roles in their template's `read.roles`, and the task tables and the refid random table are renamed, with the `OpenNSW/core` upgrade. See the upgrade notes. ([#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073), [#1077](https://github.com/OpenNSW/nsw-srilanka/pull/1077))
 - The task API answers 404 for a task that doesn't exist and 500 for one it can't read, where it answered 404 for both. A consignment or agency case detail fails when its task list can't be read. ([#1088](https://github.com/OpenNSW/nsw-srilanka/pull/1088))
