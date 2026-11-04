@@ -6,6 +6,41 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-11-04
+
+This is the third release candidate for 1.0.0. An SLC Edge callback that arrives before what it answers is there is now answered `202 Accepted` and retried by TNSW for up to 24 hours, where it was answered `503` and left to SLC Edge's own retries. Tell the SLC Edge team that the responses changed. The retries are held in memory, so a restart drops the ones still pending. The artifacts pin moves to a commit that raises the FCAU application fee to LKR 5000.00. There is no config change, and no migration. If no blocker is found, 1.0.0 is a later release candidate's code, promoted without changes.
+
+### Upgrade notes
+
+#### Tell the SLC Edge team that early callbacks are answered 202 ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+
+- A callback that arrives before what it answers is there used to get a `503`, and SLC Edge retried it a few times. That covers a declaration or dispatch note that isn't recorded yet, a document that can't be found by its reference because the event raced its integration result, and a task that hasn't parked yet. A `CUSDEC_INTEGRATED` whose task hadn't parked got a `500`. All of them now get `202 Accepted`, so SLC Edge stops retrying, and TNSW retries the callback itself. The first retry comes after 5 seconds, then the wait doubles up to every 10 minutes, until 24 hours have passed.
+- The retries live in the server process only, and nothing waits for them when the server stops. A restart or a deploy drops the callbacks still held, and SLC Edge won't send them again because it was told they were accepted. Deploy when no early callback is pending: a held callback logs `slce: callback arrived early; accepted and held for retry`, and `slce: held callback applied` when it lands.
+- A callback that can never be applied, such as one that no longer decodes, or one for a case that was never recorded, is logged at error as `slce: held callback cannot be applied; giving up` and dropped. So is one still not applied after 24 hours (`slce: held callback still not applied; giving up`). Alert on both.
+- No config change. The [SLC Edge callback spec](https://github.com/OpenNSW/nsw-srilanka/blob/v1.0.0-rc.3/api/webhooks.slce.openapi.yaml) lists the new `202` and the shorter `503`.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`5585945`](https://github.com/OpenNSW/one-trade-artifacts/commit/558594551e2c074300055dd23658d10304d92538) (4 November 2026), for TNSW and for each agency. It holds one change to the forms and workflows since the 1.0.0-rc.2 pin: [one-trade-artifacts#363](https://github.com/OpenNSW/one-trade-artifacts/pull/363), the FCAU application fee is LKR 5000.00, up from LKR 1500.00, in the amount charged and in the three trader-facing texts that repeat it. The fee id is the same, so the payment config doesn't change. It needs no matching image version.
+- The rest of it is the artifacts repository's own release tooling ([#360](https://github.com/OpenNSW/one-trade-artifacts/pull/360), [#361](https://github.com/OpenNSW/one-trade-artifacts/pull/361), [#362](https://github.com/OpenNSW/one-trade-artifacts/pull/362) and [#364](https://github.com/OpenNSW/one-trade-artifacts/pull/364)): the workflows that synced artifacts to R2 are replaced by a release workflow that publishes a bundle's manifest from a release tag. Nothing in the artifacts themselves changes.
+
+### Changed
+
+- An SLC Edge callback that arrives early is answered `202 Accepted` and retried by TNSW for up to 24 hours, in place of a `503` that SLC Edge retried a few times. See the upgrade notes. ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+
+### Known issues
+
+- SLC Edge callbacks that TNSW holds for retry live in the server's memory: a restart drops the pending ones, and one still not applied after 24 hours is logged and dropped. ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+- With the `github` artifact loader, workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment, and they are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines exported over OTLP whatever `server.logLevel` is, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks, and authenticated SLC Edge callbacks, are audited. Payments and the storage module's own events are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Cancelling a Cargo Dispatch Note in TNSW does not cancel it in ASYCUDA World, which NSW has no call for: the note stays registered there. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
+
 ## [1.0.0-rc.2] - 2026-11-04
 
 This is the second release candidate for 1.0.0. It issues the CusDec registration number that the SLTB tea flow sends, which needs two new `refid` formats, and it takes the slash out of the SLTB blend sheet number. The image version, the `refid` config and the artifacts pin must change in the same deployment. It also adds the `VALUE_WRITER` step, warms the artifact file cache at startup, and makes the Trader Portal fit small screens. A new deployment starts from this release's examples, as for 1.0.0-rc.1. If no blocker is found, 1.0.0 is a later release candidate's code, promoted without changes.
@@ -1502,7 +1537,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.2...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.3...HEAD
+[1.0.0-rc.3]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.2...v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.1...v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...v1.0.0-rc.1
 [0.15.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.14.0...v0.15.0
