@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 import { AppearanceProvider } from './AppearanceContext'
 import { APPEARANCE_STORAGE_KEY } from './appearanceContextCore'
@@ -26,6 +26,7 @@ function renderProbe() {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   localStorage.clear()
   document.documentElement.className = ''
   document.documentElement.style.colorScheme = ''
@@ -57,6 +58,33 @@ describe('AppearanceProvider', () => {
     localStorage.setItem(APPEARANCE_STORAGE_KEY, 'dark')
     expect(renderProbe()()).toBe('dark:dark')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
+
+  it('follows the OS when it switches, while the setting is system', () => {
+    let dark = false
+    const listeners = new Set<(event: MediaQueryListEvent) => void>()
+    vi.stubGlobal('matchMedia', () => ({
+      get matches() {
+        return dark
+      },
+      addEventListener: (_: string, listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+      removeEventListener: (_: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+    }))
+    const switchOs = (next: boolean) => {
+      dark = next
+      act(() => listeners.forEach((listener) => listener({ matches: next } as MediaQueryListEvent)))
+    }
+
+    const shown = renderProbe()
+    expect(shown()).toBe('system:light')
+
+    switchOs(true)
+    expect(shown()).toBe('system:dark')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    switchOs(false)
+    expect(shown()).toBe('system:light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
 
   it('ignores a stored value that is not a setting', () => {

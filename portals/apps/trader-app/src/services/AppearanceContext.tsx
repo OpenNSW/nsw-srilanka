@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { applyAppearance, systemAppearance, watchSystemAppearance, type AppearanceSetting } from '@portals/theme'
 import { AppearanceContext, storeAppearanceSetting, storedAppearanceSetting } from './appearanceContextCore'
 
@@ -7,10 +7,10 @@ import { AppearanceContext, storeAppearanceSetting, storedAppearanceSetting } fr
 // while the choice is 'system'.
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [setting, setSettingState] = useState(storedAppearanceSetting)
-  const [system, setSystem] = useState(() => systemAppearance())
+  // The OS's appearance, kept current. React reads it again once subscribed,
+  // so a switch between the first render and the subscription isn't missed.
+  const system = useSyncExternalStore(watchSystemAppearance, () => systemAppearance())
   const appearance = setting === 'system' ? system : setting
-
-  useEffect(() => watchSystemAppearance(setSystem), [])
 
   // A layout effect runs before the browser paints, so a change never shows
   // a frame in the old appearance.

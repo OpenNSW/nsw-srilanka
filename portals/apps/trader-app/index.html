@@ -11,13 +11,18 @@
       // and rule as src/services/appearanceContextCore.ts, and the same
       // marks on <html> as @portals/theme's applyAppearance.
       try {
-        var setting = localStorage.getItem('appearance')
+        var setting = null
+        try {
+          setting = localStorage.getItem('appearance')
+        } catch (e) {
+          // Storage blocked: follow the OS, as the app does.
+        }
         var dark =
           setting === 'dark' || (setting !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.classList.toggle('dark', dark)
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
       } catch (e) {
-        // Storage or matchMedia unavailable: the app sets the appearance when it loads.
+        // matchMedia unavailable: the app sets the appearance when it loads.
       }
     </script>
   </head>
