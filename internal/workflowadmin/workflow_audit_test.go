@@ -1,4 +1,4 @@
-package consignment
+package workflowadmin
 
 import (
 	"errors"
@@ -24,14 +24,14 @@ func TestWorkflowEngineStatus_AuditCaseID(t *testing.T) {
 		{"invalid case", map[string]any{workflow.VarCaseID: 42}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
+			svc := newTestService(nil)
 			wm := new(MockWM)
 			require.NoError(t, svc.RegisterWorkflowManager(wm))
 			wm.On("GetStatus", mock.Anything, "auxiliary--child").Return(&workflow.WorkflowInstance{
 				ID: "auxiliary--child", WorkflowVariables: tc.variables,
 			}, nil).Once()
 			client, capture := nswaudit.NewWithCapture()
-			router := mustNewRouter(t, svc, nil, nil, client)
+			router := NewHandler(svc, nil, client)
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.SetPathValue("id", "auxiliary--child")
 			req = req.WithContext(withAuthContext(req.Context(), "admin-1"))
@@ -57,11 +57,11 @@ func TestWorkflowEngineStatus_AuditCaseID(t *testing.T) {
 func TestWorkflowActions_AuditCaseID(t *testing.T) {
 	for _, route := range []struct {
 		name      string
-		handler   func(*Router) http.HandlerFunc
+		handler   func(*Handler) http.HandlerFunc
 		forcePark bool
 	}{
-		{"resolve", func(r *Router) http.HandlerFunc { return r.HandleResolveAdminIntervention }, false},
-		{"force-park", func(r *Router) http.HandlerFunc { return r.HandleForceParkTaskNode }, true},
+		{"resolve", func(r *Handler) http.HandlerFunc { return r.HandleResolveAdminIntervention }, false},
+		{"force-park", func(r *Handler) http.HandlerFunc { return r.HandleForceParkTaskNode }, true},
 	} {
 		for _, tc := range []struct {
 			name        string
@@ -71,7 +71,7 @@ func TestWorkflowActions_AuditCaseID(t *testing.T) {
 			{"success", false, false}, {"conflict", true, false}, {"lookup failure", false, true},
 		} {
 			t.Run(route.name+"/"+tc.name, func(t *testing.T) {
-				svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
+				svc := newTestService(nil)
 				wm := new(MockWM)
 				require.NoError(t, svc.RegisterWorkflowManager(wm))
 				instance := parkedInstance(workflow.NodeTypeTask)
@@ -100,7 +100,7 @@ func TestWorkflowActions_AuditCaseID(t *testing.T) {
 					}
 				}
 				client, capture := nswaudit.NewWithCapture()
-				router := mustNewRouter(t, svc, nil, nil, client)
+				router := NewHandler(svc, nil, client)
 				body := `{"action":"RETRY","reason":"repair"}`
 				if route.forcePark {
 					body = `{"reason":"repair"}`
@@ -131,13 +131,13 @@ func TestWorkflowActions_AuditCaseID(t *testing.T) {
 }
 
 func TestTaskWorkflowEngineStatus_DoesNotUseFlowAuditLookup(t *testing.T) {
-	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
+	svc := newTestService(nil)
 	rootWM, taskWM := new(MockWM), new(MockWM)
 	require.NoError(t, svc.RegisterWorkflowManager(rootWM))
 	require.NoError(t, svc.RegisterTaskWorkflowManager(taskWM))
 	taskWM.On("GetStatus", mock.Anything, "task-wf-1").Return(&workflow.WorkflowInstance{ID: "task-wf-1"}, nil).Once()
 	client, capture := nswaudit.NewWithCapture()
-	router := mustNewRouter(t, svc, nil, nil, client)
+	router := NewHandler(svc, nil, client)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.SetPathValue("id", "task-wf-1")
 	req = req.WithContext(withAuthContext(req.Context(), "admin-1"))

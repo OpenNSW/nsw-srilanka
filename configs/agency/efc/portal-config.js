@@ -8,13 +8,17 @@ window.__APP_CONFIG__ = {
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.efc.nsw-agency.local',
   APP_URL: 'http://localhost:5178',
   IDP_SCOPES:
-    'openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read',
+    'openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
   // The ID-token claim holding the officer's roles, which the user menu lists.
   IDP_ROLE_CLAIM_NAME: 'roles',
   IDP_ROLE_LABELS: JSON.stringify({
     'EFC Officer': {
       title: 'EFC Officer',
       description: 'Reviews and completes the tasks the EFC receives from the National Single Window.',
+    },
+    'EFC Admin': {
+      title: 'EFC Admin',
+      description: 'Views any case and its workflows, and resolves or force-parks their nodes.',
     },
   }),
   SHOW_AUTOFILL_BUTTON: 'false',

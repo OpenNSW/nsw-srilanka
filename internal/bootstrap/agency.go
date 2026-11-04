@@ -16,7 +16,9 @@ import (
 )
 
 // mountAgency registers the agency's own routes: the route the systems flows.clients
-// lists start flows on, gated by a scope only they hold, and the officer case views.
+// lists start flows on, gated by a scope only they hold, and the officer case views. Its
+// admin view of a case is not here — see workflowAdmin.HandleGetCase in Build, mounted
+// unconditionally for both modes, since an agency case needs no mode-specific admin code.
 func mountAgency(
 	mux *http.ServeMux,
 	db *gorm.DB,

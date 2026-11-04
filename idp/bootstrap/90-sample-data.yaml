@@ -172,6 +172,76 @@ attributes:
 credentials:
   password: "{{ .SAMPLE_USER_PASSWORD }}"
 ---
+# File: cda_admin.yaml
+resource_type: user
+id: e8b01e03-7a16-43a5-a6d1-4380ca7da349
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_admin@government.dev"
+  family_name: "Admin"
+  given_name: "CDA"
+  phone_number: "+94771234580"
+  username: "cda_admin"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: efc_admin.yaml
+resource_type: user
+id: 360f24e4-b7c5-454e-991c-c9195af1bfb7
+type: Government_User
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+attributes:
+  email: "efc_admin@government.dev"
+  family_name: "Admin"
+  given_name: "EFC"
+  phone_number: "+94771234581"
+  username: "efc_admin"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: fcau_admin.yaml
+resource_type: user
+id: 463e7db9-cabe-4366-b009-7d0d35dfd9b6
+type: Government_User
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+attributes:
+  email: "fcau_admin@government.dev"
+  family_name: "Admin"
+  given_name: "FCAU"
+  phone_number: "+94771234582"
+  username: "fcau_admin"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: npqs_admin.yaml
+resource_type: user
+id: a53c4e9f-4e15-4486-aea5-0923ced20a84
+type: Government_User
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+attributes:
+  email: "npqs_admin@government.dev"
+  family_name: "Admin"
+  given_name: "NPQS"
+  phone_number: "+94771234583"
+  username: "npqs_admin"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: sltb_admin.yaml
+resource_type: user
+id: b36c9e91-e721-43c3-b0bc-6fea41eb8a75
+type: Government_User
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+attributes:
+  email: "sltb_admin@government.dev"
+  family_name: "Admin"
+  given_name: "SLTB"
+  phone_number: "+94771234584"
+  username: "sltb_admin"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
 # File: CHA.yaml
 resource_type: group
 id: 01a13912-d495-7400-b5bc-541433e05751
@@ -256,4 +326,54 @@ description: SLTB officers group
 ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
 members:
   - id: 01a13912-dc5b-7fa0-acd8-b4908ad52a15
+    type: user
+---
+# File: CDA_Admins.yaml
+resource_type: group
+id: 4d2e3edc-30c7-4a3a-8801-321ff02c5eab
+name: CDA Admins
+description: CDA admins group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: e8b01e03-7a16-43a5-a6d1-4380ca7da349
+    type: user
+---
+# File: EFC_Admins.yaml
+resource_type: group
+id: dc4af422-e193-43c5-bba2-7cb7c57ae60c
+name: EFC Admins
+description: EFC admins group
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+members:
+  - id: 360f24e4-b7c5-454e-991c-c9195af1bfb7
+    type: user
+---
+# File: FCAU_Admins.yaml
+resource_type: group
+id: c1f9508e-3d22-46b0-ac61-0517891d17d7
+name: FCAU Admins
+description: FCAU admins group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+members:
+  - id: 463e7db9-cabe-4366-b009-7d0d35dfd9b6
+    type: user
+---
+# File: NPQS_Admins.yaml
+resource_type: group
+id: 4a7201d6-6bc6-446c-8961-f08386bfb79c
+name: NPQS Admins
+description: NPQS admins group
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+members:
+  - id: a53c4e9f-4e15-4486-aea5-0923ced20a84
+    type: user
+---
+# File: SLTB_Admins.yaml
+resource_type: group
+id: bd042c8c-0daa-448a-a030-c310da8e2782
+name: SLTB Admins
+description: SLTB admins group
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+members:
+  - id: b36c9e91-e721-43c3-b0bc-6fea41eb8a75
     type: user

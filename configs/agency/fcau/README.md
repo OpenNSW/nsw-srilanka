@@ -79,6 +79,7 @@ creates FCAU for this deployment, on the `FCAU API` resource server
 | Caller                             | Client                | Grant                                                                                                                      |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Officer `fcau_officer`             | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
+| Admin `fcau_admin`                 | `OGA_PORTAL_APP_FCAU` | `FCAU Admin` role (via `FCAU Admins`): `consignment:adminread`/`adminwrite`, `profile:read`                                |
 | TNSW injecting and replying        | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `workflow:inject`, and `task:write` to reply on FCAU's parked steps, which its catalog maps `tnsw` to |
 | FCAU decision callback and storage | `FCAU_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` and `storage:read`/`write` on TNSW                                                     |
 

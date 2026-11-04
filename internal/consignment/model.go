@@ -150,14 +150,7 @@ type AdminDetailDTO struct {
 }
 
 // FlowDTO is one flow (top-level workflow) of a consignment, see internal/caseflow.
-type FlowDTO struct {
-	WorkflowID   string `json:"workflowId"`
-	TemplateID   string `json:"templateId"`
-	TemplateName string `json:"templateName"` // the workflow definition's name, else TemplateID
-	Status       string `json:"status"`       // STARTING, STARTED or COMPLETED
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt"`
-}
+type FlowDTO = caseflow.View
 
 // WorkflowNodeResponseDTO represents a workflow node in the response.
 type WorkflowNodeResponseDTO struct {

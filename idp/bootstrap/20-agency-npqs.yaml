@@ -38,6 +38,12 @@ resources:
       - name: Read
         handle: read
         description: Read action
+      - name: Admin Read
+        handle: adminread
+        description: Admin Read action
+      - name: Admin Write
+        handle: adminwrite
+        description: Admin Write action
   - name: Task
     handle: task
     description: Task resource
@@ -112,6 +118,29 @@ resource_type: group
 id: 01a13912-d42a-7975-af84-363b4cf254bd
 name: NPQS Officers
 description: NPQS officers group
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+---
+# File: NPQS_Admin.yaml
+resource_type: role
+id: 0fe1c79b-b055-4cd2-bb0f-e8698ac13d0d
+name: NPQS Admin
+description: Role for NPQS admins, who view any case and its workflows and resolve or force-park their nodes
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+permissions:
+  - resourceServerId: 01a13912-cd09-7fe5-9b6f-e16c5523ca41
+    permissions:
+      - consignment:adminread
+      - consignment:adminwrite
+      - profile:read
+assignments:
+  - id: 4a7201d6-6bc6-446c-8961-f08386bfb79c
+    type: group
+---
+# File: NPQS_Admins.yaml
+resource_type: group
+id: 4a7201d6-6bc6-446c-8961-f08386bfb79c
+name: NPQS Admins
+description: NPQS admins group
 ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
 ---
 # File: NPQSPortalApp.yaml
@@ -195,6 +224,8 @@ inboundAuthConfig:
         - role
         - ou
         - consignment:read
+        - consignment:adminread
+        - consignment:adminwrite
         - task:read
         - task:write
         - profile:read

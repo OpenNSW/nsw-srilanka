@@ -13,7 +13,6 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/taskflow/store"
-	workflow "github.com/OpenNSW/core/workflow"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
@@ -27,60 +26,12 @@ type MockTaskStore struct {
 	mock.Mock
 }
 
-func (m *MockTaskStore) GetTaskByWorkflowID(ctx context.Context, workflowID string) (store.TaskRecord, bool) {
-	args := m.Called(ctx, workflowID)
-	return args.Get(0).(store.TaskRecord), args.Bool(1)
-}
-
 func (m *MockTaskStore) GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord {
 	args := m.Called(ctx, filter)
 	tasks, _ := args.Get(0).([]store.TaskRecord)
 	return tasks
 }
 
-// MockWM implements workflow.Manager for testing.
-type MockWM struct {
-	mock.Mock
-}
-
-func (m *MockWM) StartWorkflow(ctx context.Context, id string, workflowDefinition workflow.WorkflowDefinition, initialWorkflowVariables map[string]any) error {
-	args := m.Called(ctx, id, workflowDefinition, initialWorkflowVariables)
-	return args.Error(0)
-}
-
-func (m *MockWM) CompleteActivation(ctx context.Context, workflowID, runID, activationID string, output map[string]any) error {
-	args := m.Called(ctx, workflowID, runID, activationID, output)
-	return args.Error(0)
-}
-
-func (m *MockWM) TaskUpdate(ctx context.Context, workflowID, runID string, update workflow.UpdateEvent) error {
-	args := m.Called(ctx, workflowID, runID, update)
-	return args.Error(0)
-}
-
-func (m *MockWM) GetStatus(ctx context.Context, workflowID string) (*workflow.WorkflowInstance, error) {
-	args := m.Called(ctx, workflowID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*workflow.WorkflowInstance), args.Error(1)
-}
-
-// ResolveAdminIntervention makes MockWM also satisfy workflow.AdminInterventionResolver —
-// needed only by the ResolveAdminIntervention tests, which type-assert s.wm against it the same
-// way the real Service.ResolveAdminIntervention does.
-func (m *MockWM) ResolveAdminIntervention(ctx context.Context, workflowID, runID string, resolution workflow.AdminResolutionSignal) error {
-	args := m.Called(ctx, workflowID, runID, resolution)
-	return args.Error(0)
-}
-
-// ForceParkActivation makes MockWM also satisfy workflow.ActivationParker, for the force-park tests.
-func (m *MockWM) ForceParkActivation(ctx context.Context, workflowID, runID, activationID, reason string) error {
-	args := m.Called(ctx, workflowID, runID, activationID, reason)
-	return args.Error(0)
-}
-
-// MockUserService implements user.Service for testing.
 type MockUserService struct {
 	mock.Mock
 }

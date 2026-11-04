@@ -68,6 +68,7 @@ CDA for this deployment, on the `CDA API` resource server
 | Caller                              | Client               | Grant                                                                                                                    |
 | ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
+| Admin `cda_admin`                   | `OGA_PORTAL_APP_CDA` | `CDA Admin` role (via `CDA Admins`): `consignment:adminread`/`adminwrite`, `profile:read`                                |
 | TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `workflow:inject`, and `task:write` to reply on CDA's parked steps, which its catalog maps `tnsw` to |
 | CDA's decision callback and storage | `CDA_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` on TNSW, which maps `cda` to it in its catalog, and `storage:read`/`write`           |
 

@@ -74,33 +74,10 @@ func (m *MockCompanyService) UpsertCompany(ctx context.Context, record *company.
 	return m.Called(ctx, record).Error(0)
 }
 
-func TestConsignmentService_RegisterWorkflowManager(t *testing.T) {
-	db, _ := setupTestDB(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
-	mockWM := new(MockWM)
-
-	// Test registration
-	err := svc.RegisterWorkflowManager(mockWM)
-	assert.NoError(t, err)
-
-	// Test already registered
-	err = svc.RegisterWorkflowManager(mockWM)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "already registered")
-
-	// Test nil manager
-	svc2 := mustNewService(t, db, nil, nil, nil, nil, nil)
-	err = svc2.RegisterWorkflowManager(nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot be nil")
-}
-
 func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
 	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
 	consignmentID := uuid.NewString()
@@ -118,7 +95,6 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, consignmentID, result.ID)
 	assert.Equal(t, "My Test Consignment", result.Name)
-	mockWM.AssertExpectations(t)
 	mockTaskStore.AssertExpectations(t)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
@@ -239,10 +215,8 @@ func TestConsignmentService_GetConsignmentByID_CompanyMatchesTraderSlot_CHARoleO
 // caller actually holds — holding only one of the two roles is sufficient.
 func TestConsignmentService_GetConsignmentByID_SameCompanyBothSlots_SingleRoleGranted(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
 	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	id := uuid.NewString()
 	companyID := "company-both"
