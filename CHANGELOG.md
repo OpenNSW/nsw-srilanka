@@ -6,9 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [1.0.0-beta] - 2026-11-04
+## [1.0.0-rc.1] - 2026-11-04
 
-This is the first release for production, published as a beta of 1.0.0. A new deployment starts from this release's example config, Helm values and `idp/bootstrap/`, and from an empty database, which the single `000001` migration builds. The upgrade notes below are for a deployment already on 0.15.0. This release removes `GET /api/v1/chas` and the `cha:read` scope, and adds a dark appearance to the Trader Portal.
+This is the first release for production, and the first release candidate for 1.0.0. If no blocker is found, 1.0.0 is this release's code, promoted without changes. A new deployment starts from this release's example config, Helm values and `idp/bootstrap/`, and from an empty database, which the single `000001` migration builds. The upgrade notes below are for a deployment already on 0.15.0. This release removes `GET /api/v1/chas` and the `cha:read` scope, and adds a dark appearance to the Trader Portal.
 
 ### Upgrade notes
 
@@ -1428,8 +1428,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-beta...HEAD
-[1.0.0-beta]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...v1.0.0-beta
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.1...HEAD
+[1.0.0-rc.1]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...v1.0.0-rc.1
 [0.15.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.12.0...v0.13.0
