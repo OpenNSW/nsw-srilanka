@@ -63,9 +63,9 @@ const PARK_CATEGORY_INFO: Record<ParkCategory, { label: string; tone: StatusTone
 
 // Which resolution actions exist and whether core's engine rejects them for a GATEWAY node (a
 // gateway's routing can't be completed without bypassing its own condition logic — see
-// core/workflow.parkNodeForAdmin). description is a tooltip on an info button next to each action
-// on wide screens, and the chosen action's text under the buttons on narrow ones — see the
-// Action section below.
+// core/workflow.parkNodeForAdmin). description is the chosen action's text under the buttons, and
+// also a tooltip on an info button next to each action on wide screens — see the Action section
+// below.
 const ADMIN_ACTIONS: {
   action: AdminResolutionAction
   label: string
@@ -309,8 +309,9 @@ export function ResolveAdminInterventionView({
                   >
                     {label}
                   </Button>
-                  {/* A button so the tooltip opens on keyboard focus as well as hover; narrow screens
-                      have no hover, so they read the chosen action's description below instead. */}
+                  {/* A button so the tooltip opens on keyboard focus as well as hover. A touch tap
+                      doesn't open it, so the chosen action's description is also shown below at
+                      every width; the tooltip is a shortcut for reading the others on wide screens. */}
                   <Tooltip content={description} maxWidth="320px">
                     <button
                       type="button"
@@ -324,7 +325,7 @@ export function ResolveAdminInterventionView({
               )
             })}
           </div>
-          <Text as="p" size="2" color="gray" className="mt-4 text-justify md:hidden" aria-live="polite">
+          <Text as="p" size="2" color="gray" className="mt-4 text-justify" aria-live="polite">
             {currentAction?.description ?? 'Select an action to see what it does.'}
           </Text>
         </Section>
