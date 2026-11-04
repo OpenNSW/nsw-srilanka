@@ -372,26 +372,6 @@ func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Con
 	return responseDTO, nil
 }
 
-// GetAgencySummary returns the allowlisted projection for an Agency caller.
-// It does not enforce trader/CHA ownership — the route is gated by
-// consignment:read and an unguessable consignment UUID.
-func (s *Service) GetAgencySummary(ctx context.Context, consignmentID string) (*AgencyDTO, error) {
-	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
-	if err != nil {
-		return nil, err
-	}
-
-	traderCompany, err := s.companyService.GetCompanyByID(ctx, consignment.TraderCompanyID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve trader company with ID %s: %w", consignment.TraderCompanyID, err)
-	}
-
-	return &AgencyDTO{
-		ConsignmentID:     consignment.ID,
-		TraderCompanyName: traderCompany.Name,
-	}, nil
-}
-
 // ListConsignments returns consignments scoped to a company: those it is the trader on
 // (TraderCompanyID), those it is the CHA on (CHACompanyID), or either when both are set. At
 // least one of the two must be set.
