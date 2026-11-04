@@ -119,14 +119,14 @@ export function EngineStatusView({
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-lg font-semibold text-foreground">{title}</h2>
           <StatusBadge tone={WORKFLOW_STATUS_TONE[status.status]} size="2" title="Engine execution status">
             {status.status}
           </StatusBadge>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <GlobalVariablesButton
             workflowId={workflowId}
             label={title}
@@ -202,7 +202,7 @@ export function EngineStatusView({
             No audit events yet.
           </Text>
         ) : (
-          <ul className="text-xs font-mono text-foreground-muted space-y-1">
+          <ul className="text-xs font-mono text-foreground-muted space-y-1 break-all">
             {status.audit_trail.map((line, i) => (
               // Audit trail lines have no stable id; index is fine — this list is
               // append-only and re-rendered wholesale on every fetch.
