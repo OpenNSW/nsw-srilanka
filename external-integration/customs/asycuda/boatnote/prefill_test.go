@@ -76,7 +76,7 @@ func note(container, seal, mark string, volume float64) string {
 	raw, _ := json.Marshal(map[string]any{"eventType": "CDN_RETRIEVED", "payload": map[string]any{"cdn": map[string]any{
 		"voyageNumber": "V092", "voyageDateAsString": "2026-06-25", "vessel": "CMA CGM MARCO POLO",
 		"vesselOpCode": "OP-MSC", "contOpCode": "CO-882", "placeOfLoading": "LKCMB", "placeOfDischarge": "DEHAM",
-		"containerNumber": container, "sealNo": seal, "containerMark": mark, "volume": volume,
+		"containerNumber": container, "sealNo": seal, "containerMark": mark, "volume": volume, "bol": "BL-" + container,
 	}}})
 	return string(raw)
 }
@@ -116,11 +116,11 @@ func TestPrefill_FillsTheBoatNoteFromCustoms(t *testing.T) {
 		"consignee":                 "COCO WORLD SDN BHD, 125, PUTRAJAYA",
 		"exporters_registration_no": "900000000001",
 		"vessel":                    "CMA CGM MARCO POLO",
-		"voyage_no_date":            "V092 / 2026-06-25",
-		"port_of_loading":           "LKCMB",
-		"port_of_discharge":         "DEHAM",
+		"voyage_no":                 "V092",
+		"voyage_date":               "2026-06-25",
 		"vessel_op_code":            "OP-MSC",
 		"cont_op_code":              "CO-882",
+		"sn_bl_no":                  "BL-MSCU8492019",
 		"description_of_goods":      "Coconut Oil; Desiccated Coconut",
 		"cccn_no":                   "1513110000; 0801110000",
 		"number_of_packages":        "160",
@@ -131,6 +131,8 @@ func TestPrefill_FillsTheBoatNoteFromCustoms(t *testing.T) {
 	} {
 		assert.Equal(t, want, got.Form[field], field)
 	}
+	assert.NotContains(t, got.Form, "port_of_loading", "the trader names the ports")
+	assert.NotContains(t, got.Form, "port_of_discharge", "the trader names the ports")
 }
 
 // Only the dispatch notes are retrieved, each by reference with the codes the
@@ -169,6 +171,8 @@ func TestPrefill_NoNoteRetrievedIsNotRetrieved(t *testing.T) {
 
 	require.Len(t, got.Form["containers"], 2)
 	assert.False(t, got.Retrieved)
+	assert.Equal(t, "MARCO POLO", got.Form["voyage_no"], "the declaration's voyage name")
+	assert.NotContains(t, got.Form, "voyage_date", "the declaration carries no voyage date")
 }
 
 // Without a retrieved declaration (the retrieve failed, or answered without
@@ -196,4 +200,20 @@ func TestPrefill_NoNotesListedKeepsTheConsignmentRows(t *testing.T) {
 	assert.True(t, got.Retrieved)
 	assert.Equal(t, "EVER GIVEN", got.Form["vessel"])
 	assert.Equal(t, retrievedInput(t, declaration).Fallback, got.Form["containers"])
+}
+
+// A dispatch note's voyage date fills the date field as yyyy-MM-dd, from any of
+// the shapes it may come in; one in no known shape is left for the trader.
+func TestIsoDate(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"2026-06-25", "2026-06-25"},
+		{" 2026-06-25 ", "2026-06-25"},
+		{"25/06/2026", "2026-06-25"},
+		{"2026-06-25T00:00:00Z", "2026-06-25"},
+		{"2026-06-25T10:30:00", "2026-06-25"},
+		{"25-Jun-26", ""},
+		{"", ""},
+	} {
+		assert.Equal(t, c.want, isoDate(c.in), c.in)
+	}
 }
