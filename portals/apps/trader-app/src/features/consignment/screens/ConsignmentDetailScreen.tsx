@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Button } from '@radix-ui/themes'
 import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
+import { useCan } from '@/hooks/useCan'
 import { isAgencyMode } from '@/features/case/mode'
 import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
 import { AuxiliaryServices } from '@/features/consignment/components/AuxiliaryServices'
@@ -45,11 +46,13 @@ export function ConsignmentDetailScreen({
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const hasFlowWriteScope = useCan('consignment.startFlow')
   // An agency's officers work on cases: the same records, under their own name.
   const up = parent ?? { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: ROUTES.CONSIGNMENTS }
   const untitled = t(isAgencyMode ? 'cases.detail.title' : 'consignments.detail.title')
   const backTo = up.to ?? ROUTES.CONSIGNMENTS
   const { consignment, error, loading, provisioning, refreshing, refetch, startFlow } = useConsignment(consignmentId, {
+    hasFlowWriteScope,
     scope,
     fetcher,
   })
@@ -156,7 +159,9 @@ export function ConsignmentDetailScreen({
         </div>
       </Surface>
 
-      {canStartFlows && <AuxiliaryServices flows={consignment.startableFlows ?? []} onStart={startFlow} />}
+      {canStartFlows && hasFlowWriteScope && (
+        <AuxiliaryServices flows={consignment.startableFlows ?? []} onStart={startFlow} />
+      )}
     </div>
   )
 }
