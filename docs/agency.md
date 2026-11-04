@@ -208,9 +208,9 @@ flows:
 is a column and each value the JSON Pointer (RFC 6901) of a string in the attributes.
 `name` is the only column it can fill: `caseColumns: { name: /traderCompany/name }` makes
 the trader company's name the case's name, which the case list shows over the case id. A
-value that is missing or blank leaves the name as it is. The server refuses to start if
-a column is not `name` or a value is not a JSON Pointer. The attributes are stored
-whether or not anything maps them.
+value that is missing, blank, or longer than the 255 characters `cases.name` holds leaves
+the name as it is. The server refuses to start if a column is not `name` or a value is not
+a JSON Pointer. The attributes are stored whether or not anything maps them.
 
 `owner` decides who sees the case and its tasks: a role every officer holds for an
 open case, or a narrower one (an accounts division's `accountant`) for a closed one.

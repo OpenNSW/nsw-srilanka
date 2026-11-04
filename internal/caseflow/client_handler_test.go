@@ -76,6 +76,8 @@ func TestClientHandlerStartsTheFlow(t *testing.T) {
 func TestClientHandlerRecordsTheCaseAttributes(t *testing.T) {
 	list := clientFlows
 	list.CaseColumns = map[string]string{CaseColumnName: "/traderCompany/name"}
+	// cases.name holds 255 characters, which a multibyte name passes at twice the bytes.
+	atLimit, tooLong := strings.Repeat("é", maxCaseNameLength), strings.Repeat("a", maxCaseNameLength+1)
 	for name, tc := range map[string]struct {
 		attributes string
 		wantName   string
@@ -86,6 +88,8 @@ func TestClientHandlerRecordsTheCaseAttributes(t *testing.T) {
 		"not an object":   {`{"traderCompany":"Adam PVT LTD"}`, ""},
 		"blank":           {`{"traderCompany":{"name":"  "}}`, ""},
 		"unmapped stored": {`{"traderCompany":{"name":"Adam PVT LTD"},"destination":"MY"}`, "Adam PVT LTD"},
+		"at the limit":    {`{"traderCompany":{"name":"` + atLimit + `"}}`, atLimit},
+		"too long":        {`{"traderCompany":{"name":"` + tooLong + `"}}`, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h, repo, _ := newClientHandler(t, list)

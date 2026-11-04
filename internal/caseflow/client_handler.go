@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/json/jsonpointer"
@@ -143,9 +144,13 @@ func (h *ClientHandler) allowed(ctx context.Context, workflowID, caseID string) 
 	return flow, true
 }
 
+// maxCaseNameLength is the most characters cases.name holds (varchar(255)).
+const maxCaseNameLength = 255
+
 // caseInfo is the CaseInfo for attrs: the attributes, and the name columns maps from them.
-// Nil when attrs is empty. A name that is missing, not a string or blank leaves the case's
-// name as it is.
+// Nil when attrs is empty. A name that is missing, not a string, blank or longer than
+// maxCaseNameLength leaves the case's name as it is: a longer one would fail the write, and
+// with it the flow's start.
 func caseInfo(attrs map[string]any, columns map[string]string) *CaseInfo {
 	if len(attrs) == 0 {
 		return nil
@@ -156,7 +161,9 @@ func caseInfo(attrs map[string]any, columns map[string]string) *CaseInfo {
 	if pointer, ok := columns[CaseColumnName]; ok {
 		if v, ok := jsonpointer.Get(attrs, pointer); ok {
 			if name, ok := v.(string); ok {
-				info.Name = strings.TrimSpace(name)
+				if name = strings.TrimSpace(name); utf8.RuneCountInString(name) <= maxCaseNameLength {
+					info.Name = name
+				}
 			}
 		}
 	}
