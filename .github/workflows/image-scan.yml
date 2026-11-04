@@ -53,11 +53,17 @@ jobs:
         id: repo_owner
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      # Same Trivy version as release.yml.
+      # Pulled from Docker Hub, the same version release.yml gates on; GitHub's
+      # release CDN has been resolving inconsistently from these runners.
       - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
-        with:
-          version: v0.69.3
+        run: |
+          dir="$HOME/.local/bin/trivy-bin"
+          mkdir -p "$dir"
+          id=$(docker create docker.io/aquasec/trivy:0.69.3)
+          docker cp "$id":/usr/local/bin/trivy "$dir/trivy"
+          docker rm "$id" >/dev/null
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/trivy" --version
 
       - name: Run Trivy vulnerability scanner
         id: trivy-scan
