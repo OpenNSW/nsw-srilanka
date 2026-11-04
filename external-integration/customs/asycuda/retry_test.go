@@ -132,7 +132,7 @@ const (
 		"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}}`
 )
 
-// A CDN callback that finds its task not parked is answered 503 and then
+// A CDN callback that finds its task not parked is accepted with a 202 and
 // retried by the handler until the task has parked.
 func TestSLCEHandler_CDNCallbackRetriedUntilTheTaskParks(t *testing.T) {
 	for name, tc := range map[string]struct {
@@ -149,7 +149,7 @@ func TestSLCEHandler_CDNCallbackRetriedUntilTheTaskParks(t *testing.T) {
 			cdnSvc.On(tc.method, mock.Anything, mock.Anything).Return(nil).Once()
 			h := NewHandler(new(mockCusdecService), cdnSvc)
 
-			assert.Equal(t, http.StatusServiceUnavailable, post(h, tc.body))
+			assert.Equal(t, http.StatusAccepted, post(h, tc.body))
 			h.retries.wait()
 
 			cdnSvc.AssertNumberOfCalls(t, tc.method, 3)
@@ -158,28 +158,28 @@ func TestSLCEHandler_CDNCallbackRetriedUntilTheTaskParks(t *testing.T) {
 }
 
 // A CusDec integration result that finds its review task not parked is
-// answered 503, not 500, and retried by the handler.
+// accepted with a 202 and retried by the handler.
 func TestSLCEHandler_CusdecIntegrationResultRetriedUntilTheTaskParks(t *testing.T) {
 	cusdecSvc := new(mockCusdecService)
 	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cusdec.ErrTaskNotParked).Once()
 	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(nil).Once()
 	h := NewHandler(cusdecSvc, new(mockCDNService))
 
-	assert.Equal(t, http.StatusServiceUnavailable, post(h, cusdecIntegratedPayload))
+	assert.Equal(t, http.StatusAccepted, post(h, cusdecIntegratedPayload))
 	h.retries.wait()
 
 	cusdecSvc.AssertNumberOfCalls(t, "ProcessIntegrationResult", 2)
 }
 
-// When SLC Edge's own retry completes the task first, ours finds a duplicate
-// and stops.
+// When a redelivery from SLC Edge completes the task first, ours finds a
+// duplicate and stops.
 func TestSLCEHandler_RetryStopsOnceSLCEdgeDelivered(t *testing.T) {
 	cusdecSvc := new(mockCusdecService)
 	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cusdec.ErrTaskNotParked).Once()
 	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cusdec.ErrDuplicateIntegrationResult)
 	h := NewHandler(cusdecSvc, new(mockCDNService))
 
-	assert.Equal(t, http.StatusServiceUnavailable, post(h, cusdecIntegratedPayload))
+	assert.Equal(t, http.StatusAccepted, post(h, cusdecIntegratedPayload))
 	h.retries.wait()
 
 	cusdecSvc.AssertNumberOfCalls(t, "ProcessIntegrationResult", 2)

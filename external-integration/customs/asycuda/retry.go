@@ -16,17 +16,17 @@ var taskRetryBackoff = []time.Duration{
 }
 
 // taskRetries re-runs a callback that arrived before the task it answers had
-// parked. The callback is still answered 503, so SLC Edge retries it too (§2);
-// these retries cover the case where its schedule runs out first. Whichever
-// delivery lands first completes the task, and the other then finds a
-// duplicate: the services complete the task before they record the callback.
+// parked. The callback is answered 202, so SLC Edge does not retry it: these
+// retries are what deliver it. Should SLC Edge redeliver it anyway, whichever
+// delivery lands first completes the task and the other finds a duplicate: the
+// services complete the task before they record the callback.
 //
-// The retries live in this process only, so a restart drops them and leaves
-// SLC Edge's retries to deliver the callback.
+// The retries live in this process only, so a restart drops them, and a
+// callback still waiting for its task is then not delivered.
 type taskRetries struct {
 	backoff []time.Duration
 	// pending holds the key of each callback being retried, so a redelivery
-	// answered 503 while one is pending does not start a second retry.
+	// while one is pending does not start a second retry.
 	pending sync.Map
 	wg      sync.WaitGroup
 }

@@ -127,8 +127,8 @@ func (s *webhookService) recordIntegrationResult(ctx context.Context, decl *Cusd
 }
 
 // findReviewTask returns the review task the declaration's workflow parked.
-// Neither error is acknowledged: the declaration is still SUBMITTED, so a
-// retry, SLC Edge's (§2) or the handler's, finds the task once it has parked.
+// Neither error records the result: the declaration is still SUBMITTED, so a
+// retry finds the task once it can be read or has parked.
 func (s *webhookService) findReviewTask(ctx context.Context, decl *CusdecDeclaration, req CusdecIntegrationResultRequest) (parkedtask.Task, error) {
 	if decl.WorkflowID == "" {
 		return parkedtask.Task{}, fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)

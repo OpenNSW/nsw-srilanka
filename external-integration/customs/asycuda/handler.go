@@ -26,7 +26,6 @@ const (
 	errDeclarationNotFoundRetry  = "declaration not found, retry later"
 	errDispatchNoteNotFound      = "dispatch note not found"
 	errDispatchNoteNotFoundRetry = "dispatch note not found, retry later"
-	errTaskNotParkedRetry        = "task not waiting yet, retry later"
 	errNoteCaseNotRecorded       = "dispatch note has no case recorded"
 )
 
@@ -154,9 +153,9 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 			return
 		}
 		if errors.Is(err, cusdec.ErrTaskNotParked) {
-			slog.WarnContext(r.Context(), "slce: CusDec integration result arrived before its task was waiting; retry",
+			slog.WarnContext(r.Context(), "slce: CusDec integration result arrived before its task was waiting; accepted, retrying it ourselves",
 				"edge_id", req.EdgeID)
-			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			w.WriteHeader(http.StatusAccepted)
 			h.retries.schedule(r.Context(), "CUSDEC_INTEGRATED "+req.EdgeID, func(ctx context.Context) error {
 				err := h.cusdecService.ProcessIntegrationResult(ctx, req)
 				if errors.Is(err, cusdec.ErrDuplicateIntegrationResult) {
@@ -319,9 +318,9 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		if errors.Is(err, cdn.ErrTaskNotParked) {
-			slog.WarnContext(r.Context(), "slce: CDN integration result arrived before its task was waiting; retry",
+			slog.WarnContext(r.Context(), "slce: CDN integration result arrived before its task was waiting; accepted, retrying it ourselves",
 				"edge_id", req.Payload.EdgeID)
-			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			w.WriteHeader(http.StatusAccepted)
 			h.retries.schedule(r.Context(), "CDN_INTEGRATED "+req.Payload.EdgeID, func(ctx context.Context) error {
 				return h.cdnService.ProcessIntegrationResult(ctx, req)
 			}, isCDNTaskNotParked)
@@ -362,9 +361,9 @@ func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if errors.Is(err, cdn.ErrTaskNotParked) {
-			slog.WarnContext(r.Context(), "slce: CDN acknowledgment arrived before its task was waiting; retry",
+			slog.WarnContext(r.Context(), "slce: CDN acknowledgment arrived before its task was waiting; accepted, retrying it ourselves",
 				"cdn_ref", req.Payload.CDNRef)
-			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			w.WriteHeader(http.StatusAccepted)
 			h.retries.schedule(r.Context(), "CDN_ACKNOWLEDGED "+req.Payload.CDNRef.String(), func(ctx context.Context) error {
 				return h.cdnService.ProcessAcknowledgment(ctx, req)
 			}, isCDNTaskNotParked)
@@ -440,9 +439,9 @@ func (h *Handler) handleCDNCancellation(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		if errors.Is(err, cdn.ErrTaskNotParked) {
-			slog.WarnContext(r.Context(), "slce: CDN cancellation arrived before its task was waiting; retry",
+			slog.WarnContext(r.Context(), "slce: CDN cancellation arrived before its task was waiting; accepted, retrying it ourselves",
 				"cdn_ref", ref)
-			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			w.WriteHeader(http.StatusAccepted)
 			h.retries.schedule(r.Context(), cdn.EventCDNCancelled+" "+ref.String(), func(ctx context.Context) error {
 				return h.cdnService.ProcessCancellation(ctx, req)
 			}, isCDNTaskNotParked)

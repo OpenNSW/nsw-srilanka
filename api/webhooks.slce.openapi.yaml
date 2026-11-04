@@ -203,10 +203,16 @@ paths:
             for a cancelled dispatch note, is acknowledged without action.
         '202':
           description: |
-            Accepted. CUSDEC_INTEGRATED only: this edgeId's integration result was
-            already recorded by an earlier delivery. §2 has SLC Edge retry a
-            callback up to four times, so a repeat is expected whenever a prior
-            200 was lost in transit — it is acknowledged and nothing is re-run.
+            Accepted. Either of:
+
+            - CUSDEC_INTEGRATED: this edgeId's integration result was already
+              recorded by an earlier delivery. §2 has SLC Edge retry a callback
+              up to four times, so a repeat is expected whenever a prior 200 was
+              lost in transit — it is acknowledged and nothing is re-run.
+            - CUSDEC_INTEGRATED, CDN_INTEGRATED, CDN_ACKNOWLEDGED, CDN_CANCELLED:
+              the task the callback answers has not parked yet. TNSW keeps the
+              callback and applies it itself once the task is waiting, retrying
+              for about 19 minutes, so SLC Edge does not need to retry.
         '400':
           description: Bad Request. Malformed JSON, missing mandatory fields, validation failure, or an unrecognized `eventType`.
           content:
@@ -259,11 +265,7 @@ paths:
             (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED) or the
             dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED, CDN_AMENDED, CDN_CANCELLED) does not exist yet
             — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED
-            callback for the same document. Or the task the callback answers
-            has not parked yet (CUSDEC_INTEGRATED, CDN_INTEGRATED,
-            CDN_ACKNOWLEDGED, CDN_CANCELLED); the document is left as it was,
-            so the retry releases it, and TNSW also retries the callback itself
-            for about 19 minutes. Transient: SLC Edge should retry.
+            callback for the same document. Transient: SLC Edge should retry.
           content:
             application/json:
               schema:
