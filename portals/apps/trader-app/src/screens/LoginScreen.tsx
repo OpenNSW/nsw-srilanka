@@ -53,7 +53,7 @@ export function LoginScreen() {
 
         {/* Centered Authentication Card. In flow, not pinned to the hero's box, so the hero grows
             with an error banner or a heading that wraps instead of clipping it at the top. */}
-        <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12 lg:pl-[12%]">
+        <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12 lg:pl-[25%]">
           {auth.error && hasUrlError && (
             <Banner variant="error" title={t('auth.login.errorTitle')} className="mb-6">
               {auth.error.message}
@@ -62,9 +62,9 @@ export function LoginScreen() {
           <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-tight mb-10 drop-shadow-lg">
             {systemName}
           </h1>
-          <div className="bg-white/10 border border-white/15 backdrop-blur-xl py-10 px-8 xl:px-12 rounded-3xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-2xl">
-            <div className="flex flex-col xl:flex-row items-center gap-8 xl:gap-12">
-              <div className="flex flex-col items-center xl:items-start text-center xl:text-left">
+          <div className="max-w-full bg-white/10 border border-white/15 backdrop-blur-xl py-10 px-8 2xl:px-12 rounded-3xl flex flex-col 2xl:flex-row items-center gap-6 2xl:gap-10 shadow-2xl">
+            <div className="flex flex-col 2xl:flex-row items-center gap-8 2xl:gap-12">
+              <div className="max-w-xs flex flex-col items-center 2xl:items-start text-center 2xl:text-left">
                 <h2 className="text-2xl font-bold text-white tracking-tight">{displayName}</h2>
                 <p className="text-white/70 text-xs mt-1">{t('auth.login.tagline')}</p>
               </div>
