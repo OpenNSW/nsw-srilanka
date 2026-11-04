@@ -33,16 +33,10 @@ type CaseAttributes interface {
 
 // NewExternalReviewPlugin builds a plugin that POSTs the trader's submitted
 // form to the configured service+path, starting the other side's review flow. The
-// files in it are sent as tokens for the OGA, issued through files.
-func NewExternalReviewPlugin(manager *remote.Manager, files OGAFiles) *ExternalReviewPlugin {
-	return &ExternalReviewPlugin{client: newDispatchHelper(manager), files: files}
-}
-
-// WithCaseAttributes makes p send the attributes of a dispatch's case, read from cases,
-// with each flow it starts. Without it, none are sent. It returns p.
-func (p *ExternalReviewPlugin) WithCaseAttributes(cases CaseAttributes) *ExternalReviewPlugin {
-	p.cases = cases
-	return p
+// files in it are sent as tokens for the OGA, issued through files, and the attributes of
+// the dispatch's case, read from cases, are sent with each flow it starts.
+func NewExternalReviewPlugin(manager *remote.Manager, files OGAFiles, cases CaseAttributes) *ExternalReviewPlugin {
+	return &ExternalReviewPlugin{client: newDispatchHelper(manager), files: files, cases: cases}
 }
 
 type externalReviewConfig struct {
@@ -157,14 +151,12 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}
 	body := startFlowBody(ctx.Record, cfg.ServiceWorkflowID, data, callbackToken)
-	if p.cases != nil {
-		attrs, err := p.cases.CaseAttributes(ctx.Context, ctx.Record.CaseID)
-		if err != nil {
-			return "", nil, fmt.Errorf("external_review: failed to read the attributes of case %s: %w", ctx.Record.CaseID, err)
-		}
-		if len(attrs) > 0 {
-			body["attributes"] = attrs
-		}
+	attrs, err := p.cases.CaseAttributes(ctx.Context, ctx.Record.CaseID)
+	if err != nil {
+		return "", nil, fmt.Errorf("external_review: failed to read the attributes of case %s: %w", ctx.Record.CaseID, err)
+	}
+	if len(attrs) > 0 {
+		body["attributes"] = attrs
 	}
 	return path, body, nil
 }

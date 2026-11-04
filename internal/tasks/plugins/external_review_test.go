@@ -88,7 +88,7 @@ func ownToken(t *testing.T) string {
 
 func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 	ctx := reviewContext(map[string]any{"submission": map[string]any{"field": "v1"}})
 
 	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review"}`))
@@ -121,7 +121,7 @@ func TestExternalReview_DispatchNeeds(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			mgr, svc := newReviewService(t, http.StatusOK)
-			p := NewExternalReviewPlugin(mgr, tokenFor)
+			p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 			ctx := reviewContext(map[string]any{"submission": map[string]any{}})
 			ctx.Record.CaseID = tc.caseID
 
@@ -137,7 +137,7 @@ func TestExternalReview_DispatchNeeds(t *testing.T) {
 // The case ID is escaped into its path segment.
 func TestExternalReview_EscapesTheCaseID(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 	ctx := reviewContext(map[string]any{"submission": map[string]any{}})
 	ctx.Record.CaseID = "a/b"
 
@@ -162,12 +162,20 @@ func (s *caseAttributesStub) CaseAttributes(_ context.Context, caseID string) (m
 	return s.attrs, s.err
 }
 
+// noCaseAttributes is the reader for tests that don't look at case attributes: no case
+// has any.
+type noCaseAttributes struct{}
+
+func (noCaseAttributes) CaseAttributes(context.Context, string) (map[string]any, error) {
+	return nil, nil
+}
+
 const dispatchConfig = `{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review", "reply_command": "submit"}`
 
 func TestExternalReview_DispatchSendsTheCaseAttributes(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
 	cases := &caseAttributesStub{attrs: map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}}
-	p := NewExternalReviewPlugin(mgr, tokenFor).WithCaseAttributes(cases)
+	p := NewExternalReviewPlugin(mgr, tokenFor, cases)
 
 	err := p.Execute(reviewContext(map[string]any{"submission": map[string]any{"field": "v1"}}), json.RawMessage(dispatchConfig))
 
@@ -182,7 +190,7 @@ func TestExternalReview_DispatchSendsTheCaseAttributes(t *testing.T) {
 
 func TestExternalReview_DispatchWithoutCaseAttributes(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor).WithCaseAttributes(&caseAttributesStub{attrs: map[string]any{}})
+	p := NewExternalReviewPlugin(mgr, tokenFor, &caseAttributesStub{attrs: map[string]any{}})
 
 	err := p.Execute(reviewContext(map[string]any{"submission": map[string]any{}}), json.RawMessage(dispatchConfig))
 
@@ -196,7 +204,7 @@ func TestExternalReview_DispatchWithoutCaseAttributes(t *testing.T) {
 // failed POST: it is not a permanent error.
 func TestExternalReview_FailedCaseAttributesReadIsRetried(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor).WithCaseAttributes(&caseAttributesStub{err: fmt.Errorf("db down")})
+	p := NewExternalReviewPlugin(mgr, tokenFor, &caseAttributesStub{err: fmt.Errorf("db down")})
 
 	err := p.Execute(reviewContext(map[string]any{"submission": map[string]any{}}), json.RawMessage(dispatchConfig))
 
@@ -209,7 +217,7 @@ func TestExternalReview_FailedCaseAttributesReadIsRetried(t *testing.T) {
 func TestExternalReview_ReplySendsNoCaseAttributes(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
 	cases := &caseAttributesStub{attrs: map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}}
-	p := NewExternalReviewPlugin(mgr, tokenFor).WithCaseAttributes(cases)
+	p := NewExternalReviewPlugin(mgr, tokenFor, cases)
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x", "submission": map[string]any{}}), json.RawMessage(dispatchConfig))
 
@@ -222,7 +230,7 @@ func TestExternalReview_ReplySendsNoCaseAttributes(t *testing.T) {
 
 func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 	ctx := reviewContext(map[string]any{"replyToken": "", "submission": map[string]any{}})
 
 	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review", "reply_command": "submit"}`))
@@ -235,7 +243,7 @@ func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
 
 func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"submission": map[string]any{"field": "v2"},
@@ -261,7 +269,7 @@ func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 
 func TestExternalReview_ReplySendsOnlyPayloadInput(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"feedback": "attach the invoice"},
@@ -287,7 +295,7 @@ func TestExternalReview_ReplySendsOnlyPayloadInput(t *testing.T) {
 
 func TestExternalReview_ReplyWithEmptyPayloadSendsOnlyCallbackToken(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{},
@@ -307,7 +315,7 @@ func TestExternalReview_ReplyTokenizesOnlyPayloadInput(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
 	// tokenFor has no client for "agency": tokenizing the submission's invoice
 	// would fail the reply, though the reply does not send it.
-	p := NewExternalReviewPlugin(mgr, withRenderConfig(tokenFor, reviewRenderConfig))
+	p := NewExternalReviewPlugin(mgr, withRenderConfig(tokenFor, reviewRenderConfig), noCaseAttributes{})
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"feedback": "attach the invoice"},
@@ -327,7 +335,7 @@ func TestExternalReview_ReplyTokenizesOnlyPayloadInput(t *testing.T) {
 
 func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusConflict)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
@@ -341,7 +349,7 @@ func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 
 func TestExternalReview_ReplyPayloadNotAnObjectIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x", "payload": "x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
@@ -354,7 +362,7 @@ func TestExternalReview_ReplyPayloadNotAnObjectIsNotRetried(t *testing.T) {
 
 func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusServiceUnavailable)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
@@ -368,7 +376,7 @@ func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
 // parks at once.
 func TestExternalReview_RefusedDispatchIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusBadRequest)
-	p := NewExternalReviewPlugin(mgr, tokenFor)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 
 	err := p.Execute(reviewContext(map[string]any{}),
 		json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review"}`))
@@ -393,7 +401,7 @@ func TestExternalReview_ConfigErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mgr, svc := newReviewService(t, http.StatusOK)
-			p := NewExternalReviewPlugin(mgr, tokenFor)
+			p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
 
 			err := p.Execute(reviewContext(tt.inputs), json.RawMessage(tt.config))
 
