@@ -19,6 +19,12 @@ const si: Locale = {
         signOut: 'පිටවන්න',
       },
     },
+    appearance: {
+      label: 'පෙනුම: {{current}}',
+      light: 'ආලෝක',
+      dark: 'අඳුරු',
+      system: 'පද්ධතිය',
+    },
     nav: {
       menu: 'මෙනුව',
       consignments: 'භාණ්ඩ තොග',
