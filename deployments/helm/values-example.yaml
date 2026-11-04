@@ -496,6 +496,15 @@ backend:
                 - {type: literal, value: "TNSW"}
                 - type: random
                   random: {scopeKey: "{issuer}:{idType}", charset: alphanumeric, length: 8}
+            # The registration number of the CusDec the tea flow sends SLTB,
+            # drawn once per consignment. It stands in for the number ASYCUDA
+            # would issue: 90, then a count that never restarts.
+            # Produces: 90000001
+            - idType: cusdec_registration_no
+              segments:
+                - {type: literal, value: "90"}
+                - type: sequence
+                  sequence: {scopeKey: "{issuer}:{idType}", padding: 6}
         - issuer: CDA
           formats:
             # A CDA fee's payment reference: <registration number><main

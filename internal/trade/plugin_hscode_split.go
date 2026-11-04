@@ -3,6 +3,7 @@ package trade
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/OpenNSW/core/taskflow/plugins"
 )
@@ -26,8 +27,9 @@ type hscodeSplitConfig struct {
 // If an unmapped HS code is requested, it fails with an error. plugin_properties.replaces
 // then drops the workflows that a selected workflow takes the place of.
 //
-// Each item carries the submitting company, and the CHA chosen for the consignment, in its
-// payload when they are mapped in.
+// Each item's payload carries every input other than hs_codes, under its own name: the
+// submitting company, the CHA chosen for the consignment, and whatever else the
+// trade workflow maps in, such as the consignment's CusDec registration number.
 // A branch child is started with only its iteration context — none of the parent
 // workflow's variables — so anything an agency flow needs about the consignment
 // has to travel this way. Agencies read what they need from it (SLPA, for one,
@@ -66,9 +68,7 @@ func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) e
 		return fmt.Errorf("hscode_split_builder: hs_codes cannot be empty")
 	}
 
-	// Optional: a consignment whose artifacts need no company data maps none in.
-	company, _ := ctx.Inputs["company"].(map[string]any)
-	cha, _ := ctx.Inputs["cha"].(map[string]any)
+	shared := sharedPayload(ctx.Inputs)
 
 	templates, err := resolveTemplates(items, cfg.Mappings)
 	if err != nil {
@@ -78,13 +78,7 @@ func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) e
 
 	splitItems := make([]map[string]any, 0, len(templates))
 	for _, templateID := range templates {
-		payload := map[string]any{}
-		if company != nil {
-			payload["company"] = company
-		}
-		if cha != nil {
-			payload["cha"] = cha
-		}
+		payload := maps.Clone(shared)
 		splitItems = append(splitItems, map[string]any{
 			"template_id": templateID,
 			"branch_id":   templateID,
@@ -100,6 +94,20 @@ func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) e
 	}
 	ctx.Record.Data["split_items"] = splitItems
 	return nil
+}
+
+// sharedPayload is what every agency flow gets: each input the node maps in other
+// than hs_codes. An input with no value, such as a consignment without a CHA, is
+// left out.
+func sharedPayload(inputs map[string]any) map[string]any {
+	shared := make(map[string]any, len(inputs))
+	for name, value := range inputs {
+		if name == "hs_codes" || value == nil {
+			continue
+		}
+		shared[name] = value
+	}
+	return shared
 }
 
 func resolveTemplates(items []any, mappings map[string][]string) ([]string, error) {
