@@ -219,14 +219,14 @@ func TestSLCEHandler_AuditRequiresKnownCaller(t *testing.T) {
 
 func TestSLCEHandler_AuditRetryableFailure(t *testing.T) {
 	ns := new(mockCDNService)
-	ns.On("ProcessCancellation", mock.Anything, mock.Anything).Return(cdn.ErrTaskNotParked).Once()
+	ns.On("ProcessCancellation", mock.Anything, mock.Anything).Return(cdn.ErrDispatchNoteNotFoundByCDNRef).Once()
 	notes := &auditDispatchNoteRepo{note: &cdn.DispatchNote{ID: "note-1", CaseID: "case-1"}}
 	client, capture := nswaudit.NewWithCapture()
 	h := NewHandler(new(mockCusdecService), ns).WithAuditor(client, nil, notes)
 	w := httptest.NewRecorder()
 	h.HandleWebhook(w, callbackAuditRequest(cdnCancelledPayload))
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
-	assert.Contains(t, w.Body.String(), errTaskNotParkedRetry)
+	assert.Contains(t, w.Body.String(), errDispatchNoteNotFoundRetry)
 	records := capture.Records()
 	require.Len(t, records, 1)
 	assert.Equal(t, nswaudit.StatusFailure, records[0].Status)

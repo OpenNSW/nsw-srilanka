@@ -442,9 +442,9 @@ func TestProcessCusdecIntegrationResult_UnlinkedDeclaration(t *testing.T) {
 	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
-// The review task has not parked yet: the result is answered with an error that
-// is not "not found", and nothing is recorded, so SLC Edge retries it (§2)
-// until the task is there.
+// The review task has not parked yet: the result is answered with
+// ErrTaskNotParked, and nothing is recorded, so a retry completes the task once
+// it is there.
 func TestProcessCusdecIntegrationResult_ReviewNotParkedYet(t *testing.T) {
 	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
 	completer := &mockTaskCompleter{}
@@ -455,7 +455,7 @@ func TestProcessCusdecIntegrationResult_ReviewNotParkedYet(t *testing.T) {
 		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
 	})
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrTaskNotParked)
 	assert.NotErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
 	assert.False(t, repo.updateCalled, "the result must not be recorded while the step is unresumed")
 	assert.Equal(t, CusdecStatusSubmitted, repo.declsByEdgeID["edge-123"].Status)

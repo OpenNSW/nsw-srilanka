@@ -438,7 +438,8 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService).
-			WithAuditor(auditor, cusdecRepo, cdnRepo)
+			WithAuditor(auditor, cusdecRepo, cdnRepo).
+			WithCallbackRetries()
 
 		// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
 		// presenting an IdP token, so this handler owns its own authentication and

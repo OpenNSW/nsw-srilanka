@@ -203,10 +203,25 @@ paths:
             for a cancelled dispatch note, is acknowledged without action.
         '202':
           description: |
-            Accepted. CUSDEC_INTEGRATED only: this edgeId's integration result was
-            already recorded by an earlier delivery. §2 has SLC Edge retry a
-            callback up to four times, so a repeat is expected whenever a prior
-            200 was lost in transit — it is acknowledged and nothing is re-run.
+            Accepted. Either of:
+
+            - CUSDEC_INTEGRATED: this edgeId's integration result was already
+              recorded by an earlier delivery. §2 has SLC Edge retry a callback
+              up to four times, so a repeat is expected whenever a prior 200 was
+              lost in transit — it is acknowledged and nothing is re-run.
+            - Any event: the callback arrived before what it answers was there,
+              and TNSW holds it and applies it itself, so SLC Edge does not need
+              to retry. That is, no declaration or dispatch note is recorded yet
+              for its `edgeId` (CUSDEC_INTEGRATED, CDN_INTEGRATED); or the
+              declaration named by `cusDecRef` (PAYMENT_CONFIRMED,
+              WARRANTING_COMPLETED, EXPORT_RELEASED, CUSDEC_AMENDED,
+              CUSDEC_CANCELLED) or the dispatch note named by `cdnRef`
+              (CDN_ACKNOWLEDGED, CDN_AMENDED, CDN_CANCELLED) does not exist yet,
+              because the event raced the integration result for the same
+              document; or the task the callback answers has not parked yet
+              (CUSDEC_INTEGRATED, CDN_INTEGRATED, CDN_ACKNOWLEDGED,
+              CDN_CANCELLED). TNSW retries it, backing off to every 10 minutes,
+              for up to 24 hours.
         '400':
           description: Bad Request. Malformed JSON, missing mandatory fields, validation failure, or an unrecognized `eventType`.
           content:
@@ -252,17 +267,9 @@ paths:
                     example: "workflow not found"
         '503':
           description: |
-            Service Unavailable. No declaration or dispatch note is recorded yet
-            for the callback's `edgeId` (CUSDEC_INTEGRATED, CDN_INTEGRATED) —
-            TNSW records it as soon as SLC Edge accepts the submission, so the
-            result arrived early. Or the declaration named by `cusDecRef`
-            (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED) or the
-            dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED, CDN_AMENDED, CDN_CANCELLED) does not exist yet
-            — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED
-            callback for the same document. Or the dispatch note's wait for its
-            acknowledgment has not parked yet (CDN_ACKNOWLEDGED, CDN_CANCELLED);
-            the note is left as it was, so the retry releases it. Transient:
-            SLC Edge should retry.
+            Service Unavailable. The callback arrived early (see 202) and this
+            server does not hold callbacks for retry. Transient: SLC Edge
+            should retry.
           content:
             application/json:
               schema:

@@ -37,6 +37,7 @@ type Handler struct {
 	auditor       nswaudit.Auditor
 	declarations  cusdec.DeclarationRepository
 	dispatchNotes cdn.DispatchNoteRepository
+	callbacks     callbackScheduler
 }
 
 // NewHandler creates a new central SLCE webhook handler.
@@ -45,6 +46,29 @@ func NewHandler(cusdecService cusdec.WebhookService, cdnService cdn.CDNWebhookSe
 		cusdecService: cusdecService,
 		cdnService:    cdnService,
 	}
+}
+
+// WithCallbackRetries has a callback that arrives before what it answers is
+// there accepted with a 202 and retried in the background (see retry.go).
+// Without it, such a callback is answered 503 for SLC Edge to retry (§2).
+// Configure it before serving requests.
+func (h *Handler) WithCallbackRetries() *Handler {
+	h.callbacks = newCallbackRetries(h.applyCallback, defaultCallbackRetryTiming)
+	return h
+}
+
+// holdIfEarly accepts a callback whose processing failed with err for retry,
+// when err means it arrived early, answering 202. It reports whether it did; if
+// not, the caller answers err as usual.
+func (h *Handler) holdIfEarly(w http.ResponseWriter, r *http.Request, eventType string, body []byte, err error) bool {
+	if h.callbacks == nil || !isEarly(err) {
+		return false
+	}
+	h.callbacks.schedule(r.Context(), Callback{EventType: eventType, Body: body})
+	slog.InfoContext(r.Context(), "slce: callback arrived early; accepted and held for retry",
+		"event", eventType, "reason", err)
+	w.WriteHeader(http.StatusAccepted)
+	return true
 }
 
 type payloadEnvelope struct {
@@ -135,6 +159,9 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 	}
 
 	if err := h.cusdecService.ProcessIntegrationResult(r.Context(), req); err != nil {
+		if h.holdIfEarly(w, r, "CUSDEC_INTEGRATED", body, err) {
+			return
+		}
 		// A repeat delivery is acknowledged rather than re-run. 202 tells SLC
 		// Edge the callback landed — ending the §2 retry schedule — while
 		// staying distinguishable from the 200 that means work was done.
@@ -148,6 +175,12 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 			slog.WarnContext(r.Context(), "slce: CusDec integration result arrived before its submission was recorded; retry",
 				"edge_id", req.EdgeID)
 			httputil.Error(w, r, http.StatusServiceUnavailable, errDeclarationNotFoundRetry)
+			return
+		}
+		if errors.Is(err, cusdec.ErrTaskNotParked) {
+			slog.WarnContext(r.Context(), "slce: CusDec integration result arrived before its task was waiting; retry",
+				"edge_id", req.EdgeID)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
 			return
 		}
 		if errors.Is(err, cusdec.ErrWorkflowNotFoundByEdgeID) {
@@ -181,6 +214,9 @@ func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body
 	}
 
 	if err := h.cusdecService.ProcessEvent(r.Context(), req); err != nil {
+		if h.holdIfEarly(w, r, expectedEvent, body, err) {
+			return
+		}
 		// An event already applied to this declaration is acknowledged with a
 		// plain 200 and nothing else: the delivery succeeded, there was simply
 		// no work left to do.
@@ -226,6 +262,9 @@ func (h *Handler) handleCusdecAmendment(w http.ResponseWriter, r *http.Request, 
 	}
 
 	if err := h.cusdecService.ProcessAmendment(r.Context(), req); err != nil {
+		if h.holdIfEarly(w, r, cusdec.EventCusdecAmended, body, err) {
+			return
+		}
 		ref := req.Payload.CusdecRef
 		switch {
 		case errors.Is(err, cusdec.ErrCusdecNotFoundByRef):
@@ -263,6 +302,9 @@ func (h *Handler) handleCusdecCancellation(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.cusdecService.ProcessCancellation(r.Context(), req); err != nil {
+		if h.holdIfEarly(w, r, cusdec.EventCusdecCancelled, body, err) {
+			return
+		}
 		ref := req.Payload.CusdecRef
 		switch {
 		case errors.Is(err, cusdec.ErrCusdecNotFoundByRef):
@@ -296,6 +338,9 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := h.cdnService.ProcessIntegrationResult(r.Context(), req); err != nil {
+		if h.holdIfEarly(w, r, "CDN_INTEGRATED", body, err) {
+			return
+		}
 		if errors.Is(err, cdn.ErrDispatchNoteNotRecorded) {
 			slog.WarnContext(r.Context(), "slce: CDN integration result arrived before its submission was recorded; retry",
 				"edge_id", req.Payload.EdgeID)
@@ -336,6 +381,9 @@ func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := h.cdnService.ProcessAcknowledgment(r.Context(), req); err != nil {
+		if h.holdIfEarly(w, r, "CDN_ACKNOWLEDGED", body, err) {
+			return
+		}
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByCDNRef) {
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for acknowledgment (may be transient)",
 				"cdn_ref", req.Payload.CDNRef, "error", err)
@@ -372,6 +420,9 @@ func (h *Handler) handleCDNAmendment(w http.ResponseWriter, r *http.Request, bod
 	}
 
 	if err := h.cdnService.ProcessAmendment(r.Context(), req); err != nil {
+		if h.holdIfEarly(w, r, cdn.EventCDNAmended, body, err) {
+			return
+		}
 		ref := req.Payload.CDNRef
 		switch {
 		case errors.Is(err, cdn.ErrDispatchNoteNotFoundByCDNRef):
@@ -408,6 +459,9 @@ func (h *Handler) handleCDNCancellation(w http.ResponseWriter, r *http.Request, 
 	}
 
 	if err := h.cdnService.ProcessCancellation(r.Context(), req); err != nil {
+		if h.holdIfEarly(w, r, cdn.EventCDNCancelled, body, err) {
+			return
+		}
 		ref := req.Payload.CDNRef
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByCDNRef) {
 			// As for the acknowledgment: the integration result that records the
