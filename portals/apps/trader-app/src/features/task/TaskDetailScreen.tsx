@@ -59,7 +59,7 @@ export function TaskDetailScreen() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="px-4 py-6 sm:px-6 lg:px-8">
         <PageState variant="loading" title={t('tasks.loading')} />
       </div>
     )
@@ -67,7 +67,7 @@ export function TaskDetailScreen() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="px-4 py-6 sm:px-6 lg:px-8">
         <Surface>
           <PageState
             variant="error"
@@ -87,7 +87,7 @@ export function TaskDetailScreen() {
 
   if (!zoneView) {
     return (
-      <div className="p-6">
+      <div className="px-4 py-6 sm:px-6 lg:px-8">
         <Surface>
           <PageState
             variant="empty"
@@ -154,7 +154,7 @@ export function TaskDetailScreen() {
       />
       {zoneView.state === 'COMPLETED' && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex justify-end`}>
-          <Button size="3" variant="soft" onClick={goToTasks}>
+          <Button size="3" variant="soft" onClick={goToTasks} className="w-full sm:w-auto">
             {t(isAgencyMode ? 'tasks.backToCase' : 'tasks.backToConsignment')}
           </Button>
         </div>
