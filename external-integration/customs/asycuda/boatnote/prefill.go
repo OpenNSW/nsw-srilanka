@@ -108,7 +108,6 @@ func declarationFields(decl map[string]any) map[string]any {
 	setString(form, "exporters_registration_no", document.Text(exporter, "id"))
 	setString(form, "vessel", document.Text(general, "transportVesselName"))
 	setString(form, "voyage_no", document.Text(general, "transportVoyageName"))
-	setString(form, "port_of_discharge", document.Text(general, "placeOfDischarge"))
 	if n, ok := document.Float(general["numberOfPackages"]); ok {
 		form["number_of_packages"] = document.FormatNumber(n)
 	}
@@ -140,11 +139,11 @@ func declarationFields(decl map[string]any) map[string]any {
 }
 
 // dispatchFields fills, from the dispatch notes (Annex B), what the declaration
-// does not carry: the port of loading, the operators, the bill of lading number
-// (from the first note that has one), the container marks and the volume. The
-// voyage number and date of the first note that has either replace the
-// declaration's voyage name, which carries no date; other fields the
-// declaration already filled are kept.
+// does not carry: the operators, the bill of lading number (from the first note
+// that has one), the container marks and the volume. The voyage number and date
+// of the first note that has either replace the declaration's voyage name,
+// which carries no date; other fields the declaration already filled are kept.
+// The ports are left for the trader to name.
 func dispatchFields(form map[string]any, notes []map[string]any) {
 	var marks []string
 	var cube float64
@@ -160,8 +159,6 @@ func dispatchFields(form map[string]any, notes []map[string]any) {
 			setString(form, "voyage_date", isoDate(date))
 		}
 		setIfAbsent(form, "vessel", document.Text(n, "vessel"))
-		setIfAbsent(form, "port_of_loading", document.Text(n, "placeOfLoading"))
-		setIfAbsent(form, "port_of_discharge", document.Text(n, "placeOfDischarge"))
 		setIfAbsent(form, "vessel_op_code", document.Text(n, "vesselOpCode"))
 		setIfAbsent(form, "cont_op_code", document.Text(n, "contOpCode"))
 		setIfAbsent(form, "sn_bl_no", document.Text(n, "bol"))

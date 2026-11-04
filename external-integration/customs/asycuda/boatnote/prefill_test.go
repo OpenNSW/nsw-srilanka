@@ -118,8 +118,6 @@ func TestPrefill_FillsTheBoatNoteFromCustoms(t *testing.T) {
 		"vessel":                    "CMA CGM MARCO POLO",
 		"voyage_no":                 "V092",
 		"voyage_date":               "2026-06-25",
-		"port_of_loading":           "LKCMB",
-		"port_of_discharge":         "DEHAM",
 		"vessel_op_code":            "OP-MSC",
 		"cont_op_code":              "CO-882",
 		"sn_bl_no":                  "BL-MSCU8492019",
@@ -133,6 +131,8 @@ func TestPrefill_FillsTheBoatNoteFromCustoms(t *testing.T) {
 	} {
 		assert.Equal(t, want, got.Form[field], field)
 	}
+	assert.NotContains(t, got.Form, "port_of_loading", "the trader names the ports")
+	assert.NotContains(t, got.Form, "port_of_discharge", "the trader names the ports")
 }
 
 // Only the dispatch notes are retrieved, each by reference with the codes the
