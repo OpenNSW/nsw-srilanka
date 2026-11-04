@@ -1,9 +1,0 @@
--- @UP
--- ============================================================================
--- Migration: 000002_insert_seed_hscodes.sql
--- Purpose: Previously seeded baseline HS codes. The hs_codes/workflow_template_map
--- tables turned out to be unread by the application, so this seed data was
--- removed rather than replaced. Kept as a no-op stub so the migrator's
--- applied-version history stays intact for environments that already ran it.
--- ============================================================================
--- @DOWN
