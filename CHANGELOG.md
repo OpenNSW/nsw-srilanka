@@ -78,6 +78,10 @@ A live IdP does not read `idp/bootstrap/`, so make these changes by hand.
 
 - SLC Edge callbacks are no longer copied to another deployment. A `services` entry with the id `slce-debug-forward` is ignored: remove it, and `SLCE_DEBUG_FORWARD_SECRET` if you set it.
 
+#### Stop using the agency summary route ([#1101](https://github.com/OpenNSW/nsw-srilanka/pull/1101))
+
+- `GET /api/v1/consignments/{id}/agency` is removed and answers 404. It returned a consignment's trader company name to the standalone agency backend, which is retired, and this application's agency mode doesn't call it. No config, scope or IdP change is needed. Remove the route from any gateway rule or client that still lists it.
+
 #### Workflow artifacts
 
 - Pin `artifactLoader.github.ref` to one-trade-artifacts [`95cff88`](https://github.com/OpenNSW/one-trade-artifacts/commit/95cff8880a83f2fa6bcc964e13bfdaf438663fad) (4 November 2026), for TNSW and for each agency. It holds the artifact changes this release depends on:
@@ -122,7 +126,7 @@ A live IdP does not read `idp/bootstrap/`, so make these changes by hand.
 
 ### Known issues
 
-- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- With the `github` artifact loader, workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment, and they are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
 - Audit records are log lines exported over OTLP whatever `server.logLevel` is, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks, and authenticated SLC Edge callbacks, are audited. Payments and the storage module's own events are not, and startup logs a warning that payment and storage audit are not wired.
 - The API can authenticate to Temporal only with a client certificate, not with an API key.
 - `/health` does not check Temporal.
