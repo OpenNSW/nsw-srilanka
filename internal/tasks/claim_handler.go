@@ -237,9 +237,13 @@ func (h *HTTPHandler) claimant(w http.ResponseWriter, r *http.Request, taskID st
 // when not: they must be able to read it, and its task template must make it claimable.
 func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, taskID string, in taskauthz.Input) (store.TaskRecord, bool) {
 	ctx := r.Context()
-	record, ok := h.Store.GetTask(ctx, taskID)
-	if !ok {
+	record, err := h.Store.GetTask(ctx, taskID)
+	if errors.Is(err, store.ErrTaskNotFound) {
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+		return record, false
+	}
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to read task", err, "taskId", taskID)
 		return record, false
 	}
 	taskTemplate, err := h.taskTemplate(ctx, record)

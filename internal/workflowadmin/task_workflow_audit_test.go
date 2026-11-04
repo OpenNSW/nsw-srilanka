@@ -1,6 +1,7 @@
 package workflowadmin
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,14 +19,15 @@ func TestTaskWorkflowEngineStatus_AuditTarget(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		record  store.TaskRecord
-		found   bool
+		err     error
 		noStore bool
 		wantID  string
 	}{
-		{"stored case", store.TaskRecord{CaseID: "consignment-1", ParentWorkflowID: "nested-flow"}, true, false, "consignment-1"},
-		{"missing record", store.TaskRecord{}, false, false, ""},
-		{"missing case", store.TaskRecord{ParentWorkflowID: "nested-flow"}, true, false, ""},
-		{"no store", store.TaskRecord{}, false, true, ""},
+		{"stored case", store.TaskRecord{CaseID: "consignment-1", ParentWorkflowID: "nested-flow"}, nil, false, "consignment-1"},
+		{"missing record", store.TaskRecord{}, store.ErrTaskNotFound, false, ""},
+		{"failed read", store.TaskRecord{}, errors.New("db down"), false, ""},
+		{"missing case", store.TaskRecord{ParentWorkflowID: "nested-flow"}, nil, false, ""},
+		{"no store", store.TaskRecord{}, nil, true, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const workflowID = "task-wf-review"
@@ -34,7 +36,7 @@ func TestTaskWorkflowEngineStatus_AuditTarget(t *testing.T) {
 			if tc.noStore {
 				taskStore = nil
 			} else {
-				tasks.On("GetTaskByWorkflowID", mock.Anything, workflowID).Return(tc.record, tc.found).Once()
+				tasks.On("GetTaskByWorkflowID", mock.Anything, workflowID).Return(tc.record, tc.err).Once()
 			}
 			svc := newTestService(taskStore)
 			wm := new(MockWM)
@@ -83,7 +85,7 @@ func TestTaskWorkflowActions_AuditTarget(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				const workflowID = "task-wf-review"
 				tasks := new(MockTaskStore)
-				tasks.On("GetTaskByWorkflowID", mock.Anything, workflowID).Return(store.TaskRecord{CaseID: "consignment-1"}, true).Once()
+				tasks.On("GetTaskByWorkflowID", mock.Anything, workflowID).Return(store.TaskRecord{CaseID: "consignment-1"}, nil).Once()
 				svc := newTestService(tasks)
 				wm := new(MockWM)
 				require.NoError(t, svc.RegisterTaskWorkflowManager(wm))

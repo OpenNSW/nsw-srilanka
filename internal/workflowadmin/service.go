@@ -13,9 +13,10 @@ import (
 
 // TaskStore is the narrow interface needed from the task store. GetTasks is passed only a
 // CaseID, so every task of the case is listed whatever its read roles: this is an admin view.
+// A non-nil error from GetTasks means the tasks could not be read, not that there are none.
 type TaskStore interface {
-	GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord
-	GetTaskByWorkflowID(ctx context.Context, workflowID string) (store.TaskRecord, bool)
+	GetTasks(ctx context.Context, filter store.TaskFilter) ([]store.TaskRecord, error)
+	GetTaskByWorkflowID(ctx context.Context, workflowID string) (store.TaskRecord, error)
 }
 
 // TaskCanceller closes a task from outside its workflow. core's orchestrator.TaskManager implements

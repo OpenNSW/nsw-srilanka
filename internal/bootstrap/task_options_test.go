@@ -22,8 +22,11 @@ type draftStore struct {
 	drafted bool
 }
 
-func (s *draftStore) GetTask(_ context.Context, taskID string) (store.TaskRecord, bool) {
-	return s.record, taskID == s.record.TaskID
+func (s *draftStore) GetTask(_ context.Context, taskID string) (store.TaskRecord, error) {
+	if taskID != s.record.TaskID {
+		return store.TaskRecord{}, store.ErrTaskNotFound
+	}
+	return s.record, nil
 }
 
 func (s *draftStore) WriteDraft(context.Context, string, string, int64, map[string]any) (int64, error) {

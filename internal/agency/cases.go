@@ -29,7 +29,8 @@ const (
 // holds. core's task store satisfies it. The roles must never be empty, or GetTasks would
 // list every task of the case: requireCatalogRole admits no officer without one.
 type TaskLister interface {
-	GetTasks(ctx context.Context, filter store.TaskFilter) []store.TaskRecord
+	// A non-nil error means the tasks could not be read, not that there are none.
+	GetTasks(ctx context.Context, filter store.TaskFilter) ([]store.TaskRecord, error)
 }
 
 // CaseHandler serves the officer-facing case list and detail. Responses reuse the
@@ -139,8 +140,13 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Every flow on the case files its tasks under the case ID.
+	records, err := h.tasks.GetTasks(ctx, store.TaskFilter{CaseID: id, Roles: owner.Roles})
+	if err != nil {
+		httputil.InternalServerError(w, r, "failed to list case tasks", err, "caseId", id)
+		return
+	}
 	nodes := make([]WorkflowNode, 0)
-	for _, t := range h.tasks.GetTasks(ctx, store.TaskFilter{CaseID: id, Roles: owner.Roles}) {
+	for _, t := range records {
 		if t.TaskType == "SYSTEM" {
 			continue
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
@@ -86,7 +87,10 @@ func (s *CaseService) GetCaseDetail(ctx context.Context, id string) (*CaseDetail
 		return nil, err
 	}
 
-	rawTasks := s.taskStore.GetTasks(ctx, store.TaskFilter{CaseID: id})
+	rawTasks, err := s.taskStore.GetTasks(ctx, store.TaskFilter{CaseID: id})
+	if err != nil {
+		return nil, fmt.Errorf("list tasks of case %s: %w", id, err)
+	}
 	nodes := make([]CaseNode, 0, len(rawTasks))
 	for _, t := range rawTasks {
 		if t.TaskType == "SYSTEM" {
