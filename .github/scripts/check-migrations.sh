@@ -41,16 +41,32 @@ while IFS= read -r file; do
   previous=$file
 done < <(names migrations)
 
+# v1.0.0 folds the v0.x migrations into one 000001, so the change that does it
+# edits and deletes migrations on BASE. Its BASE is the only one that still has
+# 000038; once the change is merged, every BASE lacks it and the check applies
+# again. Remove this exemption after v1.0.0.
+if git cat-file -e "${base}:migrations/000038_add_cases_attributes.sql" 2>/dev/null; then
+  echo "BASE has the v0.x migrations that v1.0.0 consolidates; not checking that they are unchanged."
+  base_files=""
+else
+  base_files=$(git ls-tree --name-only "$base" migrations/ | sed 's|^migrations/||')
+fi
+
 while IFS= read -r file; do
+  [ -n "$file" ] || continue
   if [ ! -f "migrations/${file}" ]; then
     fail "migrations/${file} is deleted or renamed. A migration already on the base branch must stay as it is; add a new migration instead."
   elif [ "$(git rev-parse "${base}:migrations/${file}")" != "$(git hash-object "migrations/${file}")" ]; then
     fail "migrations/${file} is edited. The migrator never re-runs an applied migration, so the edit would never reach existing databases; add a new migration instead."
   fi
-done < <(git ls-tree --name-only "$base" migrations/ | sed 's|^migrations/||')
+done <<< "$base_files"
 
 if [ "$errors" -gt 0 ]; then
   echo "${errors} problem(s) in migrations/." >&2
   exit 1
 fi
-echo "migrations/: $((expected - 1)) migration(s), named and numbered in order; none on ${base} changed."
+if [ -n "$base_files" ]; then
+  echo "migrations/: $((expected - 1)) migration(s), named and numbered in order; none on ${base} changed."
+else
+  echo "migrations/: $((expected - 1)) migration(s), named and numbered in order."
+fi
