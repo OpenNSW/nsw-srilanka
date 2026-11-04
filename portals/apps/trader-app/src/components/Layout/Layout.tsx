@@ -12,7 +12,7 @@ export function Layout() {
     <div className="min-h-screen bg-app-bg">
       <TopBar />
 
-      <main style={{ paddingTop: 'var(--app-top-offset)' }} className="min-h-screen bg-app-bg pb-16 sm:pb-8">
+      <main style={{ paddingTop: 'var(--app-top-offset)' }} className="min-h-screen bg-app-bg pb-16 lg:pb-8">
         <div className="max-w-7xl mx-auto">
           <Outlet />
         </div>

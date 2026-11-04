@@ -81,7 +81,7 @@ export function LoginScreen() {
       </div>
 
       {/* Identity & Branding */}
-      <div className="lg:order-first w-full lg:w-1/2 flex flex-col justify-center px-8 lg:pl-[7.5vw] lg:pr-6 pt-12 pb-16 sm:pb-8 lg:pt-0 relative z-10 bg-app-surface lg:min-h-[calc(100vh-2rem)]">
+      <div className="lg:order-first w-full lg:w-1/2 flex flex-col justify-center px-8 lg:pl-[7.5vw] lg:pr-6 pt-12 pb-16 lg:pb-8 lg:pt-0 relative z-10 bg-app-surface lg:min-h-[calc(100vh-2rem)]">
         <div className="max-w-2xl mx-auto lg:mx-0 flex flex-col justify-center items-center lg:justify-start lg:items-start">
           {logoUrl && <img src={logoUrl} alt={appName} className="hidden lg:block h-36 mb-7 object-contain" />}
 
