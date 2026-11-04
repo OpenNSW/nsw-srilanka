@@ -41,12 +41,10 @@ while IFS= read -r file; do
   previous=$file
 done < <(names migrations)
 
-# v1.0.0 folds the v0.x migrations into one 000001, so the change that does it
-# edits and deletes migrations on BASE. Its BASE is the only one that still has
-# 000038; once the change is merged, every BASE lacks it and the check applies
-# again. Remove this exemption after v1.0.0.
+# A BASE with 000038_add_cases_attributes.sql holds the v0.x migrations, which
+# 000001 replaces and no v1 database has applied, so they are not compared.
 if git cat-file -e "${base}:migrations/000038_add_cases_attributes.sql" 2>/dev/null; then
-  echo "BASE has the v0.x migrations that v1.0.0 consolidates; not checking that they are unchanged."
+  echo "BASE holds the v0.x migrations that 000001 replaces; not comparing them."
   base_files=""
 else
   base_files=$(git ls-tree --name-only "$base" migrations/ | sed 's|^migrations/||')

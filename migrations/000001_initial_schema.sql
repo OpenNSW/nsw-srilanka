@@ -1,7 +1,5 @@
 -- @UP
--- The v1.0.0 schema: migrations 000001–000038 of v0.x folded into one, with the
--- tables of the retired workflow engine (workflows, workflow_nodes,
--- workflow_node_templates) left out. It installs into an empty database only.
+-- The whole schema. It installs into an empty database only.
 
 -- ---------------------------------------------------------------------------
 -- Profiles
