@@ -51,7 +51,7 @@ One migration, `000001_initial_schema`, runs on the empty database before the AP
 - No `agency_workflow`: an agency's flows are recorded in `case_flows`, like TNSW's.
 - `cases.attributes`, the values TNSW sends with each flow it starts on an agency.
 
-Its `@DOWN` drops every table. The next migration will be `000002`.
+Its `@DOWN` drops every table. It is the schema that v1.0.0 starts from, and the next migration will be `000002`.
 
 #### Update the IdP ([#1090](https://github.com/OpenNSW/nsw-srilanka/pull/1090), [#1084](https://github.com/OpenNSW/nsw-srilanka/pull/1084), [#1060](https://github.com/OpenNSW/nsw-srilanka/pull/1060))
 
@@ -114,7 +114,7 @@ A live IdP does not read `idp/bootstrap/`, so make these changes by hand.
 
 ### Changed
 
-- The 38 migrations are one, `000001_initial_schema`, built from their end state and without the retired workflow engine's tables. It installs into an empty database only. See the upgrade notes. ([#1103](https://github.com/OpenNSW/nsw-srilanka/pull/1103))
+- The 38 migrations are one, `000001_initial_schema`, built from their end state and without the retired workflow engine's tables. It installs into an empty database only, and it is the path to v1.0.0. See the upgrade notes. ([#1103](https://github.com/OpenNSW/nsw-srilanka/pull/1103))
 - A case is owned by the OU of its trader, its CHA and its agency, named by the `ouHandle` claim of its users' tokens, in place of a company record. One task gate serves TNSW and the agencies. See the upgrade notes. ([#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016))
 - Tasks record the roles in their template's `read.roles`, and the task tables and the refid random table are renamed, with the `OpenNSW/core` upgrade. See the upgrade notes. ([#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073), [#1077](https://github.com/OpenNSW/nsw-srilanka/pull/1077))
 - The task API answers 404 for a task that doesn't exist and 500 for one it can't read, where it answered 404 for both. A consignment or agency case detail fails when its task list can't be read. ([#1088](https://github.com/OpenNSW/nsw-srilanka/pull/1088))
