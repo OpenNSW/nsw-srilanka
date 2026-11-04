@@ -300,7 +300,16 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 			RenderConfigOf: tasks.RenderConfigs(artifacts),
 		}
 	}
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifacts, globalCatalog, cfg, onTaskCompleted)
+	sqlDB, err := db.DB()
+	if err != nil {
+		temporalClient.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
+	}
+	// One caseflow repository serves both the flows started on cases and the case
+	// attributes EXTERNAL_REVIEW sends.
+	flowRepo := caseflow.NewRepository(sqlDB)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, flowRepo, artifacts, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -322,14 +331,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// agency.go). An agency builds none of the consignment stack, whose constructors
 	// require the trader and CHA roles an agency catalog does not map.
 	agencyMode := cfg.Mode == config.ModeAgency
-	sqlDB, err := db.DB()
-	if err != nil {
-		_ = stopTask()
-		temporalClient.Close()
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
-	}
-	flowService := caseflow.NewService(caseflow.NewRepository(sqlDB), artifacts)
+	flowService := caseflow.NewService(flowRepo, artifacts)
 	var (
 		consignmentService *consignment.Service
 		consignmentRouter  *consignment.Router
@@ -1006,6 +1008,7 @@ func initTask(
 	companyService company.Service,
 	storageService nswstorage.Service,
 	ogaFiles taskplugins.OGAFiles,
+	caseAttrs taskplugins.CaseAttributes,
 	artifacts *artifact.Set,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
@@ -1015,16 +1018,12 @@ func initTask(
 	pluginsRegistry := plugins.NewRegistry()
 	declarations := cusdec.NewDeclarationRepository(db)
 	dispatchNotes := cdn.NewDispatchNoteRepository(db)
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get sql.DB for case attributes: %w", err)
-	}
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
 		Declarations:  declarations,
 		DispatchNotes: dispatchNotes,
 		Cases:         declarations,
 		Notes:         dispatchNotes,
-	}, caseflow.NewRepository(sqlDB)); err != nil {
+	}, caseAttrs); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	taskStore := gormstore.New(db)
