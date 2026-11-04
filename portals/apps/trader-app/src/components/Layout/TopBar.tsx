@@ -53,8 +53,8 @@ function CompanyName() {
   )
 }
 
-// Below 1024 px the bar has room only for the brand mark, this menu and the
-// avatar, so everything else moves in here.
+// Below 1024 px the bar has room only for the brand mark, the portal name
+// (from 640 px), this menu and the avatar, so everything else moves in here.
 function SmallScreenMenu() {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -85,9 +85,11 @@ function TopBarShell({ children }: { children: ReactNode }) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between gap-3 bg-app-surface px-4 shadow-sm lg:top-3 lg:left-3 lg:right-3 lg:rounded-2xl lg:bg-app-surface/80 lg:px-6 lg:shadow-lg lg:backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-6">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <BrandMark />
-          <span className="sr-only text-xl font-bold tracking-tight text-foreground lg:not-sr-only">{displayName}</span>
+          <span className="sr-only truncate text-xl font-bold tracking-tight text-foreground sm:not-sr-only">
+            {displayName}
+          </span>
         </div>
         <div className="hidden lg:flex">
           <NavMenu />
