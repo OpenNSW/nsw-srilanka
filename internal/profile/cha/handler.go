@@ -16,7 +16,9 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// HandleGetCHAs responds with every CHA. No route mounts it.
+// HandleGetCHAs responds with every CHA. No route mounts it and no scope gates
+// it: mounting it again needs a route in mountTNSW and a scope in
+// internal/scopes, the IdP bootstrap and the portals' IDP_SCOPES.
 func (h *Handler) HandleGetCHAs(w http.ResponseWriter, r *http.Request) {
 	chas, err := h.svc.List(r.Context())
 	if err != nil {

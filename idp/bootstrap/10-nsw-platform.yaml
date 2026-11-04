@@ -101,7 +101,6 @@ inboundAuthConfig:
         - task:read
         - task:write
         - company:read
-        - cha:read
         - profile:read
         - storage:read
         - storage:write
@@ -299,13 +298,6 @@ type: API
 ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 delimiter: ":"
 resources:
-  - name: CHA
-    handle: cha
-    description: CHA resource
-    actions:
-      - name: Read
-        handle: read
-        description: Read action
   - name: Profile
     handle: profile
     description: Profile resource
@@ -423,7 +415,6 @@ ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
-      - cha:read
       - company:read
       - consignment:flow:write
       - consignment:read
@@ -446,7 +437,6 @@ ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 permissions:
   - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
     permissions:
-      - cha:read
       - company:read
       - consignment:flow:write
       - consignment:read

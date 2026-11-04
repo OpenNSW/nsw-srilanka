@@ -696,7 +696,7 @@ frontend:
     # The `resource` value must equal backend.config.authn.audience / the NSW_API resource-server identifier.
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     APP_URL: "https://trader.example.com"
-    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,cha:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
     # The ID-token claim that holds the user's roles (an array of role names), which the user menu
     # lists. Needs the "role" scope above. Defaults to "roles".
     IDP_ROLE_CLAIM_NAME: "roles"

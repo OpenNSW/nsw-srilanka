@@ -35,7 +35,6 @@ const (
 
 	// Reference data (read-only).
 	CompanyRead = "company:read"
-	CHARead     = "cha:read"
 
 	// Profile resource (the caller's own user profile).
 	ProfileRead = "profile:read"
