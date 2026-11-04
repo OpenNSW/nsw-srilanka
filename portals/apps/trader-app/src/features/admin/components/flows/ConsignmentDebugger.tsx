@@ -97,7 +97,7 @@ export function ConsignmentDebugger({ consignmentId }: { consignmentId: string }
 
   return (
     <div className="p-4 md:p-6">
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold text-foreground">
           {isAgencyMode ? 'Case Debugger' : 'Consignment Debugger'}
         </h1>
