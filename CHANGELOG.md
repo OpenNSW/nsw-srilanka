@@ -6,6 +6,140 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-04
+
+This release changes how TNSW starts an agency's flows and who owns a case. TNSW now starts them on a new route, `POST /api/v1/internal/cases/{caseId}/flows`, and `POST /api/v1/inject` is gone. A case is owned by the OU of its trader, its CHA and its agency, not by a company record. The 38 migrations are folded into one, so this release installs into an empty database only: drop and recreate the database of TNSW and of every agency, and nothing in them is carried over. TNSW, every agency, the pinned artifacts and each agency's new `flows.clients` section must change in the same deployment. The OTLP endpoint is validated more strictly, and the portal's colors, role menu and screens follow the new `branding.theme`, `IDP_ROLE_LABELS` and the token's scopes. It also adds the agency admin routes, case names from the trader company, SLPA containers on the sundry order, and a stored copy of SLPA's payment slip.
+
+### Upgrade notes
+
+#### Drop and recreate every database: nothing is carried over ([#1103](https://github.com/OpenNSW/nsw-srilanka/pull/1103), [#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073))
+
+- Migrations `000001` to `000038` are folded into one `000001_initial_schema`, built from their end state. The migrator records applied migrations by version number, so a database that already has migrations 1 to 38 would skip the new `000001`, and the schema changes of this release (see Migrations) would never run on it. This release installs into an empty database only.
+- Before you deploy, drop and recreate the TNSW database and every agency database, then let the migrate job apply `000001`. Everything in them is lost: consignments, cases, tasks, payments, reference ID counters and company records. Let open work finish first if you need its outcome.
+- Company records go with the TNSW database, so seed them again once `000001` is applied:
+  - **Kubernetes:** apply your companies file inside the backend pod: `kubectl exec -i -n "$NS" "$POD" -- otc company apply -f /dev/stdin < companies.json`. See [onboarding traders and CHAs](https://github.com/OpenNSW/nsw-srilanka/blob/v0.15.0/docs/guides/onboarding-traders-and-chas.md#step-4-register-the-company-with-otc-inside-the-backend-pod).
+  - **Docker Compose:** `docker compose run --rm seed-companies` applies `configs/companies.json`.
+  - If you don't keep a companies file, record each company with `otc company list` and `otc company view <id>` before you drop the database.
+- The retired workflow engine's tables, `workflows`, `workflow_nodes` and `workflow_node_templates`, are gone. Nothing reads them.
+
+#### Upgrade TNSW and every agency together, with the artifacts and the new config ([#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1071](https://github.com/OpenNSW/nsw-srilanka/pull/1071))
+
+- TNSW's `EXTERNAL_REVIEW` step now starts an agency's flow on `POST /api/v1/internal/cases/{caseId}/flows`, and the agency no longer serves `POST /api/v1/inject`. A new TNSW on an old agency calls a route that doesn't exist, and an old TNSW on a new agency calls one that is gone. Move the image or chart version, the config below and `artifactLoader.github.ref` in one deployment, for TNSW and for each agency, and allow the new route in any gateway or ingress rule that lists paths.
+- The new route is gated by the scope that gated inject, `workflow:inject`, so TNSW's `services[].auth.oauth2.scopes` need no change.
+- Each agency's `config.yaml` (Helm: `backend.config`) needs a `flows.clients` section, which lists the workflows TNSW may start there. The server refuses to start without it, or when a listed workflow isn't in the current artifact manifest, so it must match the pin:
+
+  ```yaml
+  flows:
+    clients:
+      enabled: true
+      ouHandle: cda          # the agency's OU handle, as its officers' tokens carry it
+      caseColumns: { name: /traderCompany/name }
+      workflows:
+        - { id: cda_officer_verification, clients: [tnsw], owner: officer }
+  ```
+
+- `ouHandle` is recorded as the owner of every case an agency starts, and it decides which officers see the case and its tasks. A renamed OU handle has to be updated in `case_parties` too. `caseColumns` fills the case name in the officers' list from the trader company TNSW sends. Without it, `name` stays empty.
+- Copy each agency's workflow list from [`configs/agency/`](https://github.com/OpenNSW/nsw-srilanka/tree/v0.15.0/configs/agency): CDA lists 12, EFC 1, FCAU 12, NPQS 24 and SLTB 11.
+
+#### Migrations ([#1103](https://github.com/OpenNSW/nsw-srilanka/pull/1103), [#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073), [#1077](https://github.com/OpenNSW/nsw-srilanka/pull/1077), [#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1071](https://github.com/OpenNSW/nsw-srilanka/pull/1071))
+
+One migration, `000001_initial_schema`, runs on the empty database before the API starts; the Helm hook and Docker Compose run it. Use the 0.15.0 `tnsw-migrate` image. Each agency's database runs it too. It is the end state of the previous 38, with no seed data, so it holds the schema changes of this release:
+
+- `taskflow_tasks`, renamed from `task_records_v2` with its indexes, and `taskflow_task_roles`, where each new task records the roles from its template's `read.roles`. Any SQL, dashboard or report outside this repository that reads `task_records_v2` must read `taskflow_tasks`.
+- `refid_random_values`, renamed from `refid_random`, which is the name `core/refid` v0.5.0 reads.
+- `case_parties` names its parties by OU (`ou` or `user`) in place of a company record.
+- No `agency_workflow`: an agency's flows are recorded in `case_flows`, like TNSW's.
+- `cases.attributes`, the values TNSW sends with each flow it starts on an agency.
+
+Its `@DOWN` drops every table. It is the schema that v1.0.0 starts from, and the next migration will be `000002`.
+
+#### Update the IdP ([#1090](https://github.com/OpenNSW/nsw-srilanka/pull/1090), [#1084](https://github.com/OpenNSW/nsw-srilanka/pull/1084), [#1060](https://github.com/OpenNSW/nsw-srilanka/pull/1060))
+
+A live IdP does not read `idp/bootstrap/`, so make these changes by hand.
+
+- **Agency admins, to use the new admin routes ([#1090](https://github.com/OpenNSW/nsw-srilanka/pull/1090)).** On each agency API, add the `adminread` and `adminwrite` actions to the `consignment` resource. In each agency's OU, create a `<Agency> Admin` role with `consignment:adminread`, `consignment:adminwrite` and `profile:read`, and an `<Agency> Admins` group that holds it. Add `consignment:adminread` and `consignment:adminwrite` to the `IDP_SCOPES` of each agency portal ([`configs/agency/*/portal-config.js`](https://github.com/OpenNSW/nsw-srilanka/tree/v0.15.0/configs/agency)). Nothing fails if you skip this, but no agency admin can use the new routes.
+- **TNSW in its own OU (recommended, [#1084](https://github.com/OpenNSW/nsw-srilanka/pull/1084)).** The scopes that each client and user holds don't change, and the backend doesn't depend on this. To match the repository:
+  - Create a root OU `tnsw`, and move into it the NSW API resource server, the trader portal, the SLCE, GovPay and `<A>_TO_NSW` clients, the `Trader`, `CHA`, `NSW Admin`, SLCE Webhook and Payment Webhook roles, the `NSW Admins` group, and the NSW admin user type and users. Keep the `Traders` and `CHA` groups in Private Sector. A user in `tnsw` carries `ouHandle: tnsw` in its token.
+  - Create `AGENCY_TO_TNSW` (`consignment:read`, `storage:read`, `storage:write` and `task:write` on the NSW API) and assign every `<A>_TO_NSW` client to it. Create `AGENCY_TO_TNSW_PRIVILEGED` (`storage:internalwrite`) and assign the clients that use the internal upload route, which is NPQS. Then delete `CdaToNswM2M`, `EfcToNswM2M`, `FcauToNswM2M`, `NpqsToNswM2M` and `SltbToNswM2M`.
+- **ThunderID 1.1.0 (recommended, [#1060](https://github.com/OpenNSW/nsw-srilanka/pull/1060)).** Upgrade deployed ThunderID instances from 1.0.1 to `ghcr.io/thunder-id/thunderid:1.1.0`, the version this repository is tested with. It brings the 1.0.2 and 1.1.0 fixes and new lookup indexes, and has no breaking changes.
+
+#### Fix the OTLP endpoint before you upgrade ([#1021](https://github.com/OpenNSW/nsw-srilanka/pull/1021))
+
+- `otel.endpoint` is validated strictly now, and an invalid one stops the server at startup. Remove any query string or fragment from it, and put the collector's authentication in `otel.headers`, with a secret placeholder such as `{{env:OTEL_AUTH_HEADER}}`. Use a base URL (`http://collector:4318`, `https://openobserve.example/api/default`) or one that ends in a complete `/v1/metrics`, `/v1/traces` or `/v1/logs`. An incomplete, unsupported or nested `/v1` path fails startup.
+
+#### Update the portal config ([#1082](https://github.com/OpenNSW/nsw-srilanka/pull/1082), [#1046](https://github.com/OpenNSW/nsw-srilanka/pull/1046), [#1070](https://github.com/OpenNSW/nsw-srilanka/pull/1070), [#1035](https://github.com/OpenNSW/nsw-srilanka/pull/1035))
+
+- **Remove `SHOW_COLOR_SCHEME_SWITCHER`** from `config.js` (Helm: `frontend.config`). The footer color scheme switcher is gone, so the 0.11.0 advice to set it to `"true"` no longer applies. A value left set is ignored.
+- **Remove `hscode:read` from the Trader Portal's `IDP_SCOPES`.** No route needs it. Deleting the `hscode` resource and its `Trader` and `CHA` grants from a live IdP is optional, and best done after the portal stops requesting it.
+- **Request the scopes your users need.** The portal now hides a screen or button whose scope the token lacks, which the API refuses anyway, so each portal's `IDP_SCOPES` should list what its users need, as the examples do. Optionally, add `Admin_User` to the trader portal application's allowed user types in the IdP. ThunderID doesn't check them at sign-in, so NSW admins already sign in without it.
+- **Role menu (optional).** The user menu lists the user's roles from an ID-token claim. `IDP_ROLE_CLAIM_NAME` (default `roles`) names the claim, and `IDP_ROLE_LABELS` maps a role name to `{ title, description }` (Helm: a YAML map, see `values-example.yaml`). A role with no entry shows its own name. The IdP must put the claim in the ID token, and `role` must be in `IDP_SCOPES`. A `IDP_ROLE_CLAIM_NAME` left in a deployment's config from before 0.9.0 is read again, so it must name a claim of role names.
+- **Colors (optional).** `branding.theme` in `branding.json` (Helm: `frontend.branding.theme`) takes `accent` and `gray` (Radix scale names), `colors` (a CSS variable name and a value) and `dark` (the same fields). Without it, the portal keeps its current colors. A `colors` name that isn't a Radix step fails the `branding.json` validation. See the chart README's "Frontend branding".
+- The Helm frontend ConfigMap renders a map or a list under `frontend.config` as a JSON string. Scalar values are unchanged.
+
+#### Remove the SLC Edge debug forward ([#1058](https://github.com/OpenNSW/nsw-srilanka/pull/1058))
+
+- SLC Edge callbacks are no longer copied to another deployment. A `services` entry with the id `slce-debug-forward` is ignored: remove it, and `SLCE_DEBUG_FORWARD_SECRET` if you set it.
+
+#### Stop using the agency summary route ([#1101](https://github.com/OpenNSW/nsw-srilanka/pull/1101))
+
+- `GET /api/v1/consignments/{id}/agency` is removed and answers 404. It returned a consignment's trader company name to the standalone agency backend, which is retired, and this application's agency mode doesn't call it. No config, scope or IdP change is needed. Remove the route from any gateway rule or client that still lists it.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`461909e`](https://github.com/OpenNSW/one-trade-artifacts/commit/461909ec208d7d2fffd936ca06aee53d7349883a) (4 November 2026), for TNSW and for each agency. It holds the artifact changes this release depends on:
+  - [one-trade-artifacts#331](https://github.com/OpenNSW/one-trade-artifacts/pull/331): each agency review starts as a client flow, and `task_config` is dropped. It needs [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), and each agency's `flows.clients` must list its workflows;
+  - [one-trade-artifacts#317](https://github.com/OpenNSW/one-trade-artifacts/pull/317): the SLPA sundry order picks its containers from the consignment. It needs the `SLPA_CASE_CONTAINERS` task type from [#1028](https://github.com/OpenNSW/nsw-srilanka/pull/1028), and a flow that reaches an unknown task type fails;
+  - [one-trade-artifacts#311](https://github.com/OpenNSW/one-trade-artifacts/pull/311): SLPA's payment slip is stored in our storage, for invoices issued after the upgrade. It needs [#1019](https://github.com/OpenNSW/nsw-srilanka/pull/1019).
+- It also carries these changes:
+  - [one-trade-artifacts#330](https://github.com/OpenNSW/one-trade-artifacts/pull/330): the NPQS phytosanitary certificate fee is LKR 162.00 (was LKR 2000.00) and the treatment fee is LKR 1000.00 (was LKR 4500.00). The fee ids are the same, so the `payees` you already have are enough;
+  - [one-trade-artifacts#326](https://github.com/OpenNSW/one-trade-artifacts/pull/326), [#307](https://github.com/OpenNSW/one-trade-artifacts/pull/307) and [#327](https://github.com/OpenNSW/one-trade-artifacts/pull/327): the SLTB tea flow is reworked, with the blend sheet levy on the officer review and a CusDec check before it is submitted to Customs;
+  - [one-trade-artifacts#299](https://github.com/OpenNSW/one-trade-artifacts/pull/299), [#333](https://github.com/OpenNSW/one-trade-artifacts/pull/333), [#338](https://github.com/OpenNSW/one-trade-artifacts/pull/338) and [#339](https://github.com/OpenNSW/one-trade-artifacts/pull/339): NPQS fills in the non-ePhyto print copy and its attached sheet, gives out a withdrawn certificate, and adds the emblem and logos to the certificates;
+  - [one-trade-artifacts#332](https://github.com/OpenNSW/one-trade-artifacts/pull/332) and [#340](https://github.com/OpenNSW/one-trade-artifacts/pull/340): the trader application forms import and download XML, and the HS code selection can be searched;
+  - [one-trade-artifacts#344](https://github.com/OpenNSW/one-trade-artifacts/pull/344): the boat note prints the CusDec number in box 9, and its section 22 charges table is optional;
+  - [one-trade-artifacts#345](https://github.com/OpenNSW/one-trade-artifacts/pull/345): NPQS offers "With PQS Supervision" for an item's treatment.
+
+#### Local Docker Compose ([#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016), [#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1084](https://github.com/OpenNSW/nsw-srilanka/pull/1084), [#1082](https://github.com/OpenNSW/nsw-srilanka/pull/1082))
+
+- Recreate the local database volumes, because the migrations are folded into one, rebuild the migrate and agency images, and run the migration: `docker compose build migrate && docker compose up migrate`. Then seed the companies again with `docker compose run --rm seed-companies`.
+- Recreate the IdP volumes (`docker compose down`, remove the `thunderid-db`, `thunderid-certs` and `thunderid-secrets` volumes, `docker compose up`). A plain `up` imports without error but leaves the existing applications in their old OUs. `ADMIN_CLI_SECRET` can be dropped from `idp/.env`.
+- `make setup` doesn't overwrite an existing `portals/apps/trader-app/public/config.js`: remove `hscode:read` from its `IDP_SCOPES` and `SHOW_COLOR_SCHEME_SWITCHER`.
+
+### Added
+
+- **Agency flows on a route of their own.** An agency starts a flow when TNSW calls `POST /api/v1/internal/cases/{caseId}/flows` for a workflow that `flows.clients` lists. The call creates the case if it is new, records the agency's OU as its owner, and is idempotent. The agency's case list and detail show only the cases its OU owns, and the detail lists the tasks whose `read.roles` name a role the officer holds. ([#1063](https://github.com/OpenNSW/nsw-srilanka/pull/1063), [#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016))
+- **Admin routes in the agencies.** An agency admin can read a workflow's engine status, resolve or force-park a parked node, and open an admin view of any case, with the scopes TNSW's admins hold. The agency portal calls the admin case view. ([#1090](https://github.com/OpenNSW/nsw-srilanka/pull/1090), [#1091](https://github.com/OpenNSW/nsw-srilanka/pull/1091))
+- **Case names in the agencies.** An agency names each case after its trader company, from `cases.attributes`, when `flows.clients.caseColumns` maps it. ([#1071](https://github.com/OpenNSW/nsw-srilanka/pull/1071))
+- **SLPA containers on the sundry order.** The sundry order form offers the consignment's containers, through the `SLPA_CASE_CONTAINERS` task type, and the Trader Portal shows a consignment's auxiliary services in a section of their own. ([#1028](https://github.com/OpenNSW/nsw-srilanka/pull/1028), [#1067](https://github.com/OpenNSW/nsw-srilanka/pull/1067))
+- **A stored copy of a linked document.** A step can download a document another service links to and store it in our storage. It downloads through the existing `slpa` service in `services`, and the SLPA invoice step uses it once the pinned artifacts are in place. ([#1019](https://github.com/OpenNSW/nsw-srilanka/pull/1019))
+
+### Changed
+
+- The 38 migrations are one, `000001_initial_schema`, built from their end state and without the retired workflow engine's tables. It installs into an empty database only, and it is the path to v1.0.0. See the upgrade notes. ([#1103](https://github.com/OpenNSW/nsw-srilanka/pull/1103))
+- A case is owned by the OU of its trader, its CHA and its agency, named by the `ouHandle` claim of its users' tokens, in place of a company record. One task gate serves TNSW and the agencies. See the upgrade notes. ([#1016](https://github.com/OpenNSW/nsw-srilanka/pull/1016))
+- Tasks record the roles in their template's `read.roles`, and the task tables and the refid random table are renamed, with the `OpenNSW/core` upgrade. See the upgrade notes. ([#1073](https://github.com/OpenNSW/nsw-srilanka/pull/1073), [#1077](https://github.com/OpenNSW/nsw-srilanka/pull/1077))
+- The task API answers 404 for a task that doesn't exist and 500 for one it can't read, where it answered 404 for both. A consignment or agency case detail fails when its task list can't be read. ([#1088](https://github.com/OpenNSW/nsw-srilanka/pull/1088))
+- The portal shows each screen and button only when the token holds its scope, and its Sinhala and Tamil text is now the translators' strings. See the upgrade notes. ([#1035](https://github.com/OpenNSW/nsw-srilanka/pull/1035), [#1054](https://github.com/OpenNSW/nsw-srilanka/pull/1054))
+- A task's title in its view comes from its render config. ([#1085](https://github.com/OpenNSW/nsw-srilanka/pull/1085))
+- The Trader Portal uses `@opennsw/jsonforms-renderers` 0.18.0. ([#1075](https://github.com/OpenNSW/nsw-srilanka/pull/1075))
+
+### Fixed
+
+- A step that fails with an error that retrying can't fix parks for an admin on its first attempt, not after its retries run out. ([#918](https://github.com/OpenNSW/nsw-srilanka/pull/918))
+- A payment amount that the transaction can't store parks the step. All the payment amounts in the artifacts have two decimal places. ([#933](https://github.com/OpenNSW/nsw-srilanka/pull/933))
+- With OTLP export on, startup logs are exported before the dependencies initialize, so a failed start leaves a record. A failed bootstrap can wait up to five seconds to flush telemetry before it exits. ([#1051](https://github.com/OpenNSW/nsw-srilanka/pull/1051))
+
+### Known issues
+
+- With the `github` artifact loader, workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment, and they are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines exported over OTLP whatever `server.logLevel` is, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks, and authenticated SLC Edge callbacks, are audited. Payments and the storage module's own events are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Cancelling a Cargo Dispatch Note in TNSW does not cancel it in ASYCUDA World, which NSW has no call for: the note stays registered there. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
+
 ## [0.14.0] - 2026-11-03
 
 This release drops the `nsw:` prefix from every API scope, so the IdP, TNSW, each agency, the portals, and Customs and GovPay change names together. It also changes four settings that the new build refuses in their old form: the flows a user may start move into a `flows` section, refid date segments take a format and a timezone, email is set up through PingMailer or SMTP, and starting a flow needs its own scope. No migrations run. The image version, the config and the artifacts pin must change in the same deployment. It also lets each task template decide whether a task can be claimed, audits SLC Edge callbacks, separates the system log stream from security alerts, and adds the Customs steps for raising and cancelling a Cargo Dispatch Note and for running one CusDec flow per tea consignment.
@@ -1246,7 +1380,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.11.0...v0.12.0
