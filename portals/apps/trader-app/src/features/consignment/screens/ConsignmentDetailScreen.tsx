@@ -4,7 +4,7 @@ import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { isAgencyMode } from '@/features/case/mode'
 import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
-import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
+import { AuxiliaryServices } from '@/features/consignment/components/AuxiliaryServices'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { useConsignment } from '@/features/consignment/hooks.ts'
 import { formatDateTime } from '@/features/consignment/utils.ts'
@@ -132,11 +132,6 @@ export function ConsignmentDetailScreen({
             </span>
           </p>
         </div>
-        {canStartFlows && (
-          <Can I="consignment.startFlow">
-            <StartFlowButtons flows={consignment.startableFlows ?? []} onStart={startFlow} />
-          </Can>
-        )}
       </div>
 
       <Surface className="relative">
@@ -159,6 +154,12 @@ export function ConsignmentDetailScreen({
           )}
         </div>
       </Surface>
+
+      {canStartFlows && (
+        <Can I="consignment.startFlow">
+          <AuxiliaryServices flows={consignment.startableFlows ?? []} onStart={startFlow} />
+        </Can>
+      )}
     </div>
   )
 }
