@@ -18,8 +18,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
 var auxFlow = FlowOption{TemplateID: "aux_flow", Label: "Auxiliary flow"}
@@ -232,6 +234,54 @@ func TestDetailListsStartableFlows(t *testing.T) {
 
 			got, err := svc.GetConsignmentByID(context.Background(), id, "co-trader", []string{"Trader"})
 			require.NoError(t, err)
+			assert.Equal(t, tc.want, got.StartableFlows)
+		})
+	}
+}
+
+func TestConsignmentDetailStartableFlowsRequireWriteScope(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		admin      bool
+		writeScope bool
+		want       []FlowOption
+	}{
+		{name: "trader with write scope", writeScope: true, want: []FlowOption{auxFlow}},
+		{name: "trader without write scope", want: []FlowOption{}},
+		{name: "admin with write scope", admin: true, writeScope: true, want: []FlowOption{auxFlow, {TemplateID: "cha_flow", Label: "CHA flow"}}},
+		{name: "admin without write scope", admin: true, want: []FlowOption{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, sqlMock, _ := newFlowsService(t)
+			taskStore := new(MockTaskStore)
+			svc.taskStore = taskStore
+			companies := new(MockCompanyService)
+			id := uuid.NewString()
+			expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
+			taskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: id}).Return(nil)
+			router := mustNewRouter(t, svc, nil, companies, nil)
+			path := "/api/v1/consignments/" + id
+			handler := router.HandleGetConsignmentByID
+			readScope := scopes.ConsignmentRead
+			if tc.admin {
+				path = "/api/v1/admin/consignments/" + id
+				handler = router.HandleAdminGetConsignmentByID
+				readScope = scopes.ConsignmentAdminRead
+			} else {
+				companies.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co-trader"}, nil)
+			}
+			principal := &authn.Principal{Kind: authn.KindUser, OUHandle: "trader-ou", Roles: []string{"Trader"}, Scopes: []string{readScope}}
+			if tc.writeScope {
+				principal.Scopes = append(principal.Scopes, scopes.ConsignmentFlowWrite)
+			}
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.SetPathValue("id", id)
+			req = req.WithContext(authn.ContextWithPrincipal(req.Context(), principal))
+			w := httptest.NewRecorder()
+			handler(w, req)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var got DetailDTO
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 			assert.Equal(t, tc.want, got.StartableFlows)
 		})
 	}
