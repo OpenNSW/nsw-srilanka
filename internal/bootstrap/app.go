@@ -307,9 +307,10 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
 	}
 	// One caseflow repository serves both the flows started on cases and the case
-	// attributes EXTERNAL_REVIEW sends.
+	// attributes EXTERNAL_REVIEW sends, of which only the keys consignment lists.
 	flowRepo := caseflow.NewRepository(sqlDB)
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, flowRepo, artifacts, globalCatalog, cfg, onTaskCompleted)
+	sharedAttrs := caseflow.SharedAttributes{Repo: flowRepo, Keys: consignment.SharedCaseAttributes}
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, sharedAttrs, artifacts, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)

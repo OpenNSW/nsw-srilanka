@@ -203,6 +203,32 @@ func caseAttributesJSON(attrs map[string]any) ([]byte, error) {
 	return b, nil
 }
 
+// SharedAttributes reads the attributes of a case that may be sent to another system: only
+// the top-level keys Keys lists, so a key written to cases.attributes stays here until it
+// is listed.
+type SharedAttributes struct {
+	Repo Repository
+	Keys []string
+}
+
+// CaseAttributes returns caseID's attributes under the listed keys, nil when it has none.
+func (s SharedAttributes) CaseAttributes(ctx context.Context, caseID string) (map[string]any, error) {
+	attrs, err := s.Repo.CaseAttributes(ctx, caseID)
+	if err != nil {
+		return nil, err
+	}
+	var shared map[string]any
+	for _, key := range s.Keys {
+		if v, ok := attrs[key]; ok {
+			if shared == nil {
+				shared = map[string]any{}
+			}
+			shared[key] = v
+		}
+	}
+	return shared, nil
+}
+
 func (r *repository) CaseAttributes(ctx context.Context, caseID string) (map[string]any, error) {
 	var raw []byte
 	err := r.db.QueryRowContext(ctx, `SELECT attributes FROM cases WHERE id = $1`, caseID).Scan(&raw)

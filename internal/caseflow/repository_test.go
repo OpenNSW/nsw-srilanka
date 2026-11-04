@@ -257,6 +257,47 @@ func TestCaseAttributes(t *testing.T) {
 	})
 }
 
+// SharedAttributes returns only the listed keys, so a key nobody listed never leaves.
+func TestSharedAttributes(t *testing.T) {
+	const q = `SELECT attributes FROM cases WHERE id = \$1`
+	keys := []string{"traderCompany"}
+
+	t.Run("only the listed keys", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectQuery(q).WithArgs("C1").
+			WillReturnRows(sqlmock.NewRows([]string{"attributes"}).AddRow([]byte(`{"traderCompany":{"name":"Adam PVT LTD"},"cmsKey":"secret"}`)))
+
+		attrs, err := SharedAttributes{Repo: repo, Keys: keys}.CaseAttributes(context.Background(), "C1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}
+		if !reflect.DeepEqual(attrs, want) {
+			t.Fatalf("attributes = %v, want %v", attrs, want)
+		}
+	})
+
+	t.Run("none listed", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectQuery(q).WithArgs("C1").
+			WillReturnRows(sqlmock.NewRows([]string{"attributes"}).AddRow([]byte(`{"cmsKey":"secret"}`)))
+
+		attrs, err := SharedAttributes{Repo: repo, Keys: keys}.CaseAttributes(context.Background(), "C1")
+		if err != nil || attrs != nil {
+			t.Fatalf("attributes, err = %v, %v; want none, nil", attrs, err)
+		}
+	})
+
+	t.Run("a failed read", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectQuery(q).WithArgs("C1").WillReturnError(sql.ErrConnDone)
+
+		if _, err := (SharedAttributes{Repo: repo, Keys: keys}).CaseAttributes(context.Background(), "C1"); err == nil {
+			t.Fatal("want the read's error")
+		}
+	})
+}
+
 func TestMarkStarted(t *testing.T) {
 	t.Run("unknown workflow", func(t *testing.T) {
 		repo, mock := newMockRepo(t)

@@ -285,8 +285,10 @@ the case has completed. A new flow started on a finished case reopens it
 `attributes` is a JSON object of values about the case that the systems its flows run on
 may see. TNSW sets it when it creates a consignment, to the trader company's name
 (`{"traderCompany": {"name": "…"}}`), and `EXTERNAL_REVIEW` sends it with every flow it
-starts on an agency, so it holds only values every agency may see: no company ids or
-data, and not the consignment's own name. An agency merges the attributes a new flow
+starts on an agency. Only the top-level keys `consignment.SharedCaseAttributes` lists are
+sent (`traderCompany` today), so a key written to TNSW's `cases.attributes` stays in TNSW
+until it is listed there. The trader company's id and data, and the consignment's own
+name, are never written. An agency merges the attributes a new flow
 starts with into its own case, by top-level key. A new key needs no migration and no
 agency change. Cases created before this have none, and keep showing their id.
 
