@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/core/json/jsonpointer"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
@@ -150,26 +151,16 @@ func caseInfo(attrs map[string]any, columns map[string]string) *CaseInfo {
 		return nil
 	}
 	info := &CaseInfo{Attributes: attrs}
-	if path, ok := columns[CaseColumnName]; ok {
-		if name, ok := attributeAt(attrs, path).(string); ok {
-			info.Name = strings.TrimSpace(name)
+	// TODO: the name is one attribute copied as it is. Make it configurable from several,
+	// such as the trader company and the destination country.
+	if pointer, ok := columns[CaseColumnName]; ok {
+		if v, ok := jsonpointer.Get(attrs, pointer); ok {
+			if name, ok := v.(string); ok {
+				info.Name = strings.TrimSpace(name)
+			}
 		}
 	}
 	return info
-}
-
-// attributeAt returns the value at path, dot-separated keys into nested objects, or nil
-// when there is none.
-func attributeAt(attrs map[string]any, path string) any {
-	var v any = attrs
-	for _, key := range strings.Split(path, ".") {
-		m, ok := v.(map[string]any)
-		if !ok {
-			return nil
-		}
-		v = m[key]
-	}
-	return v
 }
 
 // clientVars seeds a client flow's variables under the names the agencies' workflows map

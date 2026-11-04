@@ -106,7 +106,7 @@ flows:
     ouHandle: sltb
     # The case name officers see in the case list: the trader company TNSW sends
     # in the case's attributes.
-    caseColumns: { name: traderCompany.name }
+    caseColumns: { name: /traderCompany/name }
     workflows:
       - { id: sltb_officer_review, clients: [tnsw], owner: officer }
       - { id: sltb_final_decision, clients: [tnsw], owner: officer }

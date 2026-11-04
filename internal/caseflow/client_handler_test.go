@@ -75,7 +75,7 @@ func TestClientHandlerStartsTheFlow(t *testing.T) {
 // name from them.
 func TestClientHandlerRecordsTheCaseAttributes(t *testing.T) {
 	list := clientFlows
-	list.CaseColumns = map[string]string{CaseColumnName: "traderCompany.name"}
+	list.CaseColumns = map[string]string{CaseColumnName: "/traderCompany/name"}
 	for name, tc := range map[string]struct {
 		attributes string
 		wantName   string

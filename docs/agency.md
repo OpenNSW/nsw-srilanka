@@ -56,7 +56,7 @@ flows:
   clients:
     enabled: true
     ouHandle: cda
-    caseColumns: { name: traderCompany.name }
+    caseColumns: { name: /traderCompany/name }
     workflows:
       - { id: cda_officer_verification, clients: [tnsw], owner: officer }
 artifactLoader:
@@ -205,10 +205,11 @@ flows:
 ```
 
 `caseColumns` fills `cases` columns from the attributes a flow is started with. Each key
-is a column and each value the dot-separated path of a string in the attributes.
-`name` is the only column it can fill: `caseColumns: { name: traderCompany.name }` makes
+is a column and each value the JSON Pointer (RFC 6901) of a string in the attributes.
+`name` is the only column it can fill: `caseColumns: { name: /traderCompany/name }` makes
 the trader company's name the case's name, which the case list shows over the case id. A
-value that is missing or blank leaves the name as it is. The attributes are stored
+value that is missing or blank leaves the name as it is. The server refuses to start if
+a column is not `name` or a value is not a JSON Pointer. The attributes are stored
 whether or not anything maps them.
 
 `owner` decides who sees the case and its tasks: a role every officer holds for an

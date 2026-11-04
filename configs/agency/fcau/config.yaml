@@ -106,7 +106,7 @@ flows:
     ouHandle: fcau
     # The case name officers see in the case list: the trader company TNSW sends
     # in the case's attributes.
-    caseColumns: { name: traderCompany.name }
+    caseColumns: { name: /traderCompany/name }
     workflows:
       - { id: fcau_application_review, clients: [tnsw], owner: officer }
       - { id: fcau_issue_certificate, clients: [tnsw], owner: officer }
