@@ -326,6 +326,52 @@ func (f *fakeGateway) Pay(_ context.Context, taskID, method, status string, _ ti
 	return nil
 }
 
+func TestDoSignal(t *testing.T) {
+	r := New("", nil)
+	if err := r.doSignal(context.Background(), &Signal{FromWorkflowVar: "exportFlow", Name: "cusdec_assessed"}); err == nil {
+		t.Error("expected error when Signaller is nil")
+	}
+
+	fake := &fakeSignaller{}
+	r.Signaller = fake
+	if err := r.doSignal(context.Background(), &Signal{FromWorkflowVar: "exportFlow", Name: "cusdec_assessed"}); err == nil {
+		t.Error("expected error when fromWorkflowVar is not set")
+	}
+	if err := r.doSignal(context.Background(), &Signal{FromWorkflowVar: "exportFlow"}); err == nil {
+		t.Error("expected error when name is empty")
+	}
+
+	r.Vars["exportFlow"] = "wf-parent"
+	r.Vars["cusdec"] = "CBEX1/2026/E/1"
+	if err := r.doSignal(context.Background(), &Signal{
+		FromWorkflowVar: "exportFlow",
+		Name:            "cusdec_assessed",
+		Payload:         map[string]any{"cusdec_number": "{{cusdec}}"},
+		Timeout:         "5s",
+	}); err != nil {
+		t.Fatalf("doSignal: %v", err)
+	}
+	if fake.parentID != "wf-parent" || fake.name != "cusdec_assessed" {
+		t.Errorf("signaller got parent=%q name=%q", fake.parentID, fake.name)
+	}
+	if fake.payload["cusdec_number"] != "CBEX1/2026/E/1" {
+		t.Errorf("payload not interpolated: %v", fake.payload)
+	}
+}
+
+type fakeSignaller struct {
+	parentID string
+	name     string
+	payload  map[string]any
+}
+
+func (f *fakeSignaller) BroadcastToChildren(_ context.Context, parentWorkflowID, name string, payload map[string]any, _ time.Duration) error {
+	f.parentID = parentWorkflowID
+	f.name = name
+	f.payload = payload
+	return nil
+}
+
 // An upload reserves the file as the actor, PUTs its bytes to the presigned URL
 // without the actor, and captures the file's reference.
 func TestDoUpload(t *testing.T) {

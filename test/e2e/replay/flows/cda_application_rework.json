@@ -1,0 +1,341 @@
+{
+  "name": "cda_application_rework",
+  "steps": [
+    {
+      "name": "trader creates consignment",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments",
+        "expectStatus": 201,
+        "extract": {
+          "consignmentId": "id"
+        }
+      }
+    },
+    {
+      "name": "wait for Initialize Consignment task",
+      "wait": {
+        "node": "Initialize Consignment",
+        "state": "IN_PROGRESS",
+        "into": "initTask",
+        "timeout": "45s"
+      }
+    },
+    {
+      "name": "trader reads the step initTask is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "extract": {
+          "initTaskStep": "step_id"
+        },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "trader initializes consignment (name + CHA)",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{initTask}}/steps/{{initTaskStep}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "consignment_name": "E2E CDA Rework Consignment",
+            "cha_company_id": "adam-pvt-ltd"
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for HS-code selection task",
+      "wait": {
+        "node": "Select HS Codes",
+        "state": "IN_PROGRESS",
+        "into": "hsTask",
+        "timeout": "45s"
+      }
+    },
+    {
+      "name": "cha reads the step hsTask is on",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "extract": {
+          "hsTaskStep": "step_id"
+        },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "cha selects the CDA coconut-certificate HS code",
+      "request": {
+        "actor": "cha",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{hsTask}}/steps/{{hsTaskStep}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "hs_codes": [
+              "cda-certificate-reg"
+            ]
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "admin lists the consignment's flows",
+      "request": {
+        "actor": "admin",
+        "method": "GET",
+        "path": "/api/v1/admin/consignments/{{consignmentId}}",
+        "extract": {
+          "exportFlow": "flows.0.workflowId"
+        },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "emit assessed CusDec (stands in for Customs)",
+      "signal": {
+        "fromWorkflowVar": "exportFlow",
+        "name": "cusdec_assessed",
+        "payload": {
+          "cusdec_number": "CBEX1/2026/E/904821"
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for CDA application task (agency split fired)",
+      "wait": {
+        "node": "Submit Application",
+        "state": "IN_PROGRESS",
+        "into": "cdaApp",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "trader reads the step cdaApp is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{cdaApp}}",
+        "extract": {
+          "cdaAppStep": "step_id"
+        },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "trader uploads the DC bags details spreadsheet",
+      "upload": {
+        "actor": "trader",
+        "filename": "dc-bags.xlsx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content": "PK\u0003\u0004e2e-xlsx",
+        "into": "dcBags"
+      }
+    },
+    {
+      "name": "trader submits the CDA application (DC payment path)",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{cdaApp}}/steps/{{cdaAppStep}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "exporter_name": "Lanka Coconuts Ltd",
+            "exporter_registration_number": "0001",
+            "exporter_address": "123 Galle Road, Colombo 03",
+            "cusdec_number": "CBEX1/2026/E/904821",
+            "relates_to_previous_approval": false,
+            "product_type": "dc",
+            "dc_grades": [
+              {
+                "dc_grade": "FINE",
+                "number_of_bags": 500,
+                "weight_of_bag": 25,
+                "total_weight": 12500
+              }
+            ],
+            "port_of_discharge": "Port of Rotterdam",
+            "final_destination": "Rotterdam, Netherlands",
+            "container_filling_status": "full",
+            "cert_type": "PS",
+            "uploaded_dc_bags_details": "{{dcBags}}"
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for CDA application to reach officer verification",
+      "wait": {
+        "node": "Submit Application",
+        "state": "QUEUED_EXTERNALLY",
+        "into": "cdaApp",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "CDA agency sends the application back for more information",
+      "callback": {
+        "taskVar": "cdaApp",
+        "command": "needs_more_info",
+        "content": {
+          "verification_outcome": "needs_more_info",
+          "rejection_reason": "Please upload the completed DC bags details spreadsheet."
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for CDA application to return to the trader",
+      "wait": {
+        "node": "Submit Application",
+        "state": "IN_PROGRESS",
+        "into": "cdaApp",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "trader reads the step cdaApp is on after rework",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{cdaApp}}",
+        "extract": {
+          "cdaAppStep": "step_id",
+          "cdaAppState": "state"
+        },
+        "extractEquals": {
+          "cdaAppState": "PENDING_USER"
+        },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "trader uploads a corrected DC bags details spreadsheet",
+      "upload": {
+        "actor": "trader",
+        "filename": "dc-bags-corrected.xlsx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content": "PK\u0003\u0004e2e-xlsx-corrected",
+        "into": "dcBags"
+      }
+    },
+    {
+      "name": "trader resubmits the CDA application",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{cdaApp}}/steps/{{cdaAppStep}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "exporter_name": "Lanka Coconuts Ltd",
+            "exporter_registration_number": "0001",
+            "exporter_address": "123 Galle Road, Colombo 03",
+            "cusdec_number": "CBEX1/2026/E/904821",
+            "relates_to_previous_approval": false,
+            "product_type": "dc",
+            "dc_grades": [
+              {
+                "dc_grade": "FINE",
+                "number_of_bags": 500,
+                "weight_of_bag": 25,
+                "total_weight": 12500
+              }
+            ],
+            "port_of_discharge": "Port of Rotterdam",
+            "final_destination": "Rotterdam, Netherlands",
+            "container_filling_status": "full",
+            "cert_type": "PS",
+            "uploaded_dc_bags_details": "{{dcBags}}"
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for CDA application to reach officer verification again",
+      "wait": {
+        "node": "Submit Application",
+        "state": "QUEUED_EXTERNALLY",
+        "into": "cdaApp",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "CDA agency approves the resubmitted application",
+      "callback": {
+        "taskVar": "cdaApp",
+        "command": "approve",
+        "content": {
+          "verification_outcome": "approve"
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for CDA pay-fee task",
+      "wait": {
+        "node": "Salmonella Fee",
+        "state": "IN_PROGRESS",
+        "into": "payTask",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "trader reads the step payTask is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{payTask}}",
+        "extract": {
+          "payTaskStep": "step_id"
+        },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "trader selects the payment method",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{payTask}}/steps/{{payTaskStep}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "selected_method": "govpay"
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "payment gateway confirms the application fee",
+      "pay": {
+        "taskVar": "payTask",
+        "method": "govpay",
+        "status": "paid",
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for the application fee to be paid",
+      "wait": {
+        "node": "Salmonella Fee",
+        "state": "COMPLETED",
+        "timeout": "60s"
+      }
+    }
+  ]
+}
