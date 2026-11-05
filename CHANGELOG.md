@@ -6,6 +6,121 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-05
+
+This is the first stable release, and the first for production. Its code is that of 1.0.0-rc.4: the release changes only the version and these notes, so a deployment already on 1.0.0-rc.4 has nothing to do. A new deployment starts from this release's example config, Helm values and `idp/bootstrap/`, and from an empty database, which the single `000001` migration builds. The upgrade notes combine those of 1.0.0-rc.1 to 1.0.0-rc.4 for a deployment on 0.15.0. Since 0.15.0, three required config changes (two new `refid` formats and one changed) go with a new image and a new artifacts pin, and the release adds the CusDec registration number for the SLTB tea flow, a dark appearance in the Trader Portal and the `VALUE_WRITER` step. It removes the unused `GET /api/v1/chas` route and the `cha:read` scope, answers early SLC Edge callbacks with a `202` and retries them itself, and fits the Trader Portal to small screens.
+
+### Upgrade notes
+
+#### A new deployment
+
+- Start from [`configs/config.example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v1.0.0/configs/config.example.yaml) (agencies: [`configs/agency/`](https://github.com/OpenNSW/nsw-srilanka/tree/v1.0.0/configs/agency)), [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v1.0.0/deployments/helm/values-example.yaml) and `idp/bootstrap/`, with an empty database for TNSW and one for each agency. The migrate job applies `000001`, which holds the whole schema.
+- Set up the IdP by hand from `idp/bootstrap/`, then register each company with `otc company apply`. The [trader and CHA guide](https://github.com/OpenNSW/nsw-srilanka/blob/v1.0.0/docs/guides/onboarding-traders-and-chas.md) and the [agency guide](https://github.com/OpenNSW/nsw-srilanka/blob/v1.0.0/docs/guides/onboarding-agency-mode-agencies.md) describe the steps.
+- Pin the artifacts as under "Workflow artifacts" below, and deploy the exact version `1.0.0`, or the image digests in the release notes, and never `latest`, which moves with every release.
+
+#### A deployment already on a release candidate
+
+- **1.0.0-rc.4:** nothing. This release has the same code.
+- **1.0.0-rc.3:** take the Trader Portal image. The login card layout is the only change since.
+- **1.0.0-rc.2:** also tell the SLC Edge team that early callbacks are answered 202, as below, and take the artifacts pin, which moves from `ee2acee` to `5585945`.
+- **1.0.0-rc.1:** also make the `refid` changes and change the image and the pin together, as below.
+
+#### Change the image version, the `refid` config and the artifacts pin together, from 0.15.0 ([#1114](https://github.com/OpenNSW/nsw-srilanka/pull/1114), [#1116](https://github.com/OpenNSW/nsw-srilanka/pull/1116), [#1118](https://github.com/OpenNSW/nsw-srilanka/pull/1118), [#1111](https://github.com/OpenNSW/nsw-srilanka/pull/1111))
+
+- Move the image or chart version, the `refid` change below and `artifactLoader.github.ref` in one deployment, for TNSW and for each agency. The pinned artifacts need this build:
+  - the SLTB application writes the CusDec reference with the `VALUE_WRITER` step type, which 0.15.0 doesn't have, and a flow that reaches an unknown task type fails;
+  - the boat note's voyage fields are filled by this server. With the old artifacts the voyage field starts empty, and with the old server the new voyage fields do;
+  - this server sends the replaced certificate's issue date to the ePhyto Hub as a W3 datetime, which the pinned artifacts start sending.
+
+#### Add two `refid` formats and change one ([#1114](https://github.com/OpenNSW/nsw-srilanka/pull/1114), [#1126](https://github.com/OpenNSW/nsw-srilanka/pull/1126), [#1113](https://github.com/OpenNSW/nsw-srilanka/pull/1113))
+
+These are config changes, for TNSW only, in `refid` in `config.yaml` (Helm: `backend.config.refid`). Copy them from [`configs/config.example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v1.0.0/configs/config.example.yaml) or [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v1.0.0/deployments/helm/values-example.yaml).
+
+- **Add `cusdec_registration_no` to the `TNSW` issuer.** It is the registration number of the CusDec the tea flow sends SLTB: the literal `90`, then a sequence that never restarts, padded to six digits. It stands in for the number ASYCUDA would issue, for example `90000001`.
+- **Add `cusdec_year` to the `TNSW` issuer**, next to it. It is the year that goes with the registration number, drawn in the same step:
+
+  ```yaml
+  - idType: cusdec_year
+    timezone: Asia/Colombo
+    segments:
+      - type: date
+        format: "yyyy"
+  ```
+
+- **Remove the `{type: literal, value: "/"}` segment from the `SLTB` issuer's `blend_sheet_no`.** New blend sheet numbers are then `202600001`, because SLTB's system takes the blend sheet XML's id as a number. The sequence's `scopeKey` is unchanged, so the count carries on, and numbers already issued keep their slash.
+- Without the two new formats, the trade flow's CusDec registration step fails and the workflow parks. Restart the API after you change the config, and retry a workflow that is already parked on that step as an admin.
+
+#### Tell the SLC Edge team that early callbacks are answered 202 ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+
+- A callback that arrives before what it answers is there used to get a `503`, and SLC Edge retried it a few times. That covers a declaration or dispatch note that isn't recorded yet, a document that can't be found by its reference because the event raced its integration result, and a task that hasn't parked yet. A `CUSDEC_INTEGRATED` whose task hadn't parked got a `500`. All of them now get `202 Accepted`, so SLC Edge stops retrying, and TNSW retries the callback itself. The first retry comes after 5 seconds, then the wait doubles up to every 10 minutes, until 24 hours have passed.
+- The retries live in the server process only, and nothing waits for them when the server stops. A restart or a deploy drops the callbacks still held, and SLC Edge won't send them again because it was told they were accepted. Deploy when no early callback is pending: a held callback logs `slce: callback arrived early; accepted and held for retry`, and `slce: held callback applied` when it lands.
+- A callback that can never be applied, such as one that no longer decodes, or one for a case that was never recorded, is logged at error as `slce: held callback cannot be applied; giving up` and dropped. So is one still not applied after 24 hours (`slce: held callback still not applied; giving up`). Alert on both.
+- No config change. The [SLC Edge callback spec](https://github.com/OpenNSW/nsw-srilanka/blob/v1.0.0/api/webhooks.slce.openapi.yaml) lists the new `202` and the shorter `503`.
+
+#### Drop the unused `chas` route and the `cha:read` scope (optional) ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106))
+
+- `GET /api/v1/chas` is removed and answers 404. No portal or integration calls it. A client that does should use `GET /api/v1/companies?has_cha=true`.
+- No route checks `cha:read` any more, so nothing fails if a deployment keeps it. To clean it up, in this order:
+  1. Remove `cha:read` from the Trader Portal's `IDP_SCOPES` (`config.js`; Helm: `frontend.config`).
+  2. In the IdP, remove the `cha` resource from the NSW API resource server, and the `cha:read` permission from the `Trader` and `CHA` roles and from the TraderApp application. A live IdP does not read `idp/bootstrap/`, so change it by hand.
+- A new deployment from this release's `idp/bootstrap/` and examples never has the scope.
+
+#### Dark mode (optional) ([#1107](https://github.com/OpenNSW/nsw-srilanka/pull/1107))
+
+- The Trader Portal follows each user's OS appearance by default, so a user whose OS is in dark mode sees it dark. There is no deployment setting for the default, and each user can switch.
+- `logoUrlDark` and `systemLogoUrlDark` in `branding.json` (Helm: `frontend.branding`) are new and optional. Set them when a logo doesn't read on a dark background. Without them, the dark appearance uses `logoUrl` and `systemLogoUrl`. Existing files keep working.
+- A deployment with its own `branding.theme` should check that white text on `accent-9` reads at 4.5:1 in dark too, and set `theme.dark.colors` if it doesn't. See the chart README's "Frontend branding" section.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`5585945`](https://github.com/OpenNSW/one-trade-artifacts/commit/558594551e2c074300055dd23658d10304d92538) (4 November 2026), for TNSW and for each agency. It holds the artifact changes since the 0.15.0 pin that depend on this build:
+  - [one-trade-artifacts#354](https://github.com/OpenNSW/one-trade-artifacts/pull/354): each consignment is issued a CusDec registration number for SLTB. It needs [#1114](https://github.com/OpenNSW/nsw-srilanka/pull/1114), [#1126](https://github.com/OpenNSW/nsw-srilanka/pull/1126) and the `VALUE_WRITER` step of [#1116](https://github.com/OpenNSW/nsw-srilanka/pull/1116);
+  - [one-trade-artifacts#356](https://github.com/OpenNSW/one-trade-artifacts/pull/356): the boat note's fields follow Customs' answers, with `voyage_no`, `voyage_date` and `sn_bl_no`. It needs [#1118](https://github.com/OpenNSW/nsw-srilanka/pull/1118);
+  - [one-trade-artifacts#352](https://github.com/OpenNSW/one-trade-artifacts/pull/352): the replaced certificate's issue date goes to the ePhyto Hub. It needs [#1111](https://github.com/OpenNSW/nsw-srilanka/pull/1111).
+- It also carries these changes:
+  - [one-trade-artifacts#343](https://github.com/OpenNSW/one-trade-artifacts/pull/343): the CusDec download is written in ASYCUDA's order and with the fields SLTB requires, which are the exporter's name, the number of items and the destination country name. SLTB's system answers "invalid format" to a download without them;
+  - [one-trade-artifacts#363](https://github.com/OpenNSW/one-trade-artifacts/pull/363): the FCAU application fee is LKR 5000.00, up from LKR 1500.00, in the amount charged and in the three trader-facing texts that repeat it. The fee id is the same, so the payment config doesn't change;
+  - [one-trade-artifacts#347](https://github.com/OpenNSW/one-trade-artifacts/pull/347): the trader pays an NPQS Replacement Certificate Fee of LKR 12.00 before a certificate is reissued, on the ePhyto and the printed path. It is collected under the existing `certificate_fee` payment service, so the payment config doesn't change;
+  - [one-trade-artifacts#351](https://github.com/OpenNSW/one-trade-artifacts/pull/351): the FCAU application has separate package, batch and weight fields, and analysis certificates are optional. An application saved before it holds the old combined `package_batch_weight_details` value, which the new fields don't read;
+  - [one-trade-artifacts#358](https://github.com/OpenNSW/one-trade-artifacts/pull/358), [#355](https://github.com/OpenNSW/one-trade-artifacts/pull/355), [#350](https://github.com/OpenNSW/one-trade-artifacts/pull/350), [#357](https://github.com/OpenNSW/one-trade-artifacts/pull/357), [#359](https://github.com/OpenNSW/one-trade-artifacts/pull/359) and [#341](https://github.com/OpenNSW/one-trade-artifacts/pull/341): XML import, download and Save as Draft on the CDN and boat note forms, the CusDec exporter name read from where ASYCUDA writes it, the blend sheet download's totals as the original has them, package and container types shown as `(id) - name`, the SLTB application's pending state in section order, and only real HS codes offered in the selection.
+- The artifacts repository's own release tooling changed as well ([#360](https://github.com/OpenNSW/one-trade-artifacts/pull/360), [#361](https://github.com/OpenNSW/one-trade-artifacts/pull/361), [#362](https://github.com/OpenNSW/one-trade-artifacts/pull/362) and [#364](https://github.com/OpenNSW/one-trade-artifacts/pull/364)): a release workflow publishes a bundle's manifest from a release tag, in place of the workflows that synced artifacts to R2. Nothing in the artifacts themselves changes.
+
+#### Local Docker Compose ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106), [#1114](https://github.com/OpenNSW/nsw-srilanka/pull/1114), [#1126](https://github.com/OpenNSW/nsw-srilanka/pull/1126), [#1113](https://github.com/OpenNSW/nsw-srilanka/pull/1113))
+
+- `make setup` doesn't overwrite an existing `configs/config.yaml`, `configs/config.docker.yaml` or `portals/apps/trader-app/public/config.js`: copy the two new `refid` formats and the `blend_sheet_no` change into the first two from the examples, and you can remove `cha:read` from the `IDP_SCOPES` of the last.
+
+### Added
+
+- **A CusDec registration number for the tea flow.** TNSW issues each consignment a registration number and its year, once per consignment, and passes them to the agency flows. They stand in for the number ASYCUDA would issue. ([#1114](https://github.com/OpenNSW/nsw-srilanka/pull/1114), [#1126](https://github.com/OpenNSW/nsw-srilanka/pull/1126))
+- **The `VALUE_WRITER` step.** It writes values the workflow already has into fields of a later step's inputs. The workflow guide describes it. ([#1116](https://github.com/OpenNSW/nsw-srilanka/pull/1116))
+- **A warm artifact file cache.** At startup the server loads the artifact files into its cache in the background, so the first requests don't fetch them. It uses the existing `artifacts.fileCacheBytes` and works only for versioned manifest sources (`manifest_v1.json` and so on): core turns the cache off for a source with only `manifest.json`, so nothing is warmed there. Look for `artifact file cache warmed` (`version`, `files`, `bytes`) in the startup log. If you see `artifact manifest exceeds file cache size; warmup stopped early`, raise `artifacts.fileCacheBytes`. ([#1121](https://github.com/OpenNSW/nsw-srilanka/pull/1121))
+- **Dark appearance in the Trader Portal.** The portal follows the user's OS appearance, and a user can switch it. A deployment can set a dark logo with `logoUrlDark` and `systemLogoUrlDark`. ([#1107](https://github.com/OpenNSW/nsw-srilanka/pull/1107))
+
+### Changed
+
+- An SLC Edge callback that arrives early is answered `202 Accepted` and retried by TNSW for up to 24 hours, in place of a `503` that SLC Edge retried a few times. See the upgrade notes. ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+- SLTB blend sheet numbers are digits only. See the upgrade notes. ([#1113](https://github.com/OpenNSW/nsw-srilanka/pull/1113))
+- `GET /api/v1/chas` and the `cha:read` scope are removed. See the upgrade notes. ([#1106](https://github.com/OpenNSW/nsw-srilanka/pull/1106))
+
+### Fixed
+
+- The boat note's B/L number and voyage date are filled in from the dispatch notes. ([#1118](https://github.com/OpenNSW/nsw-srilanka/pull/1118))
+- The replaced certificate's issue date is sent to the ePhyto Hub as a W3 datetime. ([#1111](https://github.com/OpenNSW/nsw-srilanka/pull/1111))
+- The Trader Portal's consignment and case lists, its task, form and consignment detail screens, the admin debugger, the top bar, the footer and the login screen fit small screens, and the debugger's action descriptions are accessible. On the login screen, the portal name and the Sign In button share a row from 1280px wide, so they sit together on most laptop screens. ([#1109](https://github.com/OpenNSW/nsw-srilanka/pull/1109), [#1112](https://github.com/OpenNSW/nsw-srilanka/pull/1112), [#1119](https://github.com/OpenNSW/nsw-srilanka/pull/1119), [#1124](https://github.com/OpenNSW/nsw-srilanka/pull/1124), [#1136](https://github.com/OpenNSW/nsw-srilanka/pull/1136))
+
+### Known issues
+
+- SLC Edge callbacks that TNSW holds for retry live in the server's memory: a restart drops the pending ones, and one still not applied after 24 hours is logged and dropped. The audit record of such a callback shows its `202`, and the retry that finally applies it writes none. ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+- With the `github` artifact loader, workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment, and they are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines exported over OTLP whatever `server.logLevel` is, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks, and authenticated SLC Edge callbacks, are audited. Payments and the storage module's own events are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Cancelling a Cargo Dispatch Note in TNSW does not cancel it in ASYCUDA World, which NSW has no call for: the note stays registered there. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
+
 ## [1.0.0-rc.4] - 2026-11-05
 
 This is the fourth release candidate for 1.0.0. It changes the layout of the Trader Portal's login card on laptop-width screens and nothing else. There is no config change, no migration and no new artifacts pin, so a deployment on 1.0.0-rc.3 has nothing to do except take the new Trader Portal image. If no blocker is found, 1.0.0 is a later release candidate's code, promoted without changes.
@@ -1564,7 +1679,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.4...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...v1.0.0
 [1.0.0-rc.4]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.3...v1.0.0-rc.4
 [1.0.0-rc.3]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.2...v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.1...v1.0.0-rc.2
