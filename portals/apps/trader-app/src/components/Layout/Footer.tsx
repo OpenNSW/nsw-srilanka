@@ -66,7 +66,7 @@ export function Footer() {
           )
         })}
       </div>
-      <div className="flex items-center gap-5 text-foreground lg:order-3 lg:shrink-0 lg:whitespace-nowrap">
+      <div className="flex items-center gap-5 text-foreground lg:order-3 lg:shrink-0 lg:whitespace-nowrap lg:text-base">
         <span>
           <Trans
             i18nKey="common.poweredBy"
