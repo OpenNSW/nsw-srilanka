@@ -88,7 +88,7 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(consignmentID, "My Test Consignment", "IMPORT", "trader1", companyID, "IN_PROGRESS", time.Now(), time.Now()))
 
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(([]store.TaskRecord)(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID, Roles: []string{partyRoleTrader}}).Return(([]store.TaskRecord)(nil))
 
 	result, err := svc.GetConsignmentByID(ctx, consignmentID, companyID, []string{"Trader"})
 	assert.NoError(t, err)
@@ -213,22 +213,37 @@ func TestConsignmentService_GetConsignmentByID_CompanyMatchesTraderSlot_CHARoleO
 // A company that is BOTH the trader and CHA company on the same row (e.g. a trader
 // acting as its own CHA) is granted access via whichever slot matches a role the
 // caller actually holds — holding only one of the two roles is sufficient.
-func TestConsignmentService_GetConsignmentByID_SameCompanyBothSlots_SingleRoleGranted(t *testing.T) {
-	db, sqlMock := setupTestDB(t)
-	mockTaskStore := new(MockTaskStore)
-	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
+func TestConsignmentService_GetConsignmentByID_SameCompanyBothSlots(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		jwtRoles  []string
+		readRoles []string
+	}{
+		{name: "CHA only", jwtRoles: []string{"CHA"}, readRoles: []string{partyRoleCHA}},
+		{name: "both roles", jwtRoles: []string{"CHA", "Trader"}, readRoles: []string{partyRoleTrader, partyRoleCHA}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, sqlMock := setupTestDB(t)
+			taskStore := new(MockTaskStore)
+			svc := mustNewService(t, db, nil, nil, nil, nil, taskStore)
 
-	id := uuid.NewString()
-	companyID := "company-both"
-	sqlMock.ExpectQuery(fetchConsignmentQuery).
-		WithArgs(fetchConsignmentArgs(id)...).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
-			AddRow(id, "IN_PROGRESS", companyID, companyID))
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: id}).Return(([]store.TaskRecord)(nil))
+			id := uuid.NewString()
+			companyID := "company-both"
+			sqlMock.ExpectQuery(fetchConsignmentQuery).
+				WithArgs(fetchConsignmentArgs(id)...).
+				WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
+					AddRow(id, "IN_PROGRESS", companyID, companyID))
+			taskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: id, Roles: tc.readRoles}).
+				Return([]store.TaskRecord{{TaskID: "visible-task", TaskType: "FORM"}}).Once()
 
-	result, err := svc.GetConsignmentByID(context.Background(), id, companyID, []string{"CHA"})
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
+			result, err := svc.GetConsignmentByID(context.Background(), id, companyID, tc.jwtRoles)
+			require.NoError(t, err)
+			require.Len(t, result.WorkflowNodes, 1)
+			assert.Equal(t, "visible-task", result.WorkflowNodes[0].ID)
+			taskStore.AssertExpectations(t)
+			require.NoError(t, sqlMock.ExpectationsWereMet())
+		})
+	}
 }
 
 func TestNewService_ValidatesRoles(t *testing.T) {
@@ -467,7 +482,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(returnedID, "EXPORT", traderID, traderCompanyID, "IN_PROGRESS", time.Now(), time.Now()))
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: returnedID}).Return([]store.TaskRecord(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: returnedID, Roles: []string{partyRoleTrader}}).Return([]store.TaskRecord(nil))
 
 	result, err := svc.CreateAndStartConsignment(context.Background(), traderID, defaultExportWorkflowTemplateID)
 	assert.NoError(t, err)
@@ -577,7 +592,7 @@ func TestConsignmentService_GetConsignmentByID_DBError(t *testing.T) {
 
 func TestConsignmentService_buildNodeDTOsFromTaskRecords_NilStore(t *testing.T) {
 	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
-	_, err := svc.buildNodeDTOsFromTaskRecords(context.Background(), "id")
+	_, err := svc.buildNodeDTOsFromTaskRecords(context.Background(), "id", nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "task store not initialized")
 }
@@ -588,7 +603,7 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_FailedRead(t *testing.T
 	svc := mustNewService(t, nil, nil, nil, nil, nil, mockTaskStore)
 	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: "cons-1"}).Return(nil, errors.New("db down"))
 
-	_, err := svc.buildNodeDTOsFromTaskRecords(context.Background(), "cons-1")
+	_, err := svc.buildNodeDTOsFromTaskRecords(context.Background(), "cons-1", nil)
 	assert.ErrorContains(t, err, "db down")
 }
 
@@ -622,7 +637,7 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 	}
 	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(tasks)
 
-	dtos, err := svc.buildNodeDTOsFromTaskRecords(ctx, consignmentID)
+	dtos, err := svc.buildNodeDTOsFromTaskRecords(ctx, consignmentID, nil)
 	assert.NoError(t, err)
 	assert.Len(t, dtos, 6) // SYSTEM task filtered out
 	assert.Equal(t, WorkflowNodeStateCompleted, dtos[0].State)

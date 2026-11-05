@@ -749,6 +749,8 @@ components:
           format: date-time
         workflowNodes:
           type: array
+          description: >-
+            All non-system tasks on the consignment, regardless of read roles.
           items:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
         startableFlows:

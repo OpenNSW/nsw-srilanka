@@ -453,6 +453,9 @@ components:
           format: date-time
         workflowNodes:
           type: array
+          description: >-
+            Non-system tasks whose recorded read roles include a role the caller
+            holds on this consignment. Tasks without recorded read roles are omitted.
           items:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
         startableFlows:

@@ -85,7 +85,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(consignmentID, "IN_PROGRESS", companyID))
 
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(([]store.TaskRecord)(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID, Roles: []string{partyRoleTrader}}).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
 	req.SetPathValue("id", consignmentID)
@@ -124,7 +124,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_SameCompanyCHA(t *testing.T)
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(consignmentID, "IN_PROGRESS", "company-trader", chaCompanyID))
 
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(([]store.TaskRecord)(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID, Roles: []string{partyRoleCHA}}).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
 	req.SetPathValue("id", consignmentID)
@@ -274,7 +274,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(returnedID, "EXPORT", traderID, traderCompanyID, "IN_PROGRESS", time.Now(), time.Now()))
 
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: returnedID}).Return([]store.TaskRecord(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: returnedID, Roles: []string{partyRoleTrader}}).Return([]store.TaskRecord(nil))
 
 	req, _ := http.NewRequest("POST", "/api/v1/consignments", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), traderID, "", "Trader"))
