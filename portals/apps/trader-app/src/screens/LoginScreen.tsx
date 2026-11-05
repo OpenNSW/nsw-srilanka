@@ -62,16 +62,16 @@ export function LoginScreen() {
           <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-tight mb-10 drop-shadow-lg">
             {systemName}
           </h1>
-          <div className="max-w-full bg-white/10 border border-white/15 backdrop-blur-xl py-10 px-8 2xl:px-12 rounded-3xl flex flex-col 2xl:flex-row items-center gap-6 2xl:gap-10 shadow-2xl">
-            <div className="flex flex-col 2xl:flex-row items-center gap-8 2xl:gap-12">
-              <div className="max-w-xs flex flex-col items-center 2xl:items-start text-center 2xl:text-left">
+          <div className="max-w-full bg-white/10 border border-white/15 backdrop-blur-xl py-6 px-6 xl:px-8 rounded-3xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-2xl">
+            <div className="flex flex-col xl:flex-row items-center gap-6 xl:gap-8">
+              <div className="max-w-xs flex flex-col items-center xl:items-start text-center xl:text-left">
                 <h2 className="text-2xl font-bold text-white tracking-tight">{displayName}</h2>
                 <p className="text-white/70 text-xs mt-1">{t('auth.login.tagline')}</p>
               </div>
 
               <button
                 onClick={() => void auth.signinRedirect()}
-                className="bg-primary hover:bg-primary-hover text-primary-contrast px-10 py-3 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
+                className="shrink-0 whitespace-nowrap bg-primary hover:bg-primary-hover text-primary-contrast px-10 py-3 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
               >
                 {t('auth.login.button')}
               </button>
