@@ -6,6 +6,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-rc.4] - 2026-11-05
+
+This is the fourth release candidate for 1.0.0. It changes the layout of the Trader Portal's login card on laptop-width screens and nothing else. There is no config change, no migration and no new artifacts pin, so a deployment on 1.0.0-rc.3 has nothing to do except take the new Trader Portal image. If no blocker is found, 1.0.0 is a later release candidate's code, promoted without changes.
+
+### Upgrade notes
+
+#### Workflow artifacts
+
+- Keep `artifactLoader.github.ref` at one-trade-artifacts [`5585945`](https://github.com/OpenNSW/one-trade-artifacts/commit/558594551e2c074300055dd23658d10304d92538), the pin of 1.0.0-rc.3, for TNSW and for each agency. Nothing in the artifacts changed for this release.
+
+### Fixed
+
+- On the Trader Portal's login screen, the portal name and the Sign In button share a row from 1280px wide, where they did so only from 1536px, so they sit together on most laptop screens. The card is tighter so that the row fits inside the hero, and the Sign In label stays on one line. The change is in the Trader Portal image. ([#1136](https://github.com/OpenNSW/nsw-srilanka/pull/1136))
+
+### Known issues
+
+- SLC Edge callbacks that TNSW holds for retry live in the server's memory: a restart drops the pending ones, and one still not applied after 24 hours is logged and dropped. ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+- With the `github` artifact loader, workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment, and they are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines exported over OTLP whatever `server.logLevel` is, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks, and authenticated SLC Edge callbacks, are audited. Payments and the storage module's own events are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Cancelling a Cargo Dispatch Note in TNSW does not cancel it in ASYCUDA World, which NSW has no call for: the note stays registered there. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
+
 ## [1.0.0-rc.3] - 2026-11-04
 
 This is the third release candidate for 1.0.0. An SLC Edge callback that arrives before what it answers is there is now answered `202 Accepted` and retried by TNSW for up to 24 hours, where it was answered `503` and left to SLC Edge's own retries. Tell the SLC Edge team that the responses changed. The retries are held in memory, so a restart drops the ones still pending. The artifacts pin moves to a commit that raises the FCAU application fee to LKR 5000.00. There is no config change, and no migration. If no blocker is found, 1.0.0 is a later release candidate's code, promoted without changes.
@@ -1537,7 +1564,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.3...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.4...HEAD
+[1.0.0-rc.4]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.3...v1.0.0-rc.4
 [1.0.0-rc.3]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.2...v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.1...v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...v1.0.0-rc.1
