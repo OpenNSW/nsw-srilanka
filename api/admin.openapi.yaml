@@ -753,7 +753,10 @@ components:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
         startableFlows:
           type: array
-          description: The flows a trader or CHA may start on the consignment.
+          description: >-
+            The flows a trader or CHA may start on the consignment. Empty if
+            the caller lacks `consignment:flow:write`. This list does not grant
+            permission to start a flow.
           items:
             $ref: '#/components/schemas/FlowOption'
 

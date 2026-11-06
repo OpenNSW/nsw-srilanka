@@ -18,6 +18,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
 const (
@@ -112,6 +113,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		"traderCompanyId": consignment.TraderCompanyID,
 		"chaCompanyId":    consignment.ChaCompanyID,
 	}))
+	filterStartableFlows(p, consignment)
 	httputil.JSON(w, http.StatusCreated, consignment)
 }
 
@@ -255,6 +257,8 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	filterStartableFlows(p, consignment)
+
 	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{
 		"callerCompanyId": userCompany.ID,
 	}))
@@ -368,8 +372,16 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	filterStartableFlows(p, &consignment.DetailDTO)
+
 	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{"view": "admin"}))
 	httputil.JSON(w, http.StatusOK, consignment)
+}
+
+func filterStartableFlows(p *authn.Principal, detail *DetailDTO) {
+	if !slices.Contains(p.Scopes, scopes.ConsignmentFlowWrite) {
+		detail.StartableFlows = []FlowOption{}
+	}
 }
 
 func (c *Router) auditEvent(ctx context.Context, e nswaudit.Event) {

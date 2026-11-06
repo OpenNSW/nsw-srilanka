@@ -2,6 +2,7 @@ package consignment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -258,6 +259,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
 
 	svc := mustNewService(t, db, newExportRegistry(), nil, mockCompany, mockUser, mockTaskStore)
+	svc.userFlows = userFlows
 	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{}))
 	client, capture := nswaudit.NewWithCapture()
 	r := mustNewRouter(t, svc, nil, mockCompany, client)
@@ -281,7 +283,10 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.HandleCreateConsignment(w, req)
 
-	assert.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var detail DetailDTO
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &detail))
+	assert.Equal(t, []FlowOption{}, detail.StartableFlows)
 
 	recs := capture.Records()
 	require.Len(t, recs, 1)
