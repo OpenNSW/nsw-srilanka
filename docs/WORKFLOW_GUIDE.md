@@ -549,7 +549,7 @@ The node maps the link into the input `source_input` names, and takes the key ou
 
 - **Properties:** all four are required. `service_id` is the registered service the link is downloaded through (its credentials, and only its host: a URL on any other host is refused). `source_input` is the input holding the link. `mime_type` is the type the document is stored as. `filename` names it, extension included.
 - **Inline documents:** a source that is a base64 `data:` URI, such as SLPA's gate pass barcode, carries the document itself, so it is decoded rather than downloaded. It is stored only when its type is `mime_type`.
-- **Output:** `{key, name, mime_type, size}` at `<output_namespace>`, as `HTML_DOCUMENT_GENERATOR` writes it. Declare the key under the render config's `files` and link it as `[Download](files:{{.payment_slip_file.key}})`, or show a stored image as `![Barcode](files:{{.barcode_file.key}})`. An empty source stores nothing.
+- **Output:** `{key, name, mime_type, size}` at `<output_namespace>`, as `HTML_DOCUMENT_GENERATOR` writes it. Declare the key under the render config's `files` and link it as `[Download](files:{{.payment_slip_file.key}})`. An empty source stores nothing.
 - **Failures:** a download the service refuses (a 4xx, such as an expired link), an empty answer, or a `data:` URI that is malformed or of another type is recorded as `{error}` at `<output_namespace>`, with no `key`, and the step goes on: show the service's own link when there is no key. A transport failure or a 5xx fails the step, so the engine retries it.
 
 ### Payments (`PAYMENT`)

@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import type { MouseEvent } from 'react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { useUpload } from '@opennsw/jsonforms-renderers'
 import type { ZoneRendererProps } from '@/features/zone/types'
@@ -23,34 +23,6 @@ function fileRef(href: string | undefined): string | undefined {
 // treatment.
 function urlTransform(url: string): string {
   return url.startsWith(FILE_LINK_SCHEME) ? url : defaultUrlTransform(url)
-}
-
-// FileImage shows an image the task stores, written ![alt](files:<ref>), from
-// the download URL the backend issues for it. It shows the alt text until the
-// URL arrives, and when there is none.
-function FileImage({ fileRef, alt }: { fileRef: string; alt?: string }) {
-  const getDownloadUrl = useUpload()?.getDownloadUrl
-  const [resolved, setResolved] = useState<{ ref: string; url: string }>()
-
-  useEffect(() => {
-    if (!getDownloadUrl) return
-    let current = true
-    getDownloadUrl(fileRef)
-      .then(({ url }) => {
-        if (current) setResolved({ ref: fileRef, url })
-      })
-      .catch((err) => {
-        console.error('Failed to resolve secure download url from context', err)
-      })
-    return () => {
-      current = false
-    }
-  }, [getDownloadUrl, fileRef])
-
-  if (resolved?.ref !== fileRef) {
-    return alt ? <span>{alt}</span> : null
-  }
-  return <img src={resolved.url} alt={alt ?? ''} className="max-w-full h-auto" />
 }
 
 export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
@@ -114,13 +86,6 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
                 {children}
               </a>
             )
-          },
-          img: ({ src, alt }) => {
-            if (typeof src === 'string' && src.startsWith(FILE_LINK_SCHEME)) {
-              const ref = fileRef(src)
-              return ref ? <FileImage fileRef={ref} alt={alt} /> : null
-            }
-            return <img src={src} alt={alt} />
           },
           strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
           em: ({ children }) => <em className="italic text-foreground">{children}</em>,
