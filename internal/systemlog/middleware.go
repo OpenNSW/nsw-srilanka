@@ -185,13 +185,14 @@ func emitSecurityDenial(
 }
 
 // clientIP is the address recorded on system and security lines. Prefer the
-// first X-Forwarded-For hop (ingress), then X-Real-IP, then RemoteAddr's host.
+// last X-Forwarded-For hop (what a trusted ingress appends; earlier hops are
+// client-controlled), then X-Real-IP, then RemoteAddr's host.
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
+		parts := strings.Split(xff, ",")
+		if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
+			return ip
 		}
-		return strings.TrimSpace(xff)
 	}
 	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
 		return xri

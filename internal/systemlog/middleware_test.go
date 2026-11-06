@@ -495,12 +495,13 @@ func TestClientIP(t *testing.T) {
 		want string
 	}{
 		{
-			name: "X-Forwarded-For first hop",
+			name: "X-Forwarded-For last hop",
 			mod: func(r *http.Request) {
+				// Client-spoofed first hop; ingress appends the TCP peer last.
 				r.Header.Set("X-Forwarded-For", "198.51.100.7, 203.0.113.10")
 				r.RemoteAddr = "10.0.0.1:443"
 			},
-			want: "198.51.100.7",
+			want: "203.0.113.10",
 		},
 		{
 			name: "X-Real-IP",
