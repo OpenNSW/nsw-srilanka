@@ -3,6 +3,7 @@ package plugins
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,7 +37,9 @@ type RemoteFetcher interface {
 // and the render config links the stored copy.
 //
 // The URL is fetched through the service's own client, so the download goes only
-// to that service's host, with its credentials.
+// to that service's host, with its credentials. A source that is a base64 data:
+// URI, as SLPA sends its gate pass barcode, carries the document inline, so it is
+// decoded instead, and stored only when its type is mime_type.
 //
 // The stored file's metadata is written to <output_namespace> as {key, name,
 // mime_type, size}, as HTML_DOCUMENT_GENERATOR writes it. Nothing is written when
@@ -111,20 +114,21 @@ func (p *RemoteFileArchiverPlugin) Execute(ctx pluginContext, configRaw json.Raw
 		return nil
 	}
 
-	resp, err := p.remote.CallRaw(ctx.Context, cfg.ServiceID, remote.Request{Method: http.MethodGet, Path: source})
-	if err != nil {
-		return fmt.Errorf("remote_file_archiver: download from %s: %w", cfg.ServiceID, err)
+	var body []byte
+	var refusal string
+	if isDataURI(source) {
+		body, refusal = decodeDataURI(source, cfg.MimeType)
+	} else {
+		var err error
+		if body, refusal, err = p.download(ctx.Context, cfg.ServiceID, source); err != nil {
+			return err
+		}
 	}
-	switch {
-	case resp.StatusCode >= 400 && resp.StatusCode < 500:
-		return p.refused(ctx, cfg, fmt.Sprintf("%s refused the download with status %d", cfg.ServiceID, resp.StatusCode))
-	case resp.StatusCode < 200 || resp.StatusCode >= 300:
-		return fmt.Errorf("remote_file_archiver: download from %s: status %d", cfg.ServiceID, resp.StatusCode)
-	case len(resp.Body) == 0:
-		return p.refused(ctx, cfg, fmt.Sprintf("%s sent an empty document", cfg.ServiceID))
+	if refusal != "" {
+		return p.refused(ctx, cfg, refusal)
 	}
 
-	meta, err := p.files.Save(ctx.Context, cfg.Filename, cfg.MimeType, bytes.NewReader(resp.Body), int64(len(resp.Body)))
+	meta, err := p.files.Save(ctx.Context, cfg.Filename, cfg.MimeType, bytes.NewReader(body), int64(len(body)))
 	if err != nil {
 		return fmt.Errorf("remote_file_archiver: store %s: %w", cfg.Filename, err)
 	}
@@ -139,6 +143,63 @@ func (p *RemoteFileArchiverPlugin) Execute(ctx pluginContext, configRaw json.Raw
 		"size":      meta.Size,
 	}
 	return nil
+}
+
+// download fetches source through the service's client. It returns the reason
+// the document cannot be stored when the service refuses it, or an error a
+// retry can fix.
+func (p *RemoteFileArchiverPlugin) download(ctx context.Context, serviceID, source string) ([]byte, string, error) {
+	resp, err := p.remote.CallRaw(ctx, serviceID, remote.Request{Method: http.MethodGet, Path: source})
+	if err != nil {
+		return nil, "", fmt.Errorf("remote_file_archiver: download from %s: %w", serviceID, err)
+	}
+	switch {
+	case resp.StatusCode >= 400 && resp.StatusCode < 500:
+		return nil, fmt.Sprintf("%s refused the download with status %d", serviceID, resp.StatusCode), nil
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		return nil, "", fmt.Errorf("remote_file_archiver: download from %s: status %d", serviceID, resp.StatusCode)
+	case len(resp.Body) == 0:
+		return nil, fmt.Sprintf("%s sent an empty document", serviceID), nil
+	}
+	return resp.Body, "", nil
+}
+
+// isDataURI reports whether source carries the document inline, as SLPA sends
+// its gate pass barcode, rather than linking to it.
+func isDataURI(source string) bool {
+	return len(source) >= len("data:") && strings.EqualFold(source[:len("data:")], "data:")
+}
+
+// decodeDataURI returns the document a base64 data: URI carries. It returns the
+// reason the document cannot be stored when the URI is malformed, empty, or of
+// a type other than mimeType, so a stored file never has another type than its
+// name says.
+func decodeDataURI(source, mimeType string) ([]byte, string) {
+	header, payload, ok := strings.Cut(source[len("data:"):], ",")
+	if !ok {
+		return nil, "the inline document is not a data: URI"
+	}
+	mediaType, params, _ := strings.Cut(header, ";")
+	if !strings.EqualFold(strings.TrimSpace(mediaType), mimeType) {
+		return nil, fmt.Sprintf("the inline document is %q, not %s", mediaType, mimeType)
+	}
+	base64Encoded := false
+	for _, param := range strings.Split(params, ";") {
+		if strings.EqualFold(strings.TrimSpace(param), "base64") {
+			base64Encoded = true
+		}
+	}
+	if !base64Encoded {
+		return nil, "the inline document is not base64-encoded"
+	}
+	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(payload))
+	if err != nil {
+		return nil, "the inline document is not valid base64"
+	}
+	if len(body) == 0 {
+		return nil, "the inline document is empty"
+	}
+	return body, ""
 }
 
 // refused records a document that cannot be stored and lets the step go on.
