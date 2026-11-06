@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -74,6 +75,51 @@ func TestRemoteFileArchiver_DownloadsAndStoresTheSource(t *testing.T) {
 		"mime_type": "application/pdf",
 		"size":      int64(len("%PDF-1.7 slip")),
 	}, ctx.Record.Data["payment_slip_file"])
+}
+
+const barcodeConfig = `{"service_id": "slpa", "source_input": "payment_slip_url", "mime_type": "image/png", "filename": "slpa-gate-pass-barcode.png"}`
+
+func TestRemoteFileArchiver_DecodesAnInlineSource(t *testing.T) {
+	png := []byte("\x89PNG\r\n\x1a\nbarcode")
+	for name, source := range map[string]string{
+		"as SLPA sends it":       "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
+		"in another letter case": "DATA:Image/PNG;BASE64," + base64.StdEncoding.EncodeToString(png),
+		"with a charset first":   "data:image/png;charset=utf-8;base64," + base64.StdEncoding.EncodeToString(png),
+	} {
+		t.Run(name, func(t *testing.T) {
+			fetcher, files := &fakeFetcher{}, &fakeSaver{}
+			ctx := archiveCtx(source)
+
+			require.NoError(t, NewRemoteFileArchiverPlugin(fetcher, files).Execute(ctx, json.RawMessage(barcodeConfig)))
+
+			assert.Zero(t, fetcher.calls, "an inline document is not downloaded")
+			assert.Equal(t, png, files.content)
+			assert.Equal(t, "slpa-gate-pass-barcode.png", files.filename)
+			assert.Equal(t, "image/png", files.mime)
+			assert.Equal(t, int64(len(png)), ctx.Record.Data["payment_slip_file"].(map[string]any)["size"])
+		})
+	}
+}
+
+func TestRemoteFileArchiver_RecordsAnInlineSourceItCannotStore(t *testing.T) {
+	for name, tc := range map[string]struct{ source, want string }{
+		"another type":    {"data:image/jpeg;base64,/9j/", `the inline document is "image/jpeg", not image/png`},
+		"no comma":        {"data:image/png;base64", "the inline document is not a data: URI"},
+		"not base64":      {"data:image/png,%89PNG", "the inline document is not base64-encoded"},
+		"invalid base64":  {"data:image/png;base64,***", "the inline document is not valid base64"},
+		"an empty source": {"data:image/png;base64,", "the inline document is empty"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fetcher, files := &fakeFetcher{}, &fakeSaver{}
+			ctx := archiveCtx(tc.source)
+
+			require.NoError(t, NewRemoteFileArchiverPlugin(fetcher, files).Execute(ctx, json.RawMessage(barcodeConfig)),
+				"a retry would decode the same URI")
+			assert.Zero(t, fetcher.calls)
+			assert.Zero(t, files.calls)
+			assert.Equal(t, map[string]any{"error": tc.want}, ctx.Record.Data["payment_slip_file"])
+		})
+	}
 }
 
 func TestRemoteFileArchiver_StoresNothingWithoutASource(t *testing.T) {
