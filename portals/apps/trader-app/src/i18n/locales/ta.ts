@@ -16,6 +16,14 @@ const ta: Locale = {
       unauthorized: {
         title: 'அணுகல் கட்டுப்படுத்தப்பட்டுள்ளது',
         message: 'உங்கள் கணக்கில் உள்நுழைந்துள்ளீர்கள், ஆனால் இந்தப் பக்கத்தை அணுக உங்களுக்கு அனுமதி இல்லை.',
+        adminTitle: 'வரவேற்கிறோம், நிர்வாகியே',
+        adminMessage:
+          'நீங்கள் நிர்வாகி கணக்கில் உள்நுழைந்துள்ளீர்கள். இந்தப் பக்கத்தில் காட்டுவதற்கு இன்னும் எதுவும் இல்லை.',
+        adminConsignmentIdPrompt: 'உள்நுழைய அனுப்புப்பொருள் அடையாளத்தை (Consignment ID) உள்ளிடவும்.',
+        adminCaseIdPrompt: 'உள்நுழைய வழக்கு அடையாளத்தை (Case ID) உள்ளிடவும்.',
+        adminConsignmentIdPlaceholder: 'அனுப்புப்பொருள் அடையாளம் (Consignment ID)',
+        adminCaseIdPlaceholder: 'வழக்கு அடையாளம் (Case ID)',
+        adminOpen: 'திற',
         signOut: 'வெளியேறு',
       },
     },
