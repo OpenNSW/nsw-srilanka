@@ -66,8 +66,8 @@ export function Footer() {
           )
         })}
       </div>
-      <div className="flex items-center gap-5 text-foreground lg:order-3 lg:shrink-0 lg:whitespace-nowrap">
-        <span>
+      <div className="flex items-center gap-5 text-foreground lg:order-3 lg:min-w-0 lg:whitespace-nowrap lg:text-base">
+        <span className="lg:shrink-0">
           <Trans
             i18nKey="common.poweredBy"
             components={[
@@ -76,7 +76,11 @@ export function Footer() {
             ]}
           />
         </span>
-        {version && <span>{version}</span>}
+        {version && (
+          <span title={version} className="lg:min-w-0 lg:truncate">
+            {version}
+          </span>
+        )}
       </div>
       {/* Last in DOM order so it's bottom-most when the footer stacks below lg; at lg+
           it moves between the two groups and takes the space they leave, truncating rather than
