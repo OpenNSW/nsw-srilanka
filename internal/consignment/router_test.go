@@ -2,6 +2,7 @@ package consignment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OpenNSW/core/taskflow/store"
+	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
 
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
@@ -85,7 +87,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(consignmentID, "IN_PROGRESS", companyID))
 
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(([]store.TaskRecord)(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID, Roles: []string{partyRoleTrader}}).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
 	req.SetPathValue("id", consignmentID)
@@ -106,6 +108,39 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	mockTaskStore.AssertExpectations(t)
 }
 
+func TestConsignmentRouter_HandleGetConsignmentByID_OmitsCHAOnlyTaskForTrader(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	companies := new(MockCompanyService)
+	svc := mustNewService(t, db, nil, nil, companies, nil, gormstore.New(db))
+	router := mustNewRouter(t, svc, nil, companies, nil)
+
+	id := uuid.NewString()
+	companies.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
+		Return(&company.Record{ID: "trader-co"}, nil).Once()
+	sqlMock.ExpectQuery(fetchConsignmentQuery).
+		WithArgs(fetchConsignmentArgs(id)...).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
+			AddRow(id, "IN_PROGRESS", "trader-co", "cha-co"))
+	// Only the trader-visible task matches the case and role query.
+	sqlMock.ExpectQuery(`SELECT .* FROM "taskflow_tasks" WHERE case_id = \$1 AND task_id IN \(SELECT "task_id" FROM "taskflow_task_roles" WHERE role IN \(\$2\) AND case_id = \$3\)`).
+		WithArgs(id, "trader", id).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "task_type", "state"}).
+			AddRow("trader-task", "FORM", "PENDING_USER"))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/consignments/"+id, nil)
+	req.SetPathValue("id", id)
+	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader", "CHA"))
+	w := httptest.NewRecorder()
+	router.HandleGetConsignmentByID(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var detail DetailDTO
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &detail))
+	require.Len(t, detail.WorkflowNodes, 1)
+	assert.Equal(t, "trader-task", detail.WorkflowNodes[0].ID)
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
 // A CHA whose company is the consignment's cha_company_id may read it, even though it is
 // not the trader company.
 func TestConsignmentRouter_HandleGetConsignmentByID_SameCompanyCHA(t *testing.T) {
@@ -124,7 +159,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_SameCompanyCHA(t *testing.T)
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(consignmentID, "IN_PROGRESS", "company-trader", chaCompanyID))
 
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID}).Return(([]store.TaskRecord)(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: consignmentID, Roles: []string{partyRoleCHA}}).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
 	req.SetPathValue("id", consignmentID)
@@ -274,7 +309,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(returnedID, "EXPORT", traderID, traderCompanyID, "IN_PROGRESS", time.Now(), time.Now()))
 
-	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: returnedID}).Return([]store.TaskRecord(nil))
+	mockTaskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: returnedID, Roles: []string{partyRoleTrader}}).Return([]store.TaskRecord(nil))
 
 	req, _ := http.NewRequest("POST", "/api/v1/consignments", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), traderID, "", "Trader"))
