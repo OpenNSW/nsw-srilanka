@@ -1,13 +1,25 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Theme } from '@radix-ui/themes'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ResolveAdminInterventionView } from '@/features/admin/components/resolve/ResolveAdminInterventionView'
 import type { AdminResolutionTarget } from '@/features/admin/components/engine/shared'
+import { resolveAdminIntervention } from '@/features/admin/service'
 
 // config.js sets this in the app; @/constants reads it as it loads.
 vi.hoisted(() => {
   window.__APP_CONFIG__ = { API_BASE_URL: 'http://api.test' }
 })
+
+vi.mock('@/features/admin/service', () => ({
+  getConsignmentForAdmin: vi.fn(),
+  getCaseForAdmin: vi.fn(),
+  getWorkflowEngineStatus: vi.fn(),
+  getTaskWorkflowEngineStatus: vi.fn(),
+  forceParkNode: vi.fn(),
+  resolveAdminIntervention: vi.fn(),
+}))
+
+const mockResolve = vi.mocked(resolveAdminIntervention)
 
 const target: AdminResolutionTarget = {
   workflowId: 'wf-1',
@@ -18,15 +30,61 @@ const target: AdminResolutionTarget = {
   onResolved: () => undefined,
 }
 
-function renderView(overrides: Partial<AdminResolutionTarget> = {}) {
+function renderView(overrides: Partial<AdminResolutionTarget> = {}, onBack: () => void = () => undefined) {
   render(
     <Theme>
-      <ResolveAdminInterventionView target={{ ...target, ...overrides }} onBack={() => undefined} />
+      <ResolveAdminInterventionView target={{ ...target, ...overrides }} onBack={onBack} />
     </Theme>,
   )
 }
 
+// Picks Abort, which sends no variables patch, gives a reason and confirms it.
+function abortWithReason(reason: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Abort' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Reason' }), { target: { value: reason } })
+  fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Yes, abort' }))
+}
+
 describe('ResolveAdminInterventionView', () => {
+  afterEach(() => {
+    vi.resetAllMocks()
+    vi.restoreAllMocks()
+  })
+
+  it('resolves the node, then refreshes its workflow and goes back', async () => {
+    mockResolve.mockResolvedValue(undefined)
+    const onResolved = vi.fn()
+    const onBack = vi.fn()
+    renderView({ onResolved }, onBack)
+
+    abortWithReason('cannot continue')
+
+    await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1))
+    expect(onResolved).toHaveBeenCalledTimes(1)
+    expect(mockResolve).toHaveBeenCalledWith(
+      'wf-1',
+      'step-1',
+      { action: 'ABORT', global_variables_patch: undefined, reason: 'cannot continue' },
+      'workflow',
+    )
+  })
+
+  it('stays on the screen with the error when resolving fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockResolve.mockRejectedValue(new Error('node re-parked'))
+    const onResolved = vi.fn()
+    const onBack = vi.fn()
+    renderView({ onResolved }, onBack)
+
+    abortWithReason('cannot continue')
+
+    expect(await screen.findByText('node re-parked')).toBeTruthy()
+    expect(onResolved).not.toHaveBeenCalled()
+    expect(onBack).not.toHaveBeenCalled()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Submit' }).disabled).toBe(false)
+  })
+
   it('shows what the chosen action does under the action buttons', () => {
     renderView()
     expect(screen.getByText('Select an action to see what it does.')).toBeTruthy()

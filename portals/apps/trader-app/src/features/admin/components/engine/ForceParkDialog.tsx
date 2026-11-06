@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Text, TextArea } from '@radix-ui/themes'
 import { ConfirmDialog } from '@portals/ui'
-import { forceParkNode } from '@/features/admin/service'
+import { useForcePark } from '@/features/admin/hooks'
 import type { AdminWorkflowKind } from '@/features/admin/types'
 import { IdentityField } from '@/features/admin/components/IdentityField'
 
@@ -41,23 +41,19 @@ export function ForceParkDialog({
 }) {
   const info = FORCE_PARK_INFO[workflowKind]
   const [reason, setReason] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const forcePark = useForcePark()
+  const error = forcePark.error ? forcePark.error.message || 'Failed to force-park node.' : null
 
   const submit = async () => {
-    setSubmitting(true)
-    setError(null)
     try {
-      await forceParkNode(workflowId, stepId, reason, workflowKind)
-      setReason('')
-      onOpenChange(false)
-      onParked()
+      await forcePark.mutate(workflowId, stepId, reason, workflowKind)
     } catch (err) {
       console.error('Failed to force-park node:', err)
-      setError(err instanceof Error ? err.message : 'Failed to force-park node.')
-    } finally {
-      setSubmitting(false)
+      return
     }
+    setReason('')
+    onOpenChange(false)
+    onParked()
   }
 
   return (
@@ -69,7 +65,7 @@ export function ForceParkDialog({
       confirmLabel="Force park"
       cancelLabel="Cancel"
       onConfirm={() => void submit()}
-      busy={submitting}
+      busy={forcePark.isPending}
       confirmDisabled={!reason.trim()}
       color="amber"
     >
