@@ -372,7 +372,7 @@ backend:
       port: 8080
       logLevel: info
       serviceURL: "https://dea-api.example.com"
-      maxRequestBytes: 33554432
+      maxRequestBytes: 1048576
       strictRequestBodies: true
       readHeaderTimeout: 5s
       readTimeout: 15s

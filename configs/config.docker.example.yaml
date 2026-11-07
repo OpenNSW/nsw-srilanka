@@ -42,8 +42,9 @@ server:
   logLevel: info
   # The browser-facing URL: the host port compose publishes (BACKEND_PORT).
   serviceURL: http://localhost:8080
-  # Maximum request body size, in bytes (32 MiB).
-  maxRequestBytes: 33554432
+  # Maximum request body size, in bytes (1 MiB). It bounds a task submission or
+  # draft, an agency flow start and an admin resolve or force-park.
+  maxRequestBytes: 1048576
   # Refuse (400) a request body field the endpoint does not declare, or anything
   # after the JSON value, on the endpoints that accept them when this is unset or
   # false: task submissions and drafts, and agency flow starts.

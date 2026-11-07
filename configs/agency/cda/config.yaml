@@ -14,7 +14,7 @@ server:
   port: 8083
   logLevel: debug
   serviceURL: http://localhost:8083
-  maxRequestBytes: 33554432
+  maxRequestBytes: 1048576
   strictRequestBodies: true
   readHeaderTimeout: 5s
   readTimeout: 15s
