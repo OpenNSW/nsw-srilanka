@@ -181,7 +181,7 @@ func TestHandler_HandleGetCase(t *testing.T) {
 	taskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: "C1"}).Return([]store.TaskRecord(nil))
 	cases := NewCaseService(db, taskStore, fakeFlows{}, emptyArtifactSet(t))
 	client, capture := nswaudit.NewWithCapture()
-	h := NewHandler(&Service{}, cases, client)
+	h := NewHandler(&Service{}, cases, client, testMaxRequestBytes)
 
 	rec := httptest.NewRecorder()
 	h.HandleGetCase(rec, adminCaseRequest(adminUser, "C1"))
@@ -204,7 +204,7 @@ func TestHandler_HandleGetCase(t *testing.T) {
 func TestHandler_HandleGetCase_Unauthenticated(t *testing.T) {
 	db, _ := newMockDB(t)
 	cases := NewCaseService(db, &MockTaskStore{}, fakeFlows{}, emptyArtifactSet(t))
-	h := NewHandler(&Service{}, cases, nil)
+	h := NewHandler(&Service{}, cases, nil, testMaxRequestBytes)
 
 	rec := httptest.NewRecorder()
 	h.HandleGetCase(rec, adminCaseRequest(nil, "C1"))
@@ -218,7 +218,7 @@ func TestHandler_HandleGetCase_UnknownCase(t *testing.T) {
 	sqlMock.ExpectQuery(caseRowQuery()).WithArgs("nope").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "state", "created_at", "updated_at"}))
 	cases := NewCaseService(db, &MockTaskStore{}, fakeFlows{}, emptyArtifactSet(t))
-	h := NewHandler(&Service{}, cases, nil)
+	h := NewHandler(&Service{}, cases, nil, testMaxRequestBytes)
 
 	rec := httptest.NewRecorder()
 	h.HandleGetCase(rec, adminCaseRequest(adminUser, "nope"))

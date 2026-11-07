@@ -2,9 +2,7 @@ package workflowadmin
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -22,7 +20,6 @@ const (
 	errWorkflowIDRequired = "workflow ID is required"
 	errWorkflowNotFound   = "workflow execution not found"
 	errStepIDRequired     = "step ID is required"
-	errInvalidRequestBody = "invalid request body"
 	errInvalidAdminAction = "action must be one of RETRY, COMPLETE, ABORT"
 	errReasonRequired     = "reason is required"
 	errCaseIDRequired     = "case ID is required"
@@ -37,16 +34,22 @@ var validAdminActions = map[string]workflow.AdminResolutionAction{
 	string(workflow.AdminActionAbort):    workflow.AdminActionAbort,
 }
 
+// maxForceParkRequestBytes caps a ForceParkRequest body, which carries only a reason.
+const maxForceParkRequestBytes = 1 << 14
+
 // Handler serves the admin routes on svc and cases, auditing every read and override.
 type Handler struct {
 	svc   *Service
 	cases *CaseService
 	audit nswaudit.Auditor
+	// maxRequestBytes caps a resolve request body, whose variables patch carries case data.
+	maxRequestBytes int64
 }
 
-// NewHandler creates a Handler. A nil auditor records nothing.
-func NewHandler(svc *Service, cases *CaseService, auditor nswaudit.Auditor) *Handler {
-	return &Handler{svc: svc, cases: cases, audit: auditor}
+// NewHandler creates a Handler. A nil auditor records nothing. maxRequestBytes caps a
+// resolve request body.
+func NewHandler(svc *Service, cases *CaseService, auditor nswaudit.Auditor, maxRequestBytes int64) *Handler {
+	return &Handler{svc: svc, cases: cases, audit: auditor, maxRequestBytes: maxRequestBytes}
 }
 
 // HandleGetCase handles GET /api/v1/admin/cases/{id}: any case, with no ownership
@@ -206,24 +209,10 @@ func (h *Handler) handleResolveAdminIntervention(
 	}
 
 	var req ResolveAdminInterventionRequest
-	// Unknown fields are rejected rather than ignored: a patch sent under a wrong or old key (e.g.
-	// the pre-rename "overrides") would otherwise be dropped while the action still succeeded.
-	// Decode only parses the first JSON value, so a second Decode is needed to reject a body
-	// with anything trailing it (e.g. two concatenated objects).
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		msg := errInvalidRequestBody
-		// encoding/json has no typed error for this, and naming the field is what tells the
-		// caller what to fix.
-		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
-			msg += ": unknown field " + field
-		}
-		httputil.Error(w, r, http.StatusBadRequest, msg)
-		return
-	}
-	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+	// DecodeJSON refuses unknown fields: a patch sent under a wrong key would otherwise be
+	// dropped while the action still succeeded.
+	if err := httputil.DecodeJSON(w, r, h.maxRequestBytes, &req); err != nil {
+		httputil.WriteDecodeError(w, r, err)
 		return
 	}
 	action, ok := validAdminActions[req.Action]
@@ -331,18 +320,8 @@ func (h *Handler) handleForcePark(
 	}
 
 	var req ForceParkRequest
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		msg := errInvalidRequestBody
-		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
-			msg += ": unknown field " + field
-		}
-		httputil.Error(w, r, http.StatusBadRequest, msg)
-		return
-	}
-	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+	if err := httputil.DecodeJSON(w, r, maxForceParkRequestBytes, &req); err != nil {
+		httputil.WriteDecodeError(w, r, err)
 		return
 	}
 	if strings.TrimSpace(req.Reason) == "" {

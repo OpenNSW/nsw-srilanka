@@ -75,9 +75,10 @@ paths:
                 $ref: '#/components/schemas/UploadResponse'
         '400':
           description: |
-            Malformed JSON, a missing `filename` or `mime_type`, a `size` that
-            is not positive, a file over the size limit, or a file name whose
-            extension `mime_type` doesn't have.
+            Malformed JSON, an unknown field, anything after the JSON value, a
+            missing `filename` or `mime_type`, a `size` that is not positive, a
+            file over the size limit, or a file name whose extension
+            `mime_type` doesn't have.
           content:
             application/json:
               schema:
@@ -90,6 +91,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Forbidden. The bearer token lacks scope `storage:write`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body is larger than 1 MiB.
           content:
             application/json:
               schema:
@@ -149,9 +156,10 @@ paths:
                 $ref: '#/components/schemas/UploadResponse'
         '400':
           description: |
-            Malformed JSON, a missing `filename` or `mime_type`, a `size` that
-            is not positive, a file over the size limit, or a file name whose
-            extension `mime_type` doesn't have.
+            Malformed JSON, an unknown field, anything after the JSON value, a
+            missing `filename` or `mime_type`, a `size` that is not positive, a
+            file over the size limit, or a file name whose extension
+            `mime_type` doesn't have.
           content:
             application/json:
               schema:
@@ -164,6 +172,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Forbidden. The bearer token lacks scope `storage:internalwrite`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body is larger than 1 MiB.
           content:
             application/json:
               schema:
@@ -287,6 +301,7 @@ components:
 
     UploadRequest:
       type: object
+      additionalProperties: false
       required:
         - filename
         - mime_type

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -109,9 +108,8 @@ func (h *FileHandler) serveUpload(w http.ResponseWriter, r *http.Request, up Upl
 		MimeType string `json:"mime_type"`
 		Size     int64  `json:"size"`
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadRequestBytes)
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.Error(w, r, http.StatusBadRequest, "invalid request body")
+	if err := httputil.DecodeJSON(w, r, maxUploadRequestBytes, &req); err != nil {
+		httputil.WriteDecodeError(w, r, err)
 		return
 	}
 	if req.Filename == "" {

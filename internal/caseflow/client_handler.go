@@ -21,7 +21,6 @@ import (
 const ScopeFlowStart = "workflow:inject"
 
 const (
-	errInvalidBody     = "invalid request body"
 	errWorkflowIDReq   = "workflowId is required"
 	errFlowIDReq       = "flowId is required"
 	errFlowNotFound    = "flow not found"
@@ -54,16 +53,18 @@ type ClientHandler struct {
 	flows   *Service
 	list    ClientFlows
 	clients map[string]string // OAuth2 client id -> catalog client name
+	// maxRequestBytes caps a start request body, whose input carries the caller's case data.
+	maxRequestBytes int64
 }
 
 // NewClientHandler creates a ClientHandler. clients is the catalog's Clients map (name ->
-// client id).
-func NewClientHandler(flows *Service, list ClientFlows, clients map[string]string) *ClientHandler {
+// client id). maxRequestBytes caps a start request body.
+func NewClientHandler(flows *Service, list ClientFlows, clients map[string]string, maxRequestBytes int64) *ClientHandler {
 	byID := make(map[string]string, len(clients))
 	for name, id := range clients {
 		byID[id] = name
 	}
-	return &ClientHandler{flows: flows, list: list, clients: byID}
+	return &ClientHandler{flows: flows, list: list, clients: byID, maxRequestBytes: maxRequestBytes}
 }
 
 // HandleStart handles POST /api/v1/internal/cases/{caseId}/flows. Response: Flow.
@@ -74,8 +75,8 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	caseID := r.PathValue("caseId")
 	var req ClientStartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidBody)
+	if err := httputil.DecodeJSON(w, r, h.maxRequestBytes, &req); err != nil {
+		httputil.WriteDecodeError(w, r, err)
 		return
 	}
 	switch {
@@ -95,7 +96,7 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 
 	vars, err := clientVars(caseID, req)
 	if err != nil {
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidBody)
+		httputil.Error(w, r, http.StatusBadRequest, httputil.MsgInvalidBody)
 		return
 	}
 	// The owner is recorded with the flow, so a flow that is recorded is owned, and a
