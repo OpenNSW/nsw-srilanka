@@ -342,6 +342,32 @@ func TestServerConfigValidate_NonPositiveLimits(t *testing.T) {
 	}
 }
 
+// A limit above the recommended one still validates: the server warns about it
+// instead of refusing to start.
+func TestServerConfig_RequestLimitAboveRecommended(t *testing.T) {
+	tests := []struct {
+		name  string
+		limit int64
+		want  bool
+	}{
+		{"below", RecommendedMaxRequestBytes - 1, false},
+		{"at", RecommendedMaxRequestBytes, false},
+		{"above", RecommendedMaxRequestBytes + 1, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := validConfig().Server
+			s.MaxRequestBytes = tc.limit
+			if got := s.RequestLimitAboveRecommended(); got != tc.want {
+				t.Errorf("RequestLimitAboveRecommended() = %v, want %v", got, tc.want)
+			}
+			if err := s.Validate(); err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+		})
+	}
+}
+
 // --- Load ---
 
 func TestLoad_Base(t *testing.T) {

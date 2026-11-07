@@ -43,8 +43,9 @@ server:
   logLevel: debug
   # This API's own base URL, as its callers reach it.
   serviceURL: http://localhost:8080
-  # Maximum request body size, in bytes (32 MiB).
-  maxRequestBytes: 33554432
+  # Maximum request body size, in bytes (1 MiB). It bounds a task submission or
+  # draft, an agency flow start's input and an admin resolve's patch.
+  maxRequestBytes: 1048576
   # Durations are Go duration strings (5s, 1m30s).
   readHeaderTimeout: 5s
   readTimeout: 15s
