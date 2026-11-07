@@ -106,8 +106,9 @@ than another (a supervisor, say), grant the two IdP roles different scopes on th
 API. The backend still checks the token's catalog roles on each call.
 
 The user menu lists the roles in the token's `roles` claim (`IDP_ROLE_CLAIM_NAME` names
-another claim), each by its own name, or by the title and description `IDP_ROLE_LABELS`
-gives it. The list is for display only; the screens and buttons follow the scopes.
+another claim) that `IDP_ROLE_LABELS` names, each by the title and description it gives.
+The IdP may also put the user's roles for other applications in the claim, and the menu
+leaves those out. The list is for display only; the screens and buttons follow the scopes.
 
 ## Flow
 
