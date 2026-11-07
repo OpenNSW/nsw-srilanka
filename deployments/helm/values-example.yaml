@@ -170,6 +170,10 @@ backend:
       serviceURL: "https://nsw-api.example.com"
       # Request-body size cap and server timeouts (Slowloris/DoS hardening).
       maxRequestBytes: 33554432   # 32 MiB
+      # Refuse (400) a request body field the endpoint does not declare, or
+      # anything after the JSON value, on the endpoints that accept them when this
+      # is unset or false: agency flow starts.
+      strictRequestBodies: true
       readHeaderTimeout: 5s
       readTimeout: 15s
       writeTimeout: 30s

@@ -19,13 +19,16 @@ var clientFlows = ClientFlows{Enabled: true, OUHandle: "cda", Workflows: []Clien
 // role its task reads.
 var noticeOwners = []string{"C1/reviewer/cda", "C1/officer/cda"}
 
+// testMaxRequestBytes is the start body limit the tests' handlers are built with.
+const testMaxRequestBytes = 1 << 20
+
 // catalogClients is the catalog's Clients map: tnsw calls as NSW_TO_CDA.
 var catalogClients = map[string]string{"tnsw": "NSW_TO_CDA", "fcau": "FCAU_TO_NSW"}
 
 func newClientHandler(t *testing.T, list ClientFlows) (*ClientHandler, *memRepo, *startCapture) {
 	t.Helper()
 	repo, wm := newMemRepo(), &startCapture{}
-	return NewClientHandler(newService(t, repo, wm), list, catalogClients), repo, wm
+	return NewClientHandler(newService(t, repo, wm), list, catalogClients, testMaxRequestBytes, false), repo, wm
 }
 
 // post sends body to the route for case C1, as p (unauthenticated when nil).
@@ -197,6 +200,7 @@ func TestClientHandlerBadRequests(t *testing.T) {
 		"no flowId":       `{"workflowId":"notice"}`,
 		"slash in flowId": `{"workflowId":"notice","flowId":"a/b"}`,
 		"bad attributes":  `{"workflowId":"notice","flowId":"task-1","attributes":["Adam PVT LTD"]}`,
+		"empty":           ``,
 	} {
 		t.Run(name, func(t *testing.T) {
 			h, _, wm := newClientHandler(t, clientFlows)
@@ -210,10 +214,62 @@ func TestClientHandlerBadRequests(t *testing.T) {
 	}
 }
 
+// A start request with a field it does not declare, or anything after the JSON value, starts
+// the flow unless the handler reads bodies strictly; then it is a 400 and starts nothing.
+func TestClientHandlerStrictBodies(t *testing.T) {
+	for name, body := range map[string]string{
+		"unknown field": `{"workflowId":"notice","flowId":"task-1","template":"notice"}`,
+		"trailing data": `{"workflowId":"notice","flowId":"task-1"}{"workflowId":"notice"}`,
+	} {
+		t.Run(name+"/lenient", func(t *testing.T) {
+			h, _, wm := newClientHandler(t, clientFlows)
+			if rec := post(h, tnsw, body); rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+			}
+			if len(wm.starts) != 1 {
+				t.Errorf("starts = %v, want one", wm.starts)
+			}
+		})
+		t.Run(name+"/strict", func(t *testing.T) {
+			repo, wm := newMemRepo(), &startCapture{}
+			h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, testMaxRequestBytes, true)
+			if rec := post(h, tnsw, body); rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400", rec.Code)
+			}
+			if len(wm.starts) != 0 {
+				t.Errorf("starts = %v, want none", wm.starts)
+			}
+		})
+	}
+}
+
+// A start body over the handler's limit is refused before any flow starts; one at the limit
+// starts it.
+func TestClientHandlerLimitsBody(t *testing.T) {
+	t.Run("over the limit", func(t *testing.T) {
+		repo, wm := newMemRepo(), &startCapture{}
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, int64(len(startBody))-1, false)
+		rec := post(h, tnsw, startBody)
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("status = %d, want 413", rec.Code)
+		}
+		if len(wm.starts) != 0 {
+			t.Errorf("starts = %v, want none", wm.starts)
+		}
+	})
+	t.Run("at the limit", func(t *testing.T) {
+		repo, wm := newMemRepo(), &startCapture{}
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, int64(len(startBody)), false)
+		if rec := post(h, tnsw, startBody); rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+		}
+	})
+}
+
 // A flow ID already started on another case is a conflict, and records no owner.
 func TestClientHandlerConflict(t *testing.T) {
 	repo, wm := newMemRepo(Flow{WorkflowID: "task-1", CaseID: "C2", TemplateID: "notice", Status: StatusStarted, ManifestVersion: 2}), &startCapture{}
-	h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
+	h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, testMaxRequestBytes, false)
 	if rec := post(h, tnsw, startBody); rec.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409", rec.Code)
 	}
@@ -227,7 +283,7 @@ func TestClientHandlerConflict(t *testing.T) {
 func TestClientHandlerFailures(t *testing.T) {
 	t.Run("start fails", func(t *testing.T) {
 		repo, wm := newMemRepo(), &startCapture{err: errors.New("temporal down")}
-		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, testMaxRequestBytes, false)
 		if rec := post(h, tnsw, startBody); rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d, want 500", rec.Code)
 		}
@@ -242,7 +298,7 @@ func TestClientHandlerFailures(t *testing.T) {
 	t.Run("record fails", func(t *testing.T) {
 		repo, wm := newMemRepo(), &startCapture{}
 		repo.recordErr = errors.New("db down")
-		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, testMaxRequestBytes, false)
 		if rec := post(h, tnsw, startBody); rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d, want 500", rec.Code)
 		}

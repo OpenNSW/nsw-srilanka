@@ -2,10 +2,8 @@ package consignment
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -29,9 +27,7 @@ const (
 	errTraderRoleRequired    = "creating a consignment requires the trader role"
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
-	errInvalidRequestBody    = "invalid request body"
 	errFlowNotAllowed        = "templateId is not a flow that can be started on this consignment"
-	errRequestBodyTooLarge   = "request body too large"
 )
 
 // maxStartFlowRequestBytes caps a StartFlowRequest body, which only names a template.
@@ -290,25 +286,8 @@ func (c *Router) HandleStartConsignmentFlow(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req StartFlowRequest
-	r.Body = http.MaxBytesReader(w, r.Body, maxStartFlowRequestBytes)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	err := dec.Decode(&req)
-	if err == nil {
-		// One JSON value only: anything after it is rejected too.
-		if err = dec.Decode(new(struct{})); errors.Is(err, io.EOF) {
-			err = nil
-		} else if err == nil {
-			err = errors.New("unexpected data after JSON value")
-		}
-	}
-	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			httputil.Error(w, r, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge)
-			return
-		}
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+	if err := httputil.DecodeJSON(w, r, maxStartFlowRequestBytes, &req); err != nil {
+		httputil.WriteDecodeError(w, r, err)
 		return
 	}
 

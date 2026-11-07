@@ -45,6 +45,10 @@ server:
   serviceURL: http://localhost:8080
   # Maximum request body size, in bytes (32 MiB).
   maxRequestBytes: 33554432
+  # Refuse (400) a request body field the endpoint does not declare, or anything
+  # after the JSON value, on the endpoints that accept them when this is unset or
+  # false: agency flow starts.
+  strictRequestBodies: true
   # Durations are Go duration strings (5s, 1m30s).
   readHeaderTimeout: 5s
   readTimeout: 15s

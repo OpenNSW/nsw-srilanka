@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/OpenNSW/core/httputil"
 	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	workflow "github.com/OpenNSW/core/workflow"
@@ -257,7 +258,7 @@ func TestRouter_HandleForcePark_MapsResults(t *testing.T) {
 			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
 				svc, mockWM, calls := forceParkFixture(t, route, nil)
 				client, _ := nswaudit.NewWithCapture()
-				r := NewHandler(svc, nil, client)
+				r := NewHandler(svc, nil, client, testMaxRequestBytes)
 				mockWM.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(tt.instance, tt.statusErr)
 				expectPark(mockWM, calls, tt.parkErr)
 
@@ -271,6 +272,36 @@ func TestRouter_HandleForcePark_MapsResults(t *testing.T) {
 }
 
 // Requests the handler itself rejects never reach the service, so nothing is registered.
+// A body over the handler's limit is refused before it reaches the service, so nothing is
+// registered; one at the limit is read.
+func TestRouter_HandleForcePark_LimitsBody(t *testing.T) {
+	// A blank reason, which the handler refuses after reading the body, so reaching that
+	// refusal shows the body was read in full.
+	body := `{"reason":"   "}`
+	for _, route := range forceParkRoutes {
+		t.Run(route.name+"/over the limit", func(t *testing.T) {
+			client, _ := nswaudit.NewWithCapture()
+			r := NewHandler(newTestService(nil), nil, client, int64(len(body))-1)
+
+			w := httptest.NewRecorder()
+			route.handler(r)(w, newForceParkRequest(body))
+
+			assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+			assert.Contains(t, w.Body.String(), httputil.MsgBodyTooLarge)
+		})
+		t.Run(route.name+"/at the limit", func(t *testing.T) {
+			client, _ := nswaudit.NewWithCapture()
+			r := NewHandler(newTestService(nil), nil, client, int64(len(body)))
+
+			w := httptest.NewRecorder()
+			route.handler(r)(w, newForceParkRequest(body))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), errReasonRequired)
+		})
+	}
+}
+
 func TestRouter_HandleForcePark_RejectsInvalidRequest(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -280,8 +311,8 @@ func TestRouter_HandleForcePark_RejectsInvalidRequest(t *testing.T) {
 	}{
 		{"a missing reason", `{}`, resolveTestStepID, errReasonRequired},
 		{"a blank reason", `{"reason":"  "}`, resolveTestStepID, errReasonRequired},
-		{"a body that is not JSON", `not json`, resolveTestStepID, errInvalidRequestBody},
-		{"anything after the JSON value", `{"reason":"a"}{"reason":"b"}`, resolveTestStepID, errInvalidRequestBody},
+		{"a body that is not JSON", `not json`, resolveTestStepID, httputil.MsgInvalidBody},
+		{"anything after the JSON value", `{"reason":"a"}{"reason":"b"}`, resolveTestStepID, httputil.MsgInvalidBody},
 		{"an unknown field", `{"reason":"a","action":"COMPLETE"}`, resolveTestStepID, `unknown field \"action\"`},
 		{"a missing step", `{"reason":"a"}`, "", errStepIDRequired},
 	}
@@ -289,7 +320,7 @@ func TestRouter_HandleForcePark_RejectsInvalidRequest(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
 				client, _ := nswaudit.NewWithCapture()
-				r := NewHandler(newTestService(nil), nil, client)
+				r := NewHandler(newTestService(nil), nil, client, testMaxRequestBytes)
 				req := newForceParkRequest(tt.body)
 				req.SetPathValue("stepId", tt.stepID)
 
