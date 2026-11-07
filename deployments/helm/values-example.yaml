@@ -172,7 +172,7 @@ backend:
       maxRequestBytes: 33554432   # 32 MiB
       # Refuse (400) a request body field the endpoint does not declare, or
       # anything after the JSON value, on the endpoints that accept them when this
-      # is unset or false: agency flow starts.
+      # is unset or false: task submissions and drafts, and agency flow starts.
       strictRequestBodies: true
       readHeaderTimeout: 5s
       readTimeout: 15s

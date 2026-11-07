@@ -94,7 +94,13 @@ paths:
       description: |
         Submits a command (and optional payload) to advance the task's
         underlying workflow. The request body must contain exactly one JSON
-        value; trailing data after it is rejected.
+        value; anything after the value is rejected. With the server's
+        `server.strictRequestBodies`, a field besides `command` and `payload`
+        is rejected too; without it, it is ignored.
+
+        The task, its active step and whether the caller may act on that
+        step are checked before the body is read, so a request refused for
+        one of them (401, 403, 404 or 409) is answered without reading it.
 
         `{stepId}` is the step being completed: the `step_id` the task's zone
         view reported. Only that step is completed; a submission for a step
@@ -127,8 +133,9 @@ paths:
             than assume its state.
         '400':
           description: |
-            Missing task or step ID, malformed JSON, unexpected trailing data,
-            a missing/empty `command`, a `payload` that sets the reserved
+            Missing task or step ID, malformed JSON, an unknown field (with
+            `server.strictRequestBodies`), unexpected trailing data, a
+            missing/empty `command`, a `payload` that sets the reserved
             `__command` key, or a declared file field that does not have the
             declared shape (such as a list where one file is declared) or
             holds a value that is not a file reference.
@@ -201,7 +208,11 @@ paths:
         the server authorizes it as the command the template names for
         drafts, so the body carries no `command`.
 
-        Declared file fields follow the same rule as a submission.
+        Declared file fields follow the same rule as a submission, and so
+        does the order: the task, its active step and whether the caller may
+        act on that step are checked before the body is read, so a request
+        refused for one of them (401, 403, 404 or 409) is answered without
+        reading it.
 
         Requires scope `task:write`.
       operationId: saveTaskStepDraft
@@ -219,8 +230,9 @@ paths:
           description: No Content. The draft is stored.
         '400':
           description: |
-            Missing task or step ID, malformed JSON, unexpected trailing data,
-            a `command` in the body, a `payload` that sets the reserved
+            Missing task or step ID, malformed JSON, an unknown field (with
+            `server.strictRequestBodies`), unexpected trailing data, a
+            `command` in the body, a `payload` that sets the reserved
             `__command` key, a declared file field that does not have the
             declared shape or holds a value that is not a file reference, or
             a step that does not accept drafts.
@@ -297,6 +309,11 @@ paths:
         submitted, such as one an upload returned. A reference the dispatch
         carried can only be opened, so it can't be sent back.
 
+        The task the token names, its active step and whether the caller may
+        act on that step are checked before the body is read, so a callback
+        refused for one of them (401, 403, 404 or 409) is answered without
+        reading it.
+
         Requires scope `task:write`.
       operationId: completeTaskStepByCallbackToken
       parameters:
@@ -317,7 +334,8 @@ paths:
           description: No Content. The workflow accepted the step.
         '400':
           description: |
-            A malformed token, malformed JSON, unexpected trailing data, a
+            A malformed token, malformed JSON, an unknown field (with
+            `server.strictRequestBodies`), unexpected trailing data, a
             missing/empty `command`, a `payload` that sets the reserved
             `__command` key, or a declared file field that does not have the
             declared shape or holds a value that is not a file reference.
