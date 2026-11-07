@@ -495,10 +495,11 @@ These values must agree, or officers and TNSW get `401`:
 | `backend.config.authn.audience`                         | the API identifier (Step 2b) |
 | `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier          |
 
-`IDP_ROLE_LABELS` is optional. The portal's user menu lists the roles in the officer's token
-(the `roles` claim, or the claim `IDP_ROLE_CLAIM_NAME` names), and this sets the title and
-description it shows for each. Key it by the role name exactly as the token carries it. A role
-with no entry shows its own name.
+`IDP_ROLE_LABELS` names the roles the portal's user menu lists, and the title and description
+it shows for each. The menu reads the roles from the officer's token (the `roles` claim, or the
+claim `IDP_ROLE_CLAIM_NAME` names). Key each entry by the role name exactly as the token carries
+it. The IdP may also put the officer's roles for other applications in the claim, so the menu
+leaves out every role with no entry, and without `IDP_ROLE_LABELS` it lists no roles.
 
 And this, or officers are signed in but their calls get `403`:
 
