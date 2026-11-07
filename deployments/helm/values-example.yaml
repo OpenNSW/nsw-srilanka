@@ -717,9 +717,10 @@ frontend:
     # The ID-token claim that holds the user's roles (an array of role names), which the user menu
     # lists. Needs the "role" scope above. Defaults to "roles".
     IDP_ROLE_CLAIM_NAME: "roles"
-    # Optional. How the user menu shows each role, keyed by the role name in the token: a title and
-    # an optional description. A role left out shows its own name. The chart renders this map as a
-    # JSON string, which the portal parses; the labels are not translated.
+    # The roles the user menu lists, keyed by the role name in the token, each with a title and an
+    # optional description. The IdP may also put the user's roles for other applications in the
+    # claim; the menu leaves out every role not named here. The chart renders this map as a JSON
+    # string, which the portal parses; the labels are not translated.
     IDP_ROLE_LABELS:
       "Trader":
         title: "Trader"
