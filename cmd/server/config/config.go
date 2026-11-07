@@ -113,6 +113,17 @@ func (a ArtifactsConfig) Validate() error {
 	return nil
 }
 
+// RecommendedMaxRequestBytes is the largest server.maxRequestBytes the server starts with
+// without a warning. A task submission is decoded and copied in memory at several times its
+// size, so the limit bounds what one request can cost.
+const RecommendedMaxRequestBytes = 1 << 20
+
+// RequestLimitAboveRecommended reports whether MaxRequestBytes is above
+// RecommendedMaxRequestBytes.
+func (s ServerConfig) RequestLimitAboveRecommended() bool {
+	return s.MaxRequestBytes > RecommendedMaxRequestBytes
+}
+
 // Validate checks that the server configuration is valid.
 func (s ServerConfig) Validate() error {
 	if s.Port < 1 || s.Port > 65535 {

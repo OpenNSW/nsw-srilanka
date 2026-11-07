@@ -15,7 +15,7 @@ server:
   # The browser-facing URL: the host port compose publishes. TNSW's
   # config.docker.yaml services entry "efc" also calls 8085.
   serviceURL: http://localhost:8085
-  maxRequestBytes: 33554432
+  maxRequestBytes: 1048576
   readHeaderTimeout: 5s
   readTimeout: 15s
   writeTimeout: 30s
