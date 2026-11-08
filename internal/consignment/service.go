@@ -164,7 +164,8 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 	}
 
 	// Its creator is its trader.
-	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment, s.userFlows.Startable([]string{partyRoleTrader}))
+	owned := []string{partyRoleTrader}
+	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment, s.userFlows.Startable(owned), owned)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +191,7 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 	if err != nil {
 		return nil, err
 	}
-	return s.buildConsignmentResponse(ctx, consignment, s.userFlows.Startable(owned))
+	return s.buildConsignmentResponse(ctx, consignment, s.userFlows.Startable(owned), owned)
 }
 
 // authorize is GetConsignmentByID's access check (see there): the caller's company must be
@@ -273,7 +274,7 @@ func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID 
 		return nil, err
 	}
 	// The admin view starts no flows, but lists every one a trader or CHA could.
-	detail, err := s.buildConsignmentResponse(ctx, consignment, s.userFlows.Startable([]string{partyRoleTrader, partyRoleCHA}))
+	detail, err := s.buildConsignmentResponse(ctx, consignment, s.userFlows.Startable([]string{partyRoleTrader, partyRoleCHA}), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -363,8 +364,8 @@ func (s *Service) fetchConsignmentRecord(ctx context.Context, consignmentID stri
 
 // buildConsignmentResponse builds consignment's detail. startable are the flows the reader
 // may start on it (DetailDTO.StartableFlows).
-func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Consignment, startable []caseflow.UserFlow) (*DetailDTO, error) {
-	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment, startable)
+func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Consignment, startable []caseflow.UserFlow, readRoles []string) (*DetailDTO, error) {
+	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment, startable, readRoles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build consignment response DTO: %w", err)
 	}
@@ -492,8 +493,9 @@ func (s *Service) buildConsignmentDetailDTO(
 	ctx context.Context,
 	consignment *Consignment,
 	startable []caseflow.UserFlow,
+	readRoles []string,
 ) (*DetailDTO, error) {
-	nodeResponseDTOs, err := s.buildNodeDTOsFromTaskRecords(ctx, consignment.ID)
+	nodeResponseDTOs, err := s.buildNodeDTOsFromTaskRecords(ctx, consignment.ID, readRoles)
 	if err != nil {
 		return nil, err
 	}
@@ -523,13 +525,13 @@ func (s *Service) buildConsignmentDetailDTO(
 	}, nil
 }
 
-// buildNodeDTOsFromTaskRecords queries the consignment's tasks via the TaskStore by case ID and converts each
-// non-SYSTEM record into a WorkflowNodeResponseDTO for the consignment detail response.
-func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentID string) ([]WorkflowNodeResponseDTO, error) {
+// buildNodeDTOsFromTaskRecords lists non-system tasks for the case and read roles.
+// An empty role filter is reserved for the admin view.
+func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentID string, readRoles []string) ([]WorkflowNodeResponseDTO, error) {
 	if s.taskStore == nil {
 		return nil, fmt.Errorf("task store not initialized")
 	}
-	tasks, err := s.taskStore.GetTasks(ctx, store.TaskFilter{CaseID: consignmentID})
+	tasks, err := s.taskStore.GetTasks(ctx, store.TaskFilter{CaseID: consignmentID, Roles: readRoles})
 	if err != nil {
 		return nil, fmt.Errorf("list tasks of consignment %s: %w", consignmentID, err)
 	}
