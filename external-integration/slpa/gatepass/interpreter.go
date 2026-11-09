@@ -2,9 +2,9 @@
 // Management System prints, one per consolidated container.
 //
 // The pass is what the haulier presents at the terminal gate, so it carries the
-// truck and driver the container leaves on and the seal it leaves under. None of
-// that is known to SLPA or recorded anywhere earlier in the flow, so the trader
-// supplies it per container at this step.
+// truck, trailer and driver the container leaves on, the agent's pass and the
+// seal it leaves under. None of that is known to SLPA or recorded anywhere
+// earlier in the flow, so the trader supplies it per container at this step.
 package gatepass
 
 import (
@@ -21,7 +21,9 @@ import (
 type Request struct {
 	ContainerNo string `json:"container_no"`
 	TruckNo     string `json:"truck_no"`
+	TrailerNo   string `json:"trailer_no"`
 	DriverName  string `json:"driver_name"`
+	AgentPassNo string `json:"agent_pass_no"`
 	SealNo      string `json:"seal_no"`
 }
 
@@ -55,7 +57,9 @@ func (i *Interpreter) BuildRequest(inputs map[string]any) remote.Body {
 	return remote.JSONBody{V: Request{
 		ContainerNo: fields.String(inputs, "so_container_no"),
 		TruckNo:     fields.String(form, "truck_no"),
+		TrailerNo:   fields.String(form, "trailer_no"),
 		DriverName:  fields.String(form, "driver_name"),
+		AgentPassNo: fields.String(form, "agent_pass_no"),
 		SealNo:      fields.String(form, "seal_no"),
 	}}
 }
@@ -79,8 +83,8 @@ func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[s
 	// container_no in the answer is the service-order container the pass was
 	// issued against — the CMS echoes what it was sent, not the real box.
 	out := cms.Capture(body,
-		"gate_pass_id", "gate_pass_no", "container_no", "truck_no", "driver_name",
-		"seal_no", "barcode", "status", "issued_at", "gate_pass_url", "message",
+		"gate_pass_id", "gate_pass_no", "container_no", "truck_no", "trailer_no",
+		"driver_name", "agent_pass_no", "seal_no", "barcode", "status", "issued_at", "gate_pass_url", "message",
 	)
 
 	issued := callErr == nil && !cms.HasErrors(body) && cms.String(body, "gate_pass_no") != ""

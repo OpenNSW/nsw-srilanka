@@ -31,18 +31,35 @@ func TestBuildRequest_CarriesTheHaulageDetails(t *testing.T) {
 	req := sent(t, map[string]any{
 		"so_container_no": "MSCU8492019",
 		"payload": map[string]any{
-			"truck_no":    " LM-4821 ",
-			"driver_name": "K. Perera",
-			"seal_no":     "SL-93820",
+			"truck_no":      " LM-4821 ",
+			"trailer_no":    "TR-0193",
+			"driver_name":   "K. Perera",
+			"agent_pass_no": " AP-55120 ",
+			"seal_no":       "SL-93820",
 		},
 	})
 
 	assert.Equal(t, Request{
 		ContainerNo: "MSCU8492019",
 		TruckNo:     "LM-4821",
+		TrailerNo:   "TR-0193",
 		DriverName:  "K. Perera",
+		AgentPassNo: "AP-55120",
 		SealNo:      "SL-93820",
 	}, req)
+}
+
+// The CMS reads every field of the body, so one the form left out is sent
+// empty rather than dropped.
+func TestBuildRequest_SendsEveryFieldTheCMSReads(t *testing.T) {
+	raw, _, err := NewInterpreter().BuildRequest(map[string]any{
+		"so_container_no": "MSCU8492019",
+		"payload":         map[string]any{"truck_no": "LM-4821"},
+	}).Encode()
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"container_no": "MSCU8492019", "truck_no": "LM-4821", "trailer_no": "",
+	  "driver_name": "", "agent_pass_no": "", "seal_no": ""}`, string(raw))
 }
 
 // The container comes from what SLPA consolidated, not from the form: a pass for
@@ -75,7 +92,8 @@ func TestBuildRequest_NeverSendsTheRealContainer(t *testing.T) {
 func TestInterpret_CapturesWhatTheGateScans(t *testing.T) {
 	const raw = `{"openapi": "3.0.3", "status": 1, "data": {
 	  "gate_pass_id": 7, "gate_pass_no": "GP-2026-000123", "container_no": "CON-FCL-001",
-	  "truck_no": "LM-4821", "driver_name": "K. Perera", "seal_no": "SL-93820",
+	  "truck_no": "LM-4821", "trailer_no": "TR-0193", "driver_name": "K. Perera",
+	  "agent_pass_no": "AP-55120", "seal_no": "SL-93820",
 	  "barcode": "GP2026000123CONFCL001", "status": "ISSUED",
 	  "issued_at": "2026-08-28T10:25:03.803Z"}}`
 
@@ -83,6 +101,8 @@ func TestInterpret_CapturesWhatTheGateScans(t *testing.T) {
 
 	require.True(t, issued)
 	assert.Equal(t, "GP-2026-000123", out["gate_pass_no"])
+	assert.Equal(t, "TR-0193", out["trailer_no"])
+	assert.Equal(t, "AP-55120", out["agent_pass_no"])
 	assert.Equal(t, "GP2026000123CONFCL001", out["barcode"])
 	assert.Equal(t, "2026-08-28T10:25:03.803Z", out["issued_at"])
 	assert.NotContains(t, out, "error")
