@@ -962,8 +962,9 @@ components:
             The node's input mapping, present only while it is parked (and left
             on a node an admin aborted). Each key is a workflow variable the
             node reads, dotted-path style, with a trailing `?` if it is
-            optional; each value is the task input it fills. A `RETRY` that
-            follows an `INPUT_MAPPING` park needs the missing keys set.
+            optional (`?!` reads the same here); each value is the task input
+            it fills. A `RETRY` that follows an `INPUT_MAPPING` park needs the
+            missing keys set.
         output_mapping:
           type: object
           additionalProperties:
@@ -971,9 +972,12 @@ components:
           description: |
             The node's output mapping, present only while it is parked (and
             left on a node an admin aborted). Each key is a field of the task
-            result, with a trailing `?` if it is optional; each value is the
-            workflow variable it writes. A `COMPLETE` stands in for the node's
-            output, so its `global_variables_patch` should set these variables.
+            result, and each value is the workflow variable it writes. A
+            trailing `?` marks the field optional: when it is absent, the
+            variable keeps its value. A trailing `?!` also marks it optional,
+            but when it is absent, the variable is removed. A `COMPLETE` stands
+            in for the node's output, so its `global_variables_patch` should
+            set these variables.
         cached_task_result:
           type: object
           additionalProperties: true

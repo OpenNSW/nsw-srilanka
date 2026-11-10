@@ -34,10 +34,11 @@ export interface EngineNode {
   // Set together with last_error, only while the node is AWAITING_ADMIN.
   park_category?: ParkCategory
   // The node's mappings, present only while it is parked. input_mapping is keyed by the workflow
-  // variable it reads (a trailing "?" marks it optional) with the task input it fills as the
-  // value; output_mapping is keyed by the task result field (same "?" rule) with the workflow
-  // variable it writes as the value. So a RETRY fixes input_mapping keys, and a COMPLETE patch
-  // supplies output_mapping values.
+  // variable it reads (a trailing "?" or "?!" marks it optional) with the task input it fills as
+  // the value; output_mapping is keyed by the task result field with the workflow variable it
+  // writes as the value. There a trailing "?" marks the field optional, and the variable keeps its
+  // value when the field is absent; with "?!", the variable is removed instead. So a RETRY fixes
+  // input_mapping keys, and a COMPLETE patch supplies output_mapping values.
   input_mapping?: Record<string, string>
   output_mapping?: Record<string, string>
   created_at: string
