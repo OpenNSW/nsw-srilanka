@@ -463,3 +463,34 @@ func TestBuildPayload_AScannedSupportingDocumentStillCarriesItsFile(t *testing.T
 	assert.Equal(t, "002", meta.ItemSequence)
 	assert.Equal(t, "15/09/2026", meta.DateAsString)
 }
+
+// Annex A's generalSegment.locationOfGoods is optional: sent when the trader
+// gives one, and left out of the body when they don't.
+func TestBuildPayload_SendsTheLocationOfGoodsOnlyWhenGiven(t *testing.T) {
+	general := func(t *testing.T, form map[string]any) map[string]any {
+		t.Helper()
+		sub, _, err := BuildPayload(form, "")
+		require.NoError(t, err)
+		encoded, err := json.Marshal(sub)
+		require.NoError(t, err)
+		var wire map[string]any
+		require.NoError(t, json.Unmarshal(encoded, &wire))
+		return wire["generalSegment"].(map[string]any)
+	}
+
+	t.Run("given", func(t *testing.T) {
+		form := sampleForm()
+		form["transport"].(map[string]any)["locationOfGoods"] = " CFS1 "
+		assert.Equal(t, "CFS1", general(t, form)["locationOfGoods"])
+	})
+
+	for name, value := range map[string]any{"absent": nil, "blank": "  "} {
+		t.Run(name, func(t *testing.T) {
+			form := sampleForm()
+			if value != nil {
+				form["transport"].(map[string]any)["locationOfGoods"] = value
+			}
+			assert.NotContains(t, general(t, form), "locationOfGoods")
+		})
+	}
+}

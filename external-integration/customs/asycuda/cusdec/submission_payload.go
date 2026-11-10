@@ -106,6 +106,7 @@ type GeneralSeg struct {
 	TotalCustomsValuation          Valuation `json:"totalCustomsValuation"`
 	ContainerFlag                  bool      `json:"containerFlag"`
 	NumberOfContainers             int       `json:"numberOfContainers"`
+	LocationOfGoods                string    `json:"locationOfGoods,omitempty"` // optional in Annex A: left out when empty
 	WarehouseCode                  string    `json:"warehouseCode"`
 	WarehouseDelay                 int       `json:"warehouseDelay"`
 	DeferredPayment                string    `json:"deferredPayment"`
@@ -286,6 +287,7 @@ func buildDeclaration(form map[string]any, previousEdgeID string, forVerify bool
 			TotalCustomsValuation:          buildDeclarationValuation(valuation),
 			ContainerFlag:                  boolean(transport, "containerized"),
 			NumberOfContainers:             integer(form, "containerCount"),
+			LocationOfGoods:                document.Str(transport, "locationOfGoods"),
 			WarehouseCode:                  document.Str(transport, "warehouseCode"),
 			WarehouseDelay:                 integer(transport, "warehouseDelay"),
 			DeferredPayment:                document.Str(financial, "deferredPayment"),

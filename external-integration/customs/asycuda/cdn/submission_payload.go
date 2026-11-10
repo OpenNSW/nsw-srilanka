@@ -42,6 +42,7 @@ type Submission struct {
 	LocationOfGoods    string `json:"locationOfGoods"`
 	PlaceOfLoading     string `json:"placeOfLoading"`
 	PlaceOfDischarge   string `json:"placeOfDischarge"`
+	Slpa               string `json:"slpa,omitempty"` // SLPA No., optional in Annex B: left out when empty
 
 	// Goods / packaging.
 	GoodsDescription string  `json:"goodsDescription"`
@@ -134,6 +135,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, error
 		LocationOfGoods:    document.Str(transport, "locationOfGoods"),
 		PlaceOfLoading:     document.Str(transport, "placeOfLoading"),
 		PlaceOfDischarge:   document.Str(transport, "placeOfDischarge"),
+		Slpa:               document.Str(transport, "slpa"),
 
 		GoodsDescription: document.Str(goods, "description"),
 		PackageNumber:    integer(goods, "packageNumber"),

@@ -183,3 +183,35 @@ func TestDocumentReference_ReadsTheCanonicalYear(t *testing.T) {
 	assert.Equal(t, "2026", ref.Year)
 	assert.True(t, ref.IsValid())
 }
+
+// Annex B's slpa (the SLPA No.) is optional: sent when the trader gives one,
+// and left out of the body when they don't.
+func TestBuildPayload_SendsTheSLPANumberOnlyWhenGiven(t *testing.T) {
+	t.Run("given", func(t *testing.T) {
+		form := fullForm()
+		form["transport"].(map[string]any)["slpa"] = " SLPA-55120 "
+
+		sub, err := BuildPayload(form, "")
+		require.NoError(t, err)
+
+		body, err := json.Marshal(sub)
+		require.NoError(t, err)
+		assert.Contains(t, string(body), `"slpa":"SLPA-55120"`)
+	})
+
+	for name, value := range map[string]any{"absent": nil, "blank": "  "} {
+		t.Run(name, func(t *testing.T) {
+			form := fullForm()
+			if value != nil {
+				form["transport"].(map[string]any)["slpa"] = value
+			}
+
+			sub, err := BuildPayload(form, "")
+			require.NoError(t, err)
+
+			body, err := json.Marshal(sub)
+			require.NoError(t, err)
+			assert.NotContains(t, string(body), `"slpa"`)
+		})
+	}
+}
