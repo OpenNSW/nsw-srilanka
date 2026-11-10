@@ -111,4 +111,18 @@ describe('ResolveAdminInterventionView', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Complete' }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Retry' }).disabled).toBe(false)
   })
+
+  it('gives the error, the cached result and the workflow variables a copy button', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const globalVariables = { fcau: { reference_number: '034/25236' } }
+    renderView({ lastError: 'activity timed out', cachedTaskResult: { payment_status: 'PAID' }, globalVariables })
+
+    expect(screen.getByRole('button', { name: 'Copy Last error' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Cached task result' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Workflow variables' }))
+    expect(writeText).toHaveBeenCalledWith(JSON.stringify(globalVariables, null, 2))
+
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+  })
 })
