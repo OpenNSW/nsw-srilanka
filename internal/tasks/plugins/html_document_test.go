@@ -8,6 +8,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/htmlgen"
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/taskflow/plugins"
@@ -25,6 +26,23 @@ func (f fakeTemplates) HTMLTemplate(_ context.Context, id string) ([]byte, error
 		return nil, errors.New("not found")
 	}
 	return []byte(src), nil
+}
+
+// fakeTitles serves static data titles by "id@version"; one it lacks is not
+// found, and the "down" artifact fails to read.
+type fakeTitles map[string]map[string]string
+
+var errStaticDataDown = errors.New("artifact store unavailable")
+
+func (f fakeTitles) Of(_ context.Context, id, version string) (map[string]string, error) {
+	if id == "down" {
+		return nil, errStaticDataDown
+	}
+	titles, ok := f[id+"@"+version]
+	if !ok {
+		return nil, fmt.Errorf("static data %q version %q: %w", id, version, artifact.ErrNotFound)
+	}
+	return titles, nil
 }
 
 // fakeSaver records what it was asked to store.
@@ -69,7 +87,7 @@ func htmlDocCtx(inputs map[string]any) plugins.PluginContext {
 
 func TestHTMLDocumentGenerator_RendersStoresAndRecordsKey(t *testing.T) {
 	files := &fakeSaver{}
-	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files)
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeTitles{})
 	ctx := htmlDocCtx(map[string]any{
 		"refid":       map[string]any{"reference_id": "PRM-2026-00555"},
 		"application": map[string]any{"applicant_name": "Smith & Co", "fee_amount": json.Number("1400")},
@@ -100,7 +118,7 @@ func permitInputs(applicant string) map[string]any {
 
 func TestHTMLDocumentGenerator_ChangedInputsStoreNewDocument(t *testing.T) {
 	files := &fakeSaver{}
-	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files)
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeTitles{})
 	ctx := htmlDocCtx(permitInputs("Smith & Co"))
 
 	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
@@ -118,7 +136,7 @@ func TestHTMLDocumentGenerator_ChangedInputsStoreNewDocument(t *testing.T) {
 
 func TestHTMLDocumentGenerator_EveryRunStores(t *testing.T) {
 	files := &fakeSaver{}
-	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files)
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeTitles{})
 	ctx := htmlDocCtx(permitInputs("Smith & Co"))
 
 	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
@@ -137,7 +155,7 @@ func TestHTMLDocumentGenerator_Filename(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			files := &fakeSaver{}
-			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": `<p>x</p>`}, files)
+			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": `<p>x</p>`}, files, fakeTitles{})
 			require.NoError(t, p.Execute(htmlDocCtx(nil), json.RawMessage(tc.props)))
 			assert.Equal(t, tc.want, files.filename)
 		})
@@ -175,13 +193,80 @@ func TestHTMLDocumentGenerator_Failures(t *testing.T) {
 				ctx.OutputNamespace = ""
 			}
 
-			err := NewHTMLDocumentGeneratorPlugin(templates, files).Execute(ctx, json.RawMessage(tc.props))
+			err := NewHTMLDocumentGeneratorPlugin(templates, files, fakeTitles{}).Execute(ctx, json.RawMessage(tc.props))
 
 			require.Error(t, err)
 			if tc.wantIs != nil {
 				assert.ErrorIs(t, err, tc.wantIs)
 			}
 			assert.NotContains(t, ctx.Record.Data, "permit_doc", "nothing is recorded for a document that was not stored")
+		})
+	}
+}
+
+var portTitles = fakeTitles{"ports@1": {"LKCMB": "COLOMBO", "NLRTM": "ROTTERDAM"}}
+
+func TestHTMLDocumentGenerator_StaticDataNamesACode(t *testing.T) {
+	cases := map[string]struct {
+		inputs map[string]any
+		want   string
+	}{
+		"a known code prints its title":   {map[string]any{"port": "NLRTM"}, "<p>ROTTERDAM</p>"},
+		"an unknown code prints as it is": {map[string]any{"port": "XXABC"}, "<p>XXABC</p>"},
+		"an empty value prints nothing":   {map[string]any{"port": ""}, "<p></p>"},
+		"a missing value prints nothing":  {map[string]any{}, "<p></p>"},
+		"a JSON null prints nothing":      {map[string]any{"port": nil}, "<p></p>"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			files := &fakeSaver{}
+			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" "1" .port }}</p>`}, files, portTitles)
+
+			require.NoError(t, p.Execute(htmlDocCtx(tc.inputs), json.RawMessage(`{"template_id": "doc"}`)))
+
+			assert.Equal(t, tc.want, string(files.content))
+		})
+	}
+}
+
+// A title is escaped like any other value.
+func TestHTMLDocumentGenerator_StaticDataTitleIsEscaped(t *testing.T) {
+	files := &fakeSaver{}
+	titles := fakeTitles{"ports@1": {"X": "<b>A & B</b>"}}
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" "1" .port }}</p>`}, files, titles)
+
+	require.NoError(t, p.Execute(htmlDocCtx(map[string]any{"port": "X"}), json.RawMessage(`{"template_id": "doc"}`)))
+
+	assert.Equal(t, `<p>&lt;b&gt;A &amp; B&lt;/b&gt;</p>`, string(files.content))
+}
+
+func TestHTMLDocumentGenerator_StaticDataFailures(t *testing.T) {
+	cases := map[string]struct {
+		template  string
+		inputs    map[string]any
+		permanent bool
+		wantIs    error
+	}{
+		"unknown static data":    {`{{ staticdata "nope" "1" .port }}`, map[string]any{"port": "LKCMB"}, true, artifact.ErrNotFound},
+		"unknown version":        {`{{ staticdata "ports" "2" .port }}`, map[string]any{"port": "LKCMB"}, true, artifact.ErrNotFound},
+		"too few arguments":      {`{{ staticdata "ports" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
+		"empty version":          {`{{ staticdata "ports" "" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
+		"a list as the value":    {`{{ staticdata "ports" "1" .port }}`, map[string]any{"port": []any{"LKCMB"}}, true, errStaticDataCall},
+		"static data unreadable": {`{{ staticdata "down" "1" .port }}`, map[string]any{"port": "LKCMB"}, false, errStaticDataDown},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			files := &fakeSaver{}
+			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": tc.template}, files, portTitles)
+			ctx := htmlDocCtx(tc.inputs)
+
+			err := p.Execute(ctx, json.RawMessage(`{"template_id": "doc"}`))
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tc.wantIs)
+			assert.Equal(t, tc.permanent, plugins.IsPermanent(err), "permanent")
+			assert.Equal(t, 0, files.calls, "nothing is stored")
+			assert.NotContains(t, ctx.Record.Data, "permit_doc")
 		})
 	}
 }
