@@ -96,7 +96,7 @@ export function getConsignmentForAdmin(
 }
 
 // Ops/admin view of any case plus its flows, no ownership check. Typed as AdminConsignmentDetail
-// so ConsignmentDebugger can take it as its fetcher in agency mode — see case/service.ts's
+// so useAdminConsignment can take it as its fetcher in agency mode — see case/service.ts's
 // getCase for the same convention. The backend returns the same field names but none of the
 // trade-only ones (flow, traderId, traderCompanyId, chaId, chaCompanyId, startableFlows), which
 // the debugger hides in agency mode.

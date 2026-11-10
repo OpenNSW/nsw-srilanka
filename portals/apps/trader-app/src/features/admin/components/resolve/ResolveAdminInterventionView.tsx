@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Button, Text, TextArea, Tooltip } from '@radix-ui/themes'
 import { ConfirmDialog, StatusBadge, type StatusTone } from '@portals/ui'
 import { ArrowLeftIcon, InfoCircledIcon } from '@radix-ui/react-icons'
-import { resolveAdminIntervention } from '@/features/admin/service'
+import { useResolveAdminIntervention } from '@/features/admin/hooks'
 import type { AdminResolutionAction, ParkCategory } from '@/features/admin/types'
 import { IdentityField } from '@/features/admin/components/IdentityField'
 import type { AdminResolutionTarget } from '@/features/admin/components/engine/shared'
@@ -126,8 +126,12 @@ export function ResolveAdminInterventionView({
   // task's own key names, while the patch is written under global variable paths, so editing
   // it into shape invites writing the wrong key.
   const [variablesPatchText, setVariablesPatchText] = useState('{}')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const resolve = useResolveAdminIntervention()
+  const submitting = resolve.isPending
+  // A patch that fails to parse is caught here, before anything is sent; a refused or failed
+  // request is the mutation's error.
+  const [patchError, setPatchError] = useState<string | null>(null)
+  const error = patchError ?? (resolve.error ? resolve.error.message || 'Failed to resolve admin intervention.' : null)
   // Gates the actual submit behind an explicit re-confirmation — this mutates a live workflow
   // (possibly irreversibly for ABORT) and there's no undo, so "Submit" opens this dialog instead
   // of calling submit() directly.
@@ -147,6 +151,7 @@ export function ResolveAdminInterventionView({
 
   const submit = async () => {
     if (!action) return
+    setPatchError(null)
     // Only COMPLETE/RETRY actually consume the patch (see the ADMIN_ACTIONS descriptions above)
     // — for ABORT the editor isn't shown, so whatever it holds isn't anything the admin chose to
     // send and must not go out on the wire.
@@ -156,28 +161,24 @@ export function ResolveAdminInterventionView({
         globalVariablesPatch = JSON.parse(variablesPatchText) as Record<string, unknown>
       } catch {
         setConfirmOpen(false)
-        setError('Variables must be valid JSON.')
+        setPatchError('Variables must be valid JSON.')
         return
       }
     }
     setConfirmOpen(false)
-    setSubmitting(true)
-    setError(null)
     try {
-      await resolveAdminIntervention(
+      await resolve.mutate(
         target.workflowId,
         target.stepId,
         { action, global_variables_patch: globalVariablesPatch, reason },
         target.workflowKind,
       )
-      target.onResolved()
-      onBack()
     } catch (err) {
       console.error('Failed to resolve admin intervention:', err)
-      setError(err instanceof Error ? err.message : 'Failed to resolve admin intervention.')
-    } finally {
-      setSubmitting(false)
+      return
     }
+    target.onResolved()
+    onBack()
   }
 
   return (

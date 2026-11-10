@@ -1,16 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { IconButton, Text, Tooltip } from '@radix-ui/themes'
 import { PageState, RefreshButton, StatusBadge, type StatusTone } from '@portals/ui'
 import { DoubleArrowDownIcon, DoubleArrowUpIcon, EyeNoneIcon, EyeOpenIcon } from '@radix-ui/react-icons'
-import { getWorkflowEngineStatus } from '@/features/admin/service'
-import type { EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
+import { useEngineStatus } from '@/features/admin/hooks'
+import type { EngineWorkflowStatus } from '@/features/admin/types'
 import { NodeRow } from '@/features/admin/components/engine/NodeRow'
 import {
   NODE_ROW_GRID,
   visibleNodes,
   type ExpandSignal,
   NO_EXPAND_SIGNAL,
-  type FetchError,
   type WorkflowVariablesTarget,
   type AdminResolutionTarget,
 } from '@/features/admin/components/engine/shared'
@@ -36,10 +35,7 @@ export function EngineStatusView({
   title: string
   onRefresh: () => void
 }) {
-  const [status, setStatus] = useState<EngineStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState<FetchError>(null)
+  const { status, error, loading, isFetching, refetch } = useEngineStatus(workflowId, 'workflow')
   const [variablesTarget, setVariablesTarget] = useState<WorkflowVariablesTarget | null>(null)
   const [resolveTarget, setResolveTarget] = useState<AdminResolutionTarget | null>(null)
   const canIntervene = useCan('admin.intervene')
@@ -55,41 +51,10 @@ export function EngineStatusView({
     setExpandSignal((prev) => ({ gen: prev.gen + 1, expand: !prev.expand }))
   }, [])
 
-  const refresh = useCallback(async () => {
-    setRefreshing(true)
-    try {
-      const result = await getWorkflowEngineStatus(workflowId)
-      setStatus(result)
-      setError(result ? null : 'notFound')
-    } catch (err) {
-      console.error('Failed to fetch workflow engine status:', err)
-      setError('loadFailed')
-    } finally {
-      setRefreshing(false)
-    }
+  const refresh = () => {
+    refetch()
     onRefresh()
-  }, [workflowId, onRefresh])
-
-  useEffect(() => {
-    let cancelled = false
-    getWorkflowEngineStatus(workflowId)
-      .then((result) => {
-        if (cancelled) return
-        setStatus(result)
-        setError(result ? null : 'notFound')
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        console.error('Failed to fetch workflow engine status:', err)
-        setError('loadFailed')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [workflowId])
+  }
 
   if (loading) {
     return <PageState variant="loading" title="Loading engine status…" />
@@ -101,7 +66,7 @@ export function EngineStatusView({
         <PageState
           variant="error"
           title={error === 'notFound' ? 'No workflow execution found' : 'Failed to load engine status'}
-          onRetry={() => void refresh()}
+          onRetry={refresh}
         />
       </div>
     )
@@ -133,7 +98,7 @@ export function EngineStatusView({
             variables={status.global_variables}
             onOpen={setVariablesTarget}
           />
-          <RefreshButton label="Refresh" refreshing={refreshing} onClick={() => void refresh()} showLabel />
+          <RefreshButton label="Refresh" refreshing={isFetching} onClick={refresh} showLabel />
           <Tooltip content={expandSignal.expand ? 'Collapse all' : 'Expand all'}>
             <IconButton
               variant="ghost"
@@ -188,7 +153,7 @@ export function EngineStatusView({
                 expandSignal={expandSignal}
                 onOpenVariables={setVariablesTarget}
                 onOpenResolve={setResolveTarget}
-                onRefresh={() => void refresh()}
+                onRefresh={refresh}
               />
             ))
           )}
