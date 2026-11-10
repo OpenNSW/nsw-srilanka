@@ -246,8 +246,7 @@ func TestConsignmentDetailStartableFlowsRequireWriteScope(t *testing.T) {
 	}{
 		{name: "trader with write scope", canStart: true, want: []FlowOption{auxFlow}},
 		{name: "trader without write scope", want: []FlowOption{}},
-		{name: "admin with write scope", admin: true, canStart: true, want: []FlowOption{auxFlow, {TemplateID: "cha_flow", Label: "CHA flow"}}},
-		{name: "admin without write scope", admin: true, want: []FlowOption{}},
+		{name: "admin lists trader and CHA flows", admin: true, want: []FlowOption{auxFlow, {TemplateID: "cha_flow", Label: "CHA flow"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, sqlMock, _ := newFlowsService(t)

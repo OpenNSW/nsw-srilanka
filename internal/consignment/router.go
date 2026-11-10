@@ -378,8 +378,6 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	c.filterStartableFlows(ctx, &consignment.DetailDTO)
-
 	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{"view": "admin"}))
 	httputil.JSON(w, http.StatusOK, consignment)
 }
