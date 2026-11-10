@@ -34,7 +34,7 @@ var testCatalogRoles = map[string]string{"trader": "Trader", "cha": "CHA"}
 // immediately if construction errors.
 func mustNewRouter(t *testing.T, cs *Service, chaService cha.Service, companyService company.Service, auditor nswaudit.Auditor) *Router {
 	t.Helper()
-	r, err := NewRouter(cs, chaService, companyService, auditor, testCatalogRoles)
+	r, err := NewRouter(cs, chaService, companyService, auditor, testCatalogRoles, func(context.Context) bool { return true })
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
@@ -297,6 +297,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{}))
 	client, capture := nswaudit.NewWithCapture()
 	r := mustNewRouter(t, svc, nil, mockCompany, client)
+	r.canStartFlows = func(context.Context) bool { return false }
 
 	traderID := "trader1"
 	traderCompanyID := uuid.NewString()
@@ -557,7 +558,7 @@ func TestNewRouter_ValidatesRoles(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewRouter(nil, nil, nil, nil, tc.roles)
+			_, err := NewRouter(nil, nil, nil, nil, tc.roles, func(context.Context) bool { return true })
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("NewRouter(...) err = %v, wantErr %v", err, tc.wantErr)
 			}
@@ -620,4 +621,9 @@ func TestConsignmentRouter_HandleGetConsignmentByID_ServiceError(t *testing.T) {
 	r.HandleGetConsignmentByID(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestNewRouter_RequiresFlowStartCheck(t *testing.T) {
+	_, err := NewRouter(nil, nil, nil, nil, testCatalogRoles, nil)
+	require.ErrorContains(t, err, "canStartFlows is required")
 }

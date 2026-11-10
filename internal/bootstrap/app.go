@@ -353,7 +353,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to build consignment service: %w", err)
 		}
-		consignmentRouter, err = consignment.NewRouter(consignmentService, chaService, companyService, auditor, globalCatalog.Roles)
+		consignmentRouter, err = consignment.NewRouter(consignmentService, chaService, companyService, auditor, globalCatalog.Roles, canStartConsignmentFlows)
 		if err != nil {
 			_ = stopTask()
 			temporalClient.Close()

@@ -18,7 +18,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
-	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
 const (
@@ -38,22 +37,29 @@ const (
 // maxStartFlowRequestBytes caps a StartFlowRequest body, which only names a template.
 const maxStartFlowRequestBytes = 1 << 10
 
+// CanStartFlows reports whether the caller holds the grant required by the start route.
+type CanStartFlows func(context.Context) bool
+
 type Router struct {
-	cs      *Service
-	cha     cha.Service
-	company company.Service
-	audit   nswaudit.Auditor
-	roles   map[string]string // logical name ("trader"/"cha") -> IdP token role
+	canStartFlows CanStartFlows
+	cs            *Service
+	cha           cha.Service
+	company       company.Service
+	audit         nswaudit.Auditor
+	roles         map[string]string // logical name ("trader"/"cha") -> IdP token role
 }
 
 // NewRouter builds the router. roles is the global catalog's Roles map; it must
 // define "trader" and "cha" — the handlers resolve the caller's token roles
 // through it.
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, auditor nswaudit.Auditor, roles map[string]string) (*Router, error) {
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, auditor nswaudit.Auditor, roles map[string]string, canStartFlows CanStartFlows) (*Router, error) {
 	if err := validateRoles(roles); err != nil {
 		return nil, err
 	}
-	return &Router{cs: cs, cha: chaService, company: companyService, audit: auditor, roles: roles}, nil
+	if canStartFlows == nil {
+		return nil, errors.New("consignment: canStartFlows is required")
+	}
+	return &Router{cs: cs, cha: chaService, company: companyService, audit: auditor, roles: roles, canStartFlows: canStartFlows}, nil
 }
 
 // validateRoles reports an error if roles (the global catalog's Roles map) omits
@@ -113,7 +119,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		"traderCompanyId": consignment.TraderCompanyID,
 		"chaCompanyId":    consignment.ChaCompanyID,
 	}))
-	filterStartableFlows(p, consignment)
+	c.filterStartableFlows(ctx, consignment)
 	httputil.JSON(w, http.StatusCreated, consignment)
 }
 
@@ -257,7 +263,7 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	filterStartableFlows(p, consignment)
+	c.filterStartableFlows(ctx, consignment)
 
 	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{
 		"callerCompanyId": userCompany.ID,
@@ -372,14 +378,14 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	filterStartableFlows(p, &consignment.DetailDTO)
+	c.filterStartableFlows(ctx, &consignment.DetailDTO)
 
 	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{"view": "admin"}))
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
-func filterStartableFlows(p *authn.Principal, detail *DetailDTO) {
-	if !slices.Contains(p.Scopes, scopes.ConsignmentFlowWrite) {
+func (c *Router) filterStartableFlows(ctx context.Context, detail *DetailDTO) {
+	if !c.canStartFlows(ctx) {
 		detail.StartableFlows = []FlowOption{}
 	}
 }
