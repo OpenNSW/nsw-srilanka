@@ -12,7 +12,17 @@ import { formatDateTime } from '@/features/consignment/utils.ts'
 import { ConsignmentName } from '@/features/consignment/components/ConsignmentName'
 import { ConsignmentCard } from '@/features/consignment/components/ConsignmentCard'
 import { ROUTES } from '@/constants'
-import { LinkRow, LoadingOverlay, PageHeader, PageState, PaginationControl, RowLink, Surface, Table } from '@portals/ui'
+import {
+  ConfirmDialog,
+  LinkRow,
+  LoadingOverlay,
+  PageHeader,
+  PageState,
+  PaginationControl,
+  RowLink,
+  Surface,
+  Table,
+} from '@portals/ui'
 import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
 import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
 import { Can } from '@/components/Can'
@@ -57,13 +67,19 @@ export function ConsignmentScreen() {
   const totalCount = loadError ? 0 : (data?.total ?? 0)
 
   const { mutate: create, isPending: creating, error: createError } = useMutation(createConsignment)
+  // A consignment can't be deleted once created, so the button asks first.
+  const [confirmingCreate, setConfirmingCreate] = useState(false)
 
+  // Runs from the confirmation dialog, which stays open, busy, until the
+  // create ends. A failure shows under the button.
   const handleCreateConsignment = async () => {
     try {
       const response = await create()
       void navigate(ROUTES.CONSIGNMENT_DETAIL(response.id))
     } catch (error) {
       console.error('Failed to create consignment:', error)
+    } finally {
+      setConfirmingCreate(false)
     }
   }
 
@@ -76,7 +92,7 @@ export function ConsignmentScreen() {
           <Can I="consignment.create">
             <div className="flex flex-col items-end gap-2">
               <Button
-                onClick={() => void handleCreateConsignment()}
+                onClick={() => setConfirmingCreate(true)}
                 disabled={creating}
                 loading={creating}
                 // Below Radix's xs breakpoint (520px) the button shows the short
@@ -99,6 +115,16 @@ export function ConsignmentScreen() {
                 </Text>
               )}
             </div>
+            <ConfirmDialog
+              open={confirmingCreate}
+              onOpenChange={setConfirmingCreate}
+              title={t('consignments.list.confirm.title')}
+              description={t('consignments.list.confirm.description')}
+              confirmLabel={t('consignments.list.confirm.create')}
+              cancelLabel={t('consignments.list.confirm.cancel')}
+              onConfirm={() => void handleCreateConsignment()}
+              busy={creating}
+            />
           </Can>
         }
       />

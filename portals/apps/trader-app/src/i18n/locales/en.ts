@@ -69,6 +69,12 @@ const en = {
         // The create button's label on a phone, where the full one doesn't fit.
         createShort: 'New',
         creating: 'Creating...',
+        confirm: {
+          title: 'Create a new consignment?',
+          description: "This creates a consignment and starts its workflow. It can't be deleted afterwards.",
+          create: 'Create consignment',
+          cancel: 'Cancel',
+        },
         error: {
           loadFailed: 'Could not load consignments.',
           createFailed: 'Could not create the consignment. Please try again.',
@@ -111,7 +117,8 @@ const en = {
           startService: 'Start {{label}}',
           footer: 'More auxiliary services appear here when they apply to this consignment.',
           confirmTitle: 'Start {{label}}?',
-          confirmDescription: 'This starts {{label}} on the consignment. Its steps appear in the list above.',
+          confirmDescription:
+            "This starts {{label}} on the consignment. Its steps appear in the list above. Once started, it can't be withdrawn.",
           cancel: 'Cancel',
           start: 'Start',
           failed: 'Could not start {{label}}. Please try again.',
@@ -187,6 +194,13 @@ const en = {
         description: 'Your answers on this form have not been saved. If you leave now, they will be lost.',
         stay: 'Stay on this page',
         leave: 'Leave without saving',
+      },
+      // Asked before a form's action other than Save as Draft. action is the
+      // button's label.
+      confirm: {
+        title: '{{action}}?',
+        description: "Once you go ahead, this step can't be changed or undone. Check your answers before you continue.",
+        cancel: 'Go back',
       },
       validation: {
         requiredFields: 'Please fill in all required fields.',
