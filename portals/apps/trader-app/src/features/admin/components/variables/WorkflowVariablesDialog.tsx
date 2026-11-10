@@ -1,4 +1,5 @@
 import { Button, Dialog, Text } from '@radix-ui/themes'
+import { CodeBlock } from '@portals/ui'
 import type { WorkflowVariablesTarget } from '@/features/admin/components/engine/shared'
 
 // Global variables belong to a workflow instance (root or child), not to any one node — opened
@@ -22,9 +23,9 @@ export function WorkflowVariablesDialog({
             </Dialog.Description>
 
             {target.variables && Object.keys(target.variables).length > 0 ? (
-              <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-96 whitespace-pre-wrap break-all">
+              <CodeBlock label={`${target.label} global variables`} className="max-h-96">
                 {JSON.stringify(target.variables, null, 2)}
-              </pre>
+              </CodeBlock>
             ) : (
               <Text size="2" color="gray">
                 No global variables recorded for this workflow.
