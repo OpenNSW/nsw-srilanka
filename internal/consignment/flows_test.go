@@ -258,18 +258,20 @@ func TestConsignmentDetailStartableFlowsRequireWriteScope(t *testing.T) {
 			companies := new(MockCompanyService)
 			id := uuid.NewString()
 			expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
-			taskStore.On("GetTasks", mock.Anything, store.TaskFilter{CaseID: id}).Return(nil)
 			router := mustNewRouter(t, svc, nil, companies, nil)
 			path := "/api/v1/consignments/" + id
 			handler := router.HandleGetConsignmentByID
+			taskFilter := store.TaskFilter{CaseID: id, Roles: []string{partyRoleTrader}}
 			readScope := scopes.ConsignmentRead
 			if tc.admin {
 				path = "/api/v1/admin/consignments/" + id
 				handler = router.HandleAdminGetConsignmentByID
+				taskFilter.Roles = nil
 				readScope = scopes.ConsignmentAdminRead
 			} else {
 				companies.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co-trader"}, nil)
 			}
+			taskStore.On("GetTasks", mock.Anything, taskFilter).Return(nil).Once()
 			principal := &authn.Principal{Kind: authn.KindUser, OUHandle: "trader-ou", Roles: []string{"Trader"}, Scopes: []string{readScope}}
 			if tc.writeScope {
 				principal.Scopes = append(principal.Scopes, scopes.ConsignmentFlowWrite)
@@ -283,6 +285,7 @@ func TestConsignmentDetailStartableFlowsRequireWriteScope(t *testing.T) {
 			var got DetailDTO
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 			assert.Equal(t, tc.want, got.StartableFlows)
+			taskStore.AssertExpectations(t)
 		})
 	}
 }
