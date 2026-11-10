@@ -154,4 +154,21 @@ describe('AdminConsignmentEngineStatusScreen', () => {
     expect(mockGetConsignment).toHaveBeenCalledTimes(2)
     expect(screen.getByText('Shipment c-1')).toBeTruthy()
   })
+
+  it('keeps the debugger on screen when a background reload of the consignment fails', async () => {
+    mockGetConsignment.mockResolvedValueOnce(makeConsignment('c-1'))
+    mockGetConsignment.mockRejectedValueOnce(new Error('network blip'))
+    mockGetStatus.mockResolvedValue(makeStatus('wf-c-1'))
+
+    renderScreen('/admin/consignments/c-1')
+    expect(await screen.findByRole('heading', { name: 'Flow wf-c-1' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+    await vi.waitFor(() => expect(mockGetConsignment).toHaveBeenCalledTimes(2))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(screen.getByText('Shipment c-1')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Flow wf-c-1' })).toBeTruthy()
+    expect(screen.queryByText('Failed to load consignment')).toBeNull()
+  })
 })

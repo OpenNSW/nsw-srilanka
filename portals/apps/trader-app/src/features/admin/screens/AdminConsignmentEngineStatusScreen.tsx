@@ -39,7 +39,7 @@ export function AdminConsignmentEngineStatusScreen() {
     )
   }
 
-  if (error || !consignment) {
+  if (!consignment) {
     return (
       <div className="p-6">
         <div className="bg-app-surface rounded-lg shadow">
