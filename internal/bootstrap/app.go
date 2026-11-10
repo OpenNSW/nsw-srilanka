@@ -966,7 +966,7 @@ func (p registryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]b
 // taskplugins.Register does for the same reason — seven of them inline was most
 // of initTask's branching, and adding an eighth meant editing a function that
 // has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, staticData taskplugins.StaticDataTitles, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -978,7 +978,7 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)},
 		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
 		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
-		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files)},
+		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files, staticData)},
 		{taskplugins.TaskTypeSLPACaseContainers, taskplugins.NewSLPACaseContainersPlugin(caseTasks)},
 		{taskplugins.TaskTypeRemoteFileArchiver, taskplugins.NewRemoteFileArchiverPlugin(fetcher, files)},
 	}
@@ -1035,7 +1035,7 @@ func initTask(
 	}
 	taskStore := gormstore.New(db)
 
-	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, taskStore, remoteManager); err != nil {
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, staticdata.NewTitles(artifacts), taskStore, remoteManager); err != nil {
 		return nil, nil, err
 	}
 
