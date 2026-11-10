@@ -3,17 +3,26 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConsignmentScreen } from '@/features/consignment/screens/ConsignmentScreen'
-import { getAllConsignments } from '@/features/consignment/service'
-import type { ConsignmentListResult, ConsignmentSummary } from '@/features/consignment/types'
+import { createConsignment, getAllConsignments } from '@/features/consignment/service'
+import type { ConsignmentDetail, ConsignmentListResult, ConsignmentSummary } from '@/features/consignment/types'
 
 // config.js sets this in the app; @/constants reads it as it loads.
 vi.hoisted(() => {
   window.__APP_CONFIG__ = { API_BASE_URL: 'http://api.test' }
 })
 
+const mockNavigate = vi.hoisted(() => vi.fn())
+
 vi.mock('@/features/consignment/service', () => ({ getAllConsignments: vi.fn(), createConsignment: vi.fn() }))
-// The list needs a signed-in user granted to read consignments.
-vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { scope: 'openid consignment:read' } }) }))
+// The list needs a signed-in user granted to read consignments, and New
+// Consignment one granted to write them.
+vi.mock('react-oidc-context', () => ({
+  useAuth: () => ({ user: { scope: 'openid consignment:read consignment:write' } }),
+}))
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router-dom')>()),
+  useNavigate: () => mockNavigate,
+}))
 // The keys are the text: what each test checks is which message shows, not its wording.
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-i18next')>()),
@@ -21,6 +30,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
 }))
 
 const mockGetAll = vi.mocked(getAllConsignments)
+const mockCreate = vi.mocked(createConsignment)
 
 function makeConsignment(id: string): ConsignmentSummary {
   return {
@@ -63,6 +73,54 @@ function lastOffset() {
 describe('ConsignmentScreen', () => {
   afterEach(() => {
     mockGetAll.mockReset()
+    mockCreate.mockReset()
+    mockNavigate.mockReset()
+    vi.restoreAllMocks()
+  })
+
+  it('asks before creating a consignment, and opens it once created', async () => {
+    mockGetAll.mockResolvedValue(page(0, ['CN-1']))
+    mockCreate.mockResolvedValue({ id: 'CN-9' } as ConsignmentDetail)
+    renderScreen()
+
+    fireEvent.click(screen.getByRole('button', { name: 'consignments.list.create' }))
+
+    const dialog = screen.getByRole('alertdialog', { name: 'consignments.list.confirm.title' })
+    expect(mockCreate).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'consignments.list.confirm.create' }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/consignments/CN-9'))
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+  })
+
+  it('creates nothing when the user cancels', async () => {
+    mockGetAll.mockResolvedValue(page(0, ['CN-1']))
+    renderScreen()
+
+    fireEvent.click(screen.getByRole('button', { name: 'consignments.list.create' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'consignments.list.confirm.cancel' }),
+    )
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('closes the dialog and says so when the create fails', async () => {
+    mockGetAll.mockResolvedValue(page(0, ['CN-1']))
+    mockCreate.mockRejectedValue(new Error('offline'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderScreen()
+
+    fireEvent.click(screen.getByRole('button', { name: 'consignments.list.create' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'consignments.list.confirm.create' }),
+    )
+
+    expect(await screen.findByText('consignments.list.error.createFailed')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 
   it('loads the first page with no filters', async () => {

@@ -3,7 +3,7 @@ import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema, Translator } from '@jsonforms/core'
 import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button, Text } from '@radix-ui/themes'
-import { Banner } from '@portals/ui'
+import { Banner, ConfirmDialog } from '@portals/ui'
 import { CheckIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { handleLabel, type Handle, type ZoneAction, type ZoneRendererProps } from '@/features/zone/types'
@@ -79,7 +79,8 @@ type Props = ZoneRendererProps<'FORM'> & {
 // element identifiers and their visual treatment. Handles reference these by
 // name via Handle.element; unknown identifiers fall back to a plain solid
 // button so the action still dispatches. draft_action saves the form as a
-// draft of the step, partial or not, without completing it.
+// draft of the step, partial or not, without completing it. Every other
+// element moves the task on for good, so the user confirms it first.
 const FORM_ELEMENT_CATALOG: Record<string, { variant: 'solid' | 'outline'; color?: 'red' }> = {
   primary_action: { variant: 'solid' },
   secondary_action: { variant: 'outline' },
@@ -114,6 +115,11 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [pendingCommand, setPendingCommand] = useState<string | null>(null)
   // When the last draft save succeeded; null hides the "Draft saved" note.
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null)
+  // The handle the confirmation dialog asks about, and whether the dialog is
+  // open. The handle stays set while the dialog closes, so its text holds
+  // through the closing animation.
+  const [confirming, setConfirming] = useState<Handle | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
   // formDataKey of the data as last saved (a draft or a submission), or as
   // JsonForms first reported it on mount: it emits once on mount, after
@@ -233,18 +239,11 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     setData(next)
   }
 
-  const handleAction = (h: Handle) => {
+  // Sends the handle's action with the form's data. A confirmation dialog
+  // that asked for it stays open, busy, until the action ends either way.
+  const dispatch = (h: Handle) => {
     if (!onAction) return
     const draft = h.element === 'draft_action'
-    if (!acceptsPartialForm(h) && !isValid) {
-      // Flipping showErrors changes validationMode, a dependency of
-      // JsonForms's own resync effect (see EMPTY_ADDITIONAL_ERRORS above) —
-      // but the lastFed check above already catches dataSeed up to data on
-      // the very next render whenever that happens, so this doesn't need
-      // its own copy of that logic.
-      setShowErrors(true)
-      return
-    }
     setSubmitting(true)
     setPendingCommand(h.command)
     setDraftSavedAt(null)
@@ -261,22 +260,46 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       .finally(() => {
         setSubmitting(false)
         setPendingCommand(null)
+        setConfirmOpen(false)
       })
+  }
+
+  // A click on a handle's button. A form not complete enough for the handle
+  // shows what is missing instead. A draft saves at once; any other handle
+  // asks the user to confirm first.
+  const handleAction = (h: Handle) => {
+    if (!onAction) return
+    if (!acceptsPartialForm(h) && !isValid) {
+      // Flipping showErrors changes validationMode, a dependency of
+      // JsonForms's own resync effect (see EMPTY_ADDITIONAL_ERRORS above) —
+      // but the lastFed check above already catches dataSeed up to data on
+      // the very next render whenever that happens, so this doesn't need
+      // its own copy of that logic.
+      setShowErrors(true)
+      return
+    }
+    if (h.element === 'draft_action') {
+      dispatch(h)
+      return
+    }
+    setConfirming(h)
+    setConfirmOpen(true)
   }
 
   // Autosave: a form that can save a draft does so once its input has stayed
   // unsaved for AUTOSAVE_DRAFT_MS. A save (manual or not) clears the timer, as
-  // does any action in flight; one that fails leaves the input unsaved, so the
-  // timer starts again.
+  // does any action in flight or a confirmation dialog open on screen, which
+  // a draft save in the background would close; one that fails leaves the
+  // input unsaved, so the timer starts again.
   const autosaveDraft = useEffectEvent(() => {
-    if (draftHandle) handleAction(draftHandle)
+    if (draftHandle) dispatch(draftHandle)
   })
   const canAutosave = draftHandle !== undefined
   useEffect(() => {
-    if (!unsaved || submitting || !canAutosave) return
+    if (!unsaved || submitting || confirmOpen || !canAutosave) return
     const timer = setTimeout(autosaveDraft, AUTOSAVE_DRAFT_MS)
     return () => clearTimeout(timer)
-  }, [unsaved, submitting, canAutosave])
+  }, [unsaved, submitting, confirmOpen, canAutosave])
 
   // The "Draft saved" note next to the buttons fades after a few seconds.
   useEffect(() => {
@@ -296,6 +319,11 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       inBar={!stepper}
     />
   ) : undefined
+
+  // The dialog names the action by its button's label, and colours its own
+  // button the same way.
+  const confirmingLabel = confirming ? handleLabel(confirming, i18n.resolvedLanguage ?? i18n.language, t) : ''
+  const confirmingStyle = confirming?.element ? FORM_ELEMENT_CATALOG[confirming.element] : undefined
 
   return (
     <>
@@ -343,6 +371,19 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
             {actions}
           </div>
         </div>
+      )}
+      {confirming && (
+        <ConfirmDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          title={t('tasks.confirm.title', { action: confirmingLabel })}
+          description={t('tasks.confirm.description')}
+          confirmLabel={confirmingLabel}
+          cancelLabel={t('tasks.confirm.cancel')}
+          onConfirm={() => dispatch(confirming)}
+          busy={submitting}
+          color={confirmingStyle?.color}
+        />
       )}
     </>
   )
@@ -532,6 +573,7 @@ function isEmpty(value: unknown): boolean {
 
 // draft_action and secondary_action handles accept a partial form;
 // primary_action, danger_action and unknown elements require valid data.
+// Only draft_action skips the confirmation dialog (see handleAction).
 function acceptsPartialForm(h: Handle): boolean {
   return h.element === 'draft_action' || h.element === 'secondary_action'
 }
