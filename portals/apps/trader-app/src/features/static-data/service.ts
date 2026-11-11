@@ -1,7 +1,7 @@
 import { http } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
 import type { PaginatedResponse } from '@/services/types/common'
-import type { SearchService } from '@opennsw/jsonforms-renderers'
+import type { SearchOption, SearchService } from '@opennsw/jsonforms-renderers'
 import type { StaticDataOption, StaticDataResponse } from './types'
 
 const SEARCH_LIMIT = 20
@@ -55,8 +55,15 @@ function fetchOptions(id: string, version: string): Promise<StaticDataOption[]> 
   return promise
 }
 
-function toSearchOptions(options: StaticDataOption[]) {
-  return options.map((option) => ({ id: option.const, name: option.title }))
+// A row as a search option: the row's own keys, so a displayTemplate can use {const} and {title},
+// plus the id and name every SearchOption carries. id and name are set last, so they always mean
+// const and title; {id} and {name} are the legacy placeholders.
+function toSearchOption(row: StaticDataOption): SearchOption {
+  return { ...row, id: row.const, name: row.title }
+}
+
+function toSearchOptions(rows: StaticDataOption[]): SearchOption[] {
+  return rows.map((row) => toSearchOption(row))
 }
 
 // x-search.dependsOn arrives as params.parent. An empty value means no constraint.
@@ -103,6 +110,6 @@ export const staticDataSearchService: SearchService = {
     const { id, version } = staticDataParams(params)
     const options = await fetchOptions(id, version)
     const match = options.find((option) => option.const === value)
-    return match ? { id: match.const, name: match.title } : undefined
+    return match ? toSearchOption(match) : undefined
   },
 }
