@@ -182,3 +182,38 @@ func TestSearch_ParentScopesPageAndTotal(t *testing.T) {
 		t.Fatalf("expected an empty parent to keep every row, got total %d", all.Total)
 	}
 }
+
+func TestFind(t *testing.T) {
+	ports := json.RawMessage(`{"data":[
+		{"const":"LKCMB","title":"COLOMBO"},
+		{"const":"NLRTM","title":"ROTTERDAM"},
+		{"const":"LKCMB","title":"COLOMBO (DUPLICATE)"},
+		"not an object"
+	]}`)
+	cases := map[string]struct {
+		raw       json.RawMessage
+		value     string
+		want      Option
+		wantFound bool
+		wantErr   bool
+	}{
+		"found":                         {ports, "NLRTM", Option{Const: "NLRTM", Title: "ROTTERDAM"}, true, false},
+		"not found":                     {ports, "XXABC", Option{}, false, false},
+		"the const, never the title":    {ports, "ROTTERDAM", Option{}, false, false},
+		"the const's case must match":   {ports, "lkcmb", Option{}, false, false},
+		"a duplicate const: first wins": {ports, "LKCMB", Option{Const: "LKCMB", Title: "COLOMBO"}, true, false},
+		"a row without a title":         {json.RawMessage(`{"data":[{"const":"LKCMB"}]}`), "LKCMB", Option{}, false, true},
+		"not a static data body":        {json.RawMessage(`[]`), "LKCMB", Option{}, false, true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, found, err := Find(tc.raw, tc.value)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error: got %v, want error %v", err, tc.wantErr)
+			}
+			if found != tc.wantFound || got.Const != tc.want.Const || got.Title != tc.want.Title {
+				t.Fatalf("got %+v, %v; want %+v, %v", got, found, tc.want, tc.wantFound)
+			}
+		})
+	}
+}

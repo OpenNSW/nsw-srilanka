@@ -33,10 +33,13 @@ type DocumentSaver interface {
 	Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error)
 }
 
-// StaticDataTitles returns the title of every row of one version of a
-// static_data artifact, keyed by const. staticdata.Titles satisfies it.
-type StaticDataTitles interface {
-	Of(ctx context.Context, id, version string) (map[string]string, error)
+// StaticData names a code by its row in a static_data artifact: the title of
+// the row of artifact id, in that version, whose const is value, and whether
+// there is such a row. An unknown id or version matches artifact.ErrNotFound
+// and a malformed artifact artifact.ErrInvalid, which fail the step for an
+// admin; any other error is retried.
+type StaticData interface {
+	Title(ctx context.Context, id, version, value string) (title string, found bool, err error)
 }
 
 // staticDataResolver is the name a template calls the static data resolver by.
@@ -71,12 +74,12 @@ var errStaticDataCall = errors.New("staticdata takes a static_data id, its versi
 type HTMLDocumentGeneratorPlugin struct {
 	templates  HTMLTemplateSource
 	files      DocumentSaver
-	staticData StaticDataTitles
+	staticData StaticData
 }
 
 // NewHTMLDocumentGeneratorPlugin builds the plugin. All dependencies must be
 // non-nil.
-func NewHTMLDocumentGeneratorPlugin(templates HTMLTemplateSource, files DocumentSaver, staticData StaticDataTitles) *HTMLDocumentGeneratorPlugin {
+func NewHTMLDocumentGeneratorPlugin(templates HTMLTemplateSource, files DocumentSaver, staticData StaticData) *HTMLDocumentGeneratorPlugin {
 	if templates == nil {
 		panic("templates is nil")
 	}
@@ -194,14 +197,14 @@ func (p *HTMLDocumentGeneratorPlugin) resolveStaticData(ctx context.Context, arg
 		return "", nil
 	}
 
-	titles, err := p.staticData.Of(ctx, id, version)
+	title, found, err := p.staticData.Title(ctx, id, version, code)
 	if err != nil {
 		return nil, err
 	}
-	if title, ok := titles[code]; ok {
-		return title, nil
+	if !found {
+		return code, nil
 	}
-	return code, nil
+	return title, nil
 }
 
 // documentFilename is the stored document's name. Storage takes the key's

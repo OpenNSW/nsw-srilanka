@@ -28,21 +28,22 @@ func (f fakeTemplates) HTMLTemplate(_ context.Context, id string) ([]byte, error
 	return []byte(src), nil
 }
 
-// fakeTitles serves static data titles by "id@version"; one it lacks is not
-// found, and the "down" artifact fails to read.
-type fakeTitles map[string]map[string]string
+// fakeStaticData serves static data titles by "id@version", then const; an
+// artifact it lacks is not found, and the "down" artifact fails to read.
+type fakeStaticData map[string]map[string]string
 
 var errStaticDataDown = errors.New("artifact store unavailable")
 
-func (f fakeTitles) Of(_ context.Context, id, version string) (map[string]string, error) {
+func (f fakeStaticData) Title(_ context.Context, id, version, value string) (string, bool, error) {
 	if id == "down" {
-		return nil, errStaticDataDown
+		return "", false, errStaticDataDown
 	}
 	titles, ok := f[id+"@"+version]
 	if !ok {
-		return nil, fmt.Errorf("static data %q version %q: %w", id, version, artifact.ErrNotFound)
+		return "", false, fmt.Errorf("static data %q version %q: %w", id, version, artifact.ErrNotFound)
 	}
-	return titles, nil
+	title, found := titles[value]
+	return title, found, nil
 }
 
 // fakeSaver records what it was asked to store.
@@ -87,7 +88,7 @@ func htmlDocCtx(inputs map[string]any) plugins.PluginContext {
 
 func TestHTMLDocumentGenerator_RendersStoresAndRecordsKey(t *testing.T) {
 	files := &fakeSaver{}
-	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeTitles{})
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeStaticData{})
 	ctx := htmlDocCtx(map[string]any{
 		"refid":       map[string]any{"reference_id": "PRM-2026-00555"},
 		"application": map[string]any{"applicant_name": "Smith & Co", "fee_amount": json.Number("1400")},
@@ -118,7 +119,7 @@ func permitInputs(applicant string) map[string]any {
 
 func TestHTMLDocumentGenerator_ChangedInputsStoreNewDocument(t *testing.T) {
 	files := &fakeSaver{}
-	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeTitles{})
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeStaticData{})
 	ctx := htmlDocCtx(permitInputs("Smith & Co"))
 
 	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
@@ -136,7 +137,7 @@ func TestHTMLDocumentGenerator_ChangedInputsStoreNewDocument(t *testing.T) {
 
 func TestHTMLDocumentGenerator_EveryRunStores(t *testing.T) {
 	files := &fakeSaver{}
-	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeTitles{})
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files, fakeStaticData{})
 	ctx := htmlDocCtx(permitInputs("Smith & Co"))
 
 	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
@@ -155,7 +156,7 @@ func TestHTMLDocumentGenerator_Filename(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			files := &fakeSaver{}
-			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": `<p>x</p>`}, files, fakeTitles{})
+			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": `<p>x</p>`}, files, fakeStaticData{})
 			require.NoError(t, p.Execute(htmlDocCtx(nil), json.RawMessage(tc.props)))
 			assert.Equal(t, tc.want, files.filename)
 		})
@@ -193,7 +194,7 @@ func TestHTMLDocumentGenerator_Failures(t *testing.T) {
 				ctx.OutputNamespace = ""
 			}
 
-			err := NewHTMLDocumentGeneratorPlugin(templates, files, fakeTitles{}).Execute(ctx, json.RawMessage(tc.props))
+			err := NewHTMLDocumentGeneratorPlugin(templates, files, fakeStaticData{}).Execute(ctx, json.RawMessage(tc.props))
 
 			require.Error(t, err)
 			if tc.wantIs != nil {
@@ -204,7 +205,7 @@ func TestHTMLDocumentGenerator_Failures(t *testing.T) {
 	}
 }
 
-var portTitles = fakeTitles{"ports@1": {"LKCMB": "COLOMBO", "NLRTM": "ROTTERDAM"}}
+var portStaticData = fakeStaticData{"ports@1": {"LKCMB": "COLOMBO", "NLRTM": "ROTTERDAM", "123": "NUMERIC"}}
 
 func TestHTMLDocumentGenerator_StaticDataNamesACode(t *testing.T) {
 	cases := map[string]struct {
@@ -216,11 +217,12 @@ func TestHTMLDocumentGenerator_StaticDataNamesACode(t *testing.T) {
 		"an empty value prints nothing":   {map[string]any{"port": ""}, "<p></p>"},
 		"a missing value prints nothing":  {map[string]any{}, "<p></p>"},
 		"a JSON null prints nothing":      {map[string]any{"port": nil}, "<p></p>"},
+		"a number prints its title":       {map[string]any{"port": 123}, "<p>NUMERIC</p>"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			files := &fakeSaver{}
-			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" "1" .port }}</p>`}, files, portTitles)
+			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" "1" .port }}</p>`}, files, portStaticData)
 
 			require.NoError(t, p.Execute(htmlDocCtx(tc.inputs), json.RawMessage(`{"template_id": "doc"}`)))
 
@@ -232,8 +234,8 @@ func TestHTMLDocumentGenerator_StaticDataNamesACode(t *testing.T) {
 // A title is escaped like any other value.
 func TestHTMLDocumentGenerator_StaticDataTitleIsEscaped(t *testing.T) {
 	files := &fakeSaver{}
-	titles := fakeTitles{"ports@1": {"X": "<b>A & B</b>"}}
-	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" "1" .port }}</p>`}, files, titles)
+	staticData := fakeStaticData{"ports@1": {"X": "<b>A & B</b>"}}
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" "1" .port }}</p>`}, files, staticData)
 
 	require.NoError(t, p.Execute(htmlDocCtx(map[string]any{"port": "X"}), json.RawMessage(`{"template_id": "doc"}`)))
 
@@ -252,12 +254,14 @@ func TestHTMLDocumentGenerator_StaticDataFailures(t *testing.T) {
 		"too few arguments":      {`{{ staticdata "ports" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
 		"empty version":          {`{{ staticdata "ports" "" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
 		"a list as the value":    {`{{ staticdata "ports" "1" .port }}`, map[string]any{"port": []any{"LKCMB"}}, true, errStaticDataCall},
+		"an id that isn't text":  {`{{ staticdata 5 "1" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
+		"a bool as the value":    {`{{ staticdata "ports" "1" .port }}`, map[string]any{"port": true}, true, errStaticDataCall},
 		"static data unreadable": {`{{ staticdata "down" "1" .port }}`, map[string]any{"port": "LKCMB"}, false, errStaticDataDown},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			files := &fakeSaver{}
-			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": tc.template}, files, portTitles)
+			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": tc.template}, files, portStaticData)
 			ctx := htmlDocCtx(tc.inputs)
 
 			err := p.Execute(ctx, json.RawMessage(`{"template_id": "doc"}`))
