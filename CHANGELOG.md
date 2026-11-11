@@ -6,6 +6,88 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-11
+
+This release upgrades the workflow engine so that a form field the user removes stays removed, generates the Cargo Dispatch Note (EXP 3b) for each CDN, and stores the documents SLPA sends. It also sends Customs the CusDec location of goods and the CDN SLPA No., sends SLPA the trailer and agent pass numbers, and asks the trader to confirm before submitting a task or creating a consignment. It has no migration and no config change, but it rolls out in two steps: the backend first, on every replica, and then the Trader Portal and the artifacts pin together. Once flows run on the new artifacts, the backend can't go back to 1.0.0. It also takes security fixes in go-jose and pgx.
+
+### Upgrade notes
+
+#### Upgrade in two steps: the backend first, then the portal and the artifacts pin together ([#1175](https://github.com/OpenNSW/nsw-srilanka/pull/1175), [#1174](https://github.com/OpenNSW/nsw-srilanka/pull/1174), [#1143](https://github.com/OpenNSW/nsw-srilanka/pull/1143), [#1186](https://github.com/OpenNSW/nsw-srilanka/pull/1186))
+
+The pinned artifacts need the 1.1.0 backend, and the 1.1.0 Trader Portal needs the pinned artifacts, so neither can lead on its own. Do this for TNSW and for each agency.
+
+1. **The backend first, on every replica.** Deploy the 1.1.0 chart with `frontend.image.tag: 1.0.0`, so the portal stays on 1.0.0, and keep `artifactLoader.github.ref` at the 1.0.0 pin, [`5585945`](https://github.com/OpenNSW/one-trade-artifacts/commit/558594551e2c074300055dd23658d10304d92538). Wait until no pod still runs 1.0.0. The pinned artifacts need what only this backend has:
+   - their forms use `x?!`, which only this engine reads. An older engine reads it as a source that is required and never exists, so those form nodes park. Old and new replicas share the workflow work during a rolling update, so the pin waits until every replica is on 1.1.0;
+   - the Cargo Dispatch Note template calls `staticdata`, which only this backend defines, so the document fails to render without it;
+   - the step that stores SLPA's barcode needs a document sent inline as a `data:` URI, which only this backend stores. Without it the step fails and is retried, and holds up the gate pass step.
+2. **Then the portal and the pin, in one deployment, with the site offline.** Remove the `frontend.image.tag` override, so the portal runs 1.1.0 with `@opennsw/jsonforms-renderers` 0.19.0, and move `artifactLoader.github.ref` to `8ac83a4` (see below). 0.19.0 refuses the old date formats on any upload or download that has a date, and the pinned artifacts write their formats in the Unicode date letters (`M/D/YY` becomes `M/d/yy`), which 0.18.0 writes wrongly. Take the site offline and invalidate login sessions while you deploy, so that a portal still on the old release doesn't load the new forms. Consignments in progress aren't affected by the formats: date fields store `yyyy-MM-dd` whatever the format says, no XML document is stored, and the backend doesn't read them.
+
+There is no migration and no config change.
+
+#### Running workflows and rollback ([#1175](https://github.com/OpenNSW/nsw-srilanka/pull/1175))
+
+- The engine's output mapping replaces each destination instead of merging into it, for flows on every manifest version. That is the fix: a field the user removes before resubmitting stays removed. Workers replay the histories of open workflows under the new rules, and an audit of every definition in the 1.0.0 artifacts found one case that this changes:
+  - an SLTB flow where the trader filled C.A.P (Box 13, `containerCount`) in the CusDec draft and later cleared it. If the flow hasn't reached `customs_4a_prepare_cdn_items`, that node parks for an admin (`INPUT_MAPPING`), and patching in any count resolves it, because the flow takes the real count from CIG. If it has already passed it, the workflow can't be replayed and stops with a nondeterminism error, which shows in Temporal as failing workflow tasks, not as an admin park.
+  - The Customs flow isn't affected, and flows started on the pinned artifacts can't hit this, because [one-trade-artifacts#384](https://github.com/OpenNSW/one-trade-artifacts/pull/384) drops the requirement. Move the pin soon after step 1.
+- Don't roll the backend back below 1.1.0 once flows have run on the new pin: their histories don't replay on the older engine.
+
+#### Consignment task lists follow the read roles ([#1139](https://github.com/OpenNSW/nsw-srilanka/pull/1139))
+
+- A trader's or CHA's consignment detail lists only the tasks whose recorded roles include theirs. Nothing to do: every deployment from 0.15.0 on records each task's roles, and every TNSW task template in the pinned artifacts lists both `trader` and `cha`, so the lists don't change.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`8ac83a4`](https://github.com/OpenNSW/one-trade-artifacts/commit/8ac83a47224d0163ab6cd1387909ff13589a0af3) (11 November 2026), for TNSW and for each agency, in step 2 above. It holds the artifact changes that depend on this release:
+  - [one-trade-artifacts#380](https://github.com/OpenNSW/one-trade-artifacts/pull/380): form fields the user removed stay removed when they resubmit, through `x?!`. It needs [#1175](https://github.com/OpenNSW/nsw-srilanka/pull/1175);
+  - [one-trade-artifacts#384](https://github.com/OpenNSW/one-trade-artifacts/pull/384): preparing the CDN items no longer requires the trader's container count;
+  - [one-trade-artifacts#379](https://github.com/OpenNSW/one-trade-artifacts/pull/379): a Cargo Dispatch Note (EXP 3b) is generated for each CDN, with the ports' names in boxes 5 and 6. It needs [#1174](https://github.com/OpenNSW/nsw-srilanka/pull/1174);
+  - [one-trade-artifacts#375](https://github.com/OpenNSW/one-trade-artifacts/pull/375): the XML date formats are written in the Unicode date letters. It needs the 1.1.0 Trader Portal ([#1186](https://github.com/OpenNSW/nsw-srilanka/pull/1186)), in the same deployment;
+  - [one-trade-artifacts#367](https://github.com/OpenNSW/one-trade-artifacts/pull/367): SLPA's payment receipt, gate pass and barcode are stored in our storage. It needs [#1143](https://github.com/OpenNSW/nsw-srilanka/pull/1143);
+  - [one-trade-artifacts#377](https://github.com/OpenNSW/one-trade-artifacts/pull/377): the CusDec form collects the location of goods, and the CDN form the SLPA No. [#1171](https://github.com/OpenNSW/nsw-srilanka/pull/1171) sends them to SLC Edge;
+  - [one-trade-artifacts#371](https://github.com/OpenNSW/one-trade-artifacts/pull/371): the gate pass form asks for the trailer and agent pass numbers. [#1147](https://github.com/OpenNSW/nsw-srilanka/pull/1147) sends them to SLPA.
+- It also carries these changes:
+  - [one-trade-artifacts#382](https://github.com/OpenNSW/one-trade-artifacts/pull/382): the trader picks a payment method, where GovPay was preselected;
+  - [one-trade-artifacts#374](https://github.com/OpenNSW/one-trade-artifacts/pull/374): the SLTB officer's CusDec XML has ASYCUDA's tax and valuation elements;
+  - [one-trade-artifacts#372](https://github.com/OpenNSW/one-trade-artifacts/pull/372): the CDN and boat note system flows stay off the trader's task list;
+  - [one-trade-artifacts#370](https://github.com/OpenNSW/one-trade-artifacts/pull/370): SLTB's Number & Kind, number (Box 31) accepts decimals.
+- The artifacts repository's own release tooling changed as well ([#346](https://github.com/OpenNSW/one-trade-artifacts/pull/346), [#348](https://github.com/OpenNSW/one-trade-artifacts/pull/348), [#368](https://github.com/OpenNSW/one-trade-artifacts/pull/368) and [#369](https://github.com/OpenNSW/one-trade-artifacts/pull/369)): each bundle snapshot is published as a GitHub release and deployed to the store from it. Nothing in the artifacts themselves changes.
+
+### Added
+
+- **Static data names in generated documents.** An `HTML_DOCUMENT_GENERATOR` template can print a stored code's name from a `static_data` artifact, for example a port's name for `LKCMB`, with `{{ staticdata "<id>" "<version>" <value> }}`. An empty value prints nothing, and a value no row has prints as it is. The workflow guide describes it. ([#1174](https://github.com/OpenNSW/nsw-srilanka/pull/1174))
+- **Documents sent inline.** A step can store a document that a service sends as a `data:` URI, as SLPA does for its barcode. ([#1143](https://github.com/OpenNSW/nsw-srilanka/pull/1143))
+- **More fields to Customs and SLPA.** The CusDec sends the location of goods and the CDN the SLPA No. to SLC Edge, and the gate pass request sends the trailer and agent pass numbers to SLPA, once the pinned artifacts collect them. An empty field is left out, so a declaration or dispatch note without these values keeps its `nswId`, and a retry across the upgrade is still recognised as the same submission. ([#1171](https://github.com/OpenNSW/nsw-srilanka/pull/1171), [#1147](https://github.com/OpenNSW/nsw-srilanka/pull/1147))
+- **Confirmations in the Trader Portal.** The portal asks the trader to confirm before it submits a task form or creates a consignment. ([#1177](https://github.com/OpenNSW/nsw-srilanka/pull/1177))
+
+### Changed
+
+- The workflow engine replaces each output destination instead of merging into it. See the upgrade notes. ([#1175](https://github.com/OpenNSW/nsw-srilanka/pull/1175))
+- The Trader Portal uses `@opennsw/jsonforms-renderers` 0.19.0, which reads date formats in the Unicode date letters. See the upgrade notes. ([#1186](https://github.com/OpenNSW/nsw-srilanka/pull/1186))
+
+### Fixed
+
+- A form field the user removes before resubmitting stays removed. ([#1175](https://github.com/OpenNSW/nsw-srilanka/pull/1175))
+- A trader's or CHA's consignment detail lists only the tasks their role may read. ([#1139](https://github.com/OpenNSW/nsw-srilanka/pull/1139))
+- The Trader Portal footer's "Powered by" line matches the body text size on laptops. ([#1140](https://github.com/OpenNSW/nsw-srilanka/pull/1140))
+
+### Security
+
+- The backend takes go-jose 4.1.9, which fixes [GHSA-r39w-98wm-9pp6](https://github.com/go-jose/go-jose/security/advisories/GHSA-r39w-98wm-9pp6), [GHSA-27pc-rm86-68pq](https://github.com/go-jose/go-jose/security/advisories/GHSA-27pc-rm86-68pq), [GHSA-p9j4-2j95-j4rv](https://github.com/go-jose/go-jose/security/advisories/GHSA-p9j4-2j95-j4rv), [GHSA-v6h2-qj3f-2h6v](https://github.com/go-jose/go-jose/security/advisories/GHSA-v6h2-qj3f-2h6v) and [GHSA-c67m-wr4h-2ccg](https://github.com/go-jose/go-jose/security/advisories/GHSA-c67m-wr4h-2ccg), and pgx 5.12.0, which fixes two high-severity advisories, [GHSA-j38q-h3ph-jjpq](https://github.com/jackc/pgx/security/advisories/GHSA-j38q-h3ph-jjpq) and [GHSA-95fj-3fxw-g62g](https://github.com/jackc/pgx/security/advisories/GHSA-95fj-3fxw-g62g). ([#1166](https://github.com/OpenNSW/nsw-srilanka/pull/1166))
+
+### Known issues
+
+- An engine change in `OpenNSW/core` applies to the workflows already running, because core doesn't version engine changes. A workflow whose history the new rules decide differently stops with a nondeterminism error, and no tool yet replays production histories against a build before a core upgrade. ([#1175](https://github.com/OpenNSW/nsw-srilanka/pull/1175))
+- SLC Edge callbacks that TNSW holds for retry live in the server's memory: a restart drops the pending ones, and one still not applied after 24 hours is logged and dropped. The audit record of such a callback shows its `202`, and the retry that finally applies it writes none. ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+- With the `github` artifact loader, workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment, and they are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines exported over OTLP whatever `server.logLevel` is, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks, and authenticated SLC Edge callbacks, are audited. Payments and the storage module's own events are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Cancelling a Cargo Dispatch Note in TNSW does not cancel it in ASYCUDA World, which NSW has no call for: the note stays registered there. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
+
 ## [1.0.0] - 2026-11-05
 
 This is the first stable release, and the first for production. Its code is that of 1.0.0-rc.4: the release changes only the version and these notes, so a deployment already on 1.0.0-rc.4 has nothing to do. A new deployment starts from this release's example config, Helm values and `idp/bootstrap/`, and from an empty database, which the single `000001` migration builds. The upgrade notes combine those of 1.0.0-rc.1 to 1.0.0-rc.4 for a deployment on 0.15.0. Since 0.15.0, three required config changes (two new `refid` formats and one changed) go with a new image and a new artifacts pin, and the release adds the CusDec registration number for the SLTB tea flow, a dark appearance in the Trader Portal and the `VALUE_WRITER` step. It removes the unused `GET /api/v1/chas` route and the `cha:read` scope, answers early SLC Edge callbacks with a `202` and retries them itself, and fits the Trader Portal to small screens.
@@ -1679,7 +1761,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...v1.0.0
 [1.0.0-rc.4]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.3...v1.0.0-rc.4
 [1.0.0-rc.3]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0-rc.2...v1.0.0-rc.3
