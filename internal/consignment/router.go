@@ -382,6 +382,8 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
+// filterStartableFlows clears the list when the caller lacks the permission
+// required by the flow start route.
 func (c *Router) filterStartableFlows(ctx context.Context, detail *DetailDTO) {
 	if !c.canStartFlows(ctx) {
 		detail.StartableFlows = []FlowOption{}
