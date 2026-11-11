@@ -5,135 +5,195 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/OpenNSW/core/pagination"
 )
 
-// Option is one selectable row in a static_data artifact.
-type Option struct {
-	Const   string   `json:"const"`
-	Title   string   `json:"title"`
-	Parents []string `json:"parents,omitempty"`
+// defaultSearchKeys are the row keys a search matches when the request names none: the
+// label, then the stored value, of a row in the const/title shape.
+var defaultSearchKeys = []string{"title", "const"}
+
+// parentsKey is the row key x-search.dependsOn filters on: the values of the sibling field
+// a row belongs to.
+const parentsKey = "parents"
+
+// SearchResult is the pagination envelope returned when a static-data request includes q,
+// offset, or limit. Each item is a row exactly as the artifact has it, so every key reaches
+// the client.
+type SearchResult = pagination.Page[json.RawMessage]
+
+// row is one object of a static_data artifact, with what Search reads from it.
+type row struct {
+	raw json.RawMessage
+	// texts holds the lowercased text of each search key, in search-key order; "" when the
+	// row has no searchable value for that key.
+	texts   []string
+	parents []string
 }
 
-// SearchResult is the pagination envelope returned when a static-data request
-// includes q, offset, or limit.
-type SearchResult = pagination.Page[Option]
-
-// Search loads nothing itself: raw is one static_data artifact body. An object
-// entry must have a non-empty const and title; a row that lacks either is an
-// error. Non-object entries are skipped. It then drops rows whose parents list
-// does not include parent (an empty parent keeps every row), ranks the
-// remainder against query, and returns one page. query is matched
-// case-insensitively against title and const. An empty query keeps artifact order.
-func Search(raw json.RawMessage, query, parent string, offset, limit int) (SearchResult, error) {
-	options, err := parseOptions(raw)
+// Search loads nothing itself: raw is one static_data artifact body. Rows are the objects in
+// its "data" array; other entries are skipped. It drops rows whose parents list does not
+// include parent (an empty parent keeps every row), ranks the remainder against query on
+// searchKeys (empty means title, then const), and returns one page of the original rows. A
+// row needs no particular key: one that lacks a search key just cannot match on it. query
+// is matched case-insensitively. An empty query keeps artifact order.
+func Search(raw json.RawMessage, query, parent string, searchKeys []string, offset, limit int) (SearchResult, error) {
+	if len(searchKeys) == 0 {
+		searchKeys = defaultSearchKeys
+	}
+	rows, err := parseRows(raw, searchKeys)
 	if err != nil {
 		return SearchResult{}, err
 	}
-	scoped := filterByParent(options, parent)
+	scoped := filterByParent(rows, parent)
 	matched := rank(scoped, query)
-	page := pageOptions(matched, offset, limit)
-	return pagination.NewPageResult(page, int64(len(matched)), offset, limit), nil
+	page := pageRows(matched, offset, limit)
+	items := make([]json.RawMessage, len(page))
+	for i, r := range page {
+		items[i] = r.raw
+	}
+	return pagination.NewPageResult(items, int64(len(matched)), offset, limit), nil
 }
 
 // filterByParent runs before ranking and pagination so page contents and total
 // describe the same parent scope. A row with no parents list does not match.
-func filterByParent(options []Option, parent string) []Option {
+func filterByParent(rows []row, parent string) []row {
 	if parent == "" {
-		return options
+		return rows
 	}
-	scoped := make([]Option, 0, len(options))
-	for _, opt := range options {
-		if slices.Contains(opt.Parents, parent) {
-			scoped = append(scoped, opt)
+	scoped := make([]row, 0, len(rows))
+	for _, r := range rows {
+		if slices.Contains(r.parents, parent) {
+			scoped = append(scoped, r)
 		}
 	}
 	return scoped
 }
 
-func parseOptions(raw json.RawMessage) ([]Option, error) {
+func parseRows(raw json.RawMessage, searchKeys []string) ([]row, error) {
 	var envelope struct {
 		Data []json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return nil, fmt.Errorf("parse static data options: %w", err)
+		return nil, fmt.Errorf("parse static data rows: %w", err)
 	}
-	options := make([]Option, 0, len(envelope.Data))
-	for i, item := range envelope.Data {
-		var opt Option
-		if err := json.Unmarshal(item, &opt); err != nil {
+	rows := make([]row, 0, len(envelope.Data))
+	for _, item := range envelope.Data {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(item, &fields); err != nil || fields == nil {
 			continue
 		}
-		if opt.Const == "" || opt.Title == "" {
-			return nil, fmt.Errorf("static data option at index %d must have a non-empty const and title", i)
+		texts := make([]string, len(searchKeys))
+		for i, key := range searchKeys {
+			texts[i] = searchText(fields[key])
 		}
-		options = append(options, opt)
+		rows = append(rows, row{raw: item, texts: texts, parents: rowParents(fields)})
 	}
-	return options, nil
+	return rows, nil
 }
 
-// rank scores a lowercased query in four tiers: exact title or const, prefix
-// of title or const, a later word in the title, then a substring of either.
-// Equal scores prefer the shorter title, then const, which is the unique key.
-func rank(options []Option, query string) []Option {
+// rowParents reads a row's parents list. A missing or malformed list is none, so the row
+// matches no parent.
+func rowParents(fields map[string]json.RawMessage) []string {
+	var parents []string
+	if err := json.Unmarshal(fields[parentsKey], &parents); err != nil {
+		return nil
+	}
+	return parents
+}
+
+// searchText is the lowercased text a search matches for one value: a string as it is, a
+// number or boolean as written. Anything else (missing, null, an array, an object) is "".
+func searchText(value json.RawMessage) string {
+	if len(value) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(value, &s); err == nil {
+		return strings.ToLower(s)
+	}
+	var n json.Number
+	if err := json.Unmarshal(value, &n); err == nil {
+		return n.String()
+	}
+	var b bool
+	if err := json.Unmarshal(value, &b); err == nil {
+		return strconv.FormatBool(b)
+	}
+	return ""
+}
+
+// rank scores a lowercased query in four tiers, each over every search key: exact value,
+// prefix of a value, a later word of a value, then a substring of a value. Equal scores
+// prefer the shorter first-key value, then the other keys' values in key order.
+func rank(rows []row, query string) []row {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
-		return options
+		return rows
 	}
 
 	type scored struct {
-		opt   Option
+		r     row
 		score int
 	}
-	matched := make([]scored, 0, len(options))
-	for _, opt := range options {
-		score, ok := matchScore(opt, q)
+	matched := make([]scored, 0, len(rows))
+	for _, r := range rows {
+		score, ok := matchScore(r, q)
 		if !ok {
 			continue
 		}
-		matched = append(matched, scored{opt: opt, score: score})
+		matched = append(matched, scored{r: r, score: score})
 	}
 	sort.SliceStable(matched, func(i, j int) bool {
 		if matched[i].score != matched[j].score {
 			return matched[i].score < matched[j].score
 		}
-		if len(matched[i].opt.Title) != len(matched[j].opt.Title) {
-			return len(matched[i].opt.Title) < len(matched[j].opt.Title)
-		}
-		return strings.ToLower(matched[i].opt.Const) < strings.ToLower(matched[j].opt.Const)
+		return tieLess(matched[i].r.texts, matched[j].r.texts)
 	})
 
-	out := make([]Option, len(matched))
+	out := make([]row, len(matched))
 	for i, m := range matched {
-		out[i] = m.opt
+		out[i] = m.r
 	}
 	return out
 }
 
-func matchScore(opt Option, q string) (int, bool) {
-	title := strings.ToLower(opt.Title)
-	code := strings.ToLower(opt.Const)
-	switch {
-	case title == q || code == q:
-		return 0, true
-	case strings.HasPrefix(title, q) || strings.HasPrefix(code, q):
-		return 1, true
-	case wordBoundary(title, q):
-		return 2, true
-	case strings.Contains(title, q) || strings.Contains(code, q):
-		return 3, true
-	default:
-		return 0, false
+// matchTiers are the ways a search text can match a query, best first. A row's score is the
+// index of the first tier any of its texts matches.
+var matchTiers = []func(text, q string) bool{
+	func(text, q string) bool { return text == q },
+	strings.HasPrefix,
+	wordBoundary,
+	strings.Contains,
+}
+
+func matchScore(r row, q string) (int, bool) {
+	for tier, matches := range matchTiers {
+		for _, text := range r.texts {
+			if text != "" && matches(text, q) {
+				return tier, true
+			}
+		}
 	}
+	return 0, false
+}
+
+// tieLess orders two equally scored rows by their texts, which always hold one entry per
+// search key: the shorter first-key value first, then the other keys' values in key order.
+func tieLess(a, b []string) bool {
+	if len(a[0]) != len(b[0]) {
+		return len(a[0]) < len(b[0])
+	}
+	return slices.Compare(a[1:], b[1:]) < 0
 }
 
 // wordBoundary reports whether q starts a word after the first. The first word
-// is a prefix of the whole title, so the prefix tier already covers it.
+// is a prefix of the whole value, so the prefix tier already covers it.
 // Separators are space, slash, and hyphen.
-func wordBoundary(title, q string) bool {
-	words := strings.FieldsFunc(title, func(r rune) bool {
+func wordBoundary(text, q string) bool {
+	words := strings.FieldsFunc(text, func(r rune) bool {
 		return r == ' ' || r == '/' || r == '-'
 	})
 	if len(words) < 2 {
@@ -147,13 +207,13 @@ func wordBoundary(title, q string) bool {
 	return false
 }
 
-func pageOptions(options []Option, offset, limit int) []Option {
-	if offset >= len(options) || limit <= 0 {
-		return []Option{}
+func pageRows(rows []row, offset, limit int) []row {
+	if offset >= len(rows) || limit <= 0 {
+		return []row{}
 	}
 	end := offset + limit
-	if end > len(options) {
-		end = len(options)
+	if end > len(rows) {
+		end = len(rows)
 	}
-	return options[offset:end]
+	return rows[offset:end]
 }

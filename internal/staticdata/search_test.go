@@ -2,121 +2,125 @@ package staticdata
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
 	"testing"
 )
 
-func TestRank_PrefixBeforeContains(t *testing.T) {
-	options := []Option{
-		{Const: "1", Title: "Port of Colombo"},
-		{Const: "2", Title: "Colombo Port"},
-		{Const: "3", Title: "Galle"},
+// values returns the value of key in each item, in order.
+func values(t *testing.T, items []json.RawMessage, key string) []string {
+	t.Helper()
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		var fields map[string]any
+		if err := json.Unmarshal(item, &fields); err != nil {
+			t.Fatalf("item is not an object: %s", item)
+		}
+		out = append(out, fmt.Sprint(fields[key]))
 	}
+	return out
+}
 
-	got := rank(options, "col")
-	if len(got) != 2 {
-		t.Fatalf("expected 2 matches, got %d (%v)", len(got), got)
+// searchValues searches the rows in data (a JSON array) and returns key of each match, in
+// rank order.
+func searchValues(t *testing.T, data, query string, searchKeys []string, key string) []string {
+	t.Helper()
+	got, err := Search(json.RawMessage(`{"data":`+data+`}`), query, "", searchKeys, 0, 100)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if got[0].Title != "Colombo Port" || got[1].Title != "Port of Colombo" {
-		t.Fatalf("expected prefix before contains, got %q then %q", got[0].Title, got[1].Title)
+	return values(t, got.Items, key)
+}
+
+func expectValues(t *testing.T, got, want []string) {
+	t.Helper()
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }
 
-func TestRank_ExactTitleBeforePrefix(t *testing.T) {
-	options := []Option{
-		{Const: "1", Title: "Colombo Port"},
-		{Const: "2", Title: "Colombo"},
-	}
-
-	got := rank(options, "COLOMBO")
-	if len(got) != 2 || got[0].Const != "2" || got[1].Const != "1" {
-		t.Fatalf("expected exact title first, got %+v", got)
-	}
+func TestSearch_PrefixBeforeContains(t *testing.T) {
+	data := `[
+		{"const":"1","title":"Port of Colombo"},
+		{"const":"2","title":"Colombo Port"},
+		{"const":"3","title":"Galle"}
+	]`
+	expectValues(t, searchValues(t, data, "col", nil, "const"), []string{"2", "1"})
 }
 
-func TestRank_ConstPrefixBeforeTitleContains(t *testing.T) {
-	options := []Option{
-		{Const: "X", Title: "The Colombo Harbor"},
-		{Const: "COL", Title: "Harbor"},
-	}
-
-	got := rank(options, "col")
-	if len(got) != 2 || got[0].Const != "COL" || got[1].Const != "X" {
-		t.Fatalf("expected const prefix before title contains, got %+v", got)
-	}
+func TestSearch_ExactTitleBeforePrefix(t *testing.T) {
+	data := `[
+		{"const":"1","title":"Colombo Port"},
+		{"const":"2","title":"Colombo"}
+	]`
+	expectValues(t, searchValues(t, data, "COLOMBO", nil, "const"), []string{"2", "1"})
 }
 
-func TestRank_WordBoundaryBeforeSubstring(t *testing.T) {
-	options := []Option{
-		{Const: "USSJL", Title: "SOUTHAMPTON"},
-		{Const: "USHTO", Title: "EAST HAMPTON"},
-		{Const: "USPHF", Title: "HAMPTON/HAMPTON ROADS"},
-	}
-
-	got := rank(options, "hampton")
-	if len(got) != 3 || got[0].Const != "USPHF" || got[1].Const != "USHTO" || got[2].Const != "USSJL" {
-		t.Fatalf("expected prefix, then a later word, then a substring, got %+v", got)
-	}
+func TestSearch_ConstPrefixBeforeTitleContains(t *testing.T) {
+	data := `[
+		{"const":"X","title":"The Colombo Harbor"},
+		{"const":"COL","title":"Harbor"}
+	]`
+	expectValues(t, searchValues(t, data, "col", nil, "const"), []string{"COL", "X"})
 }
 
-func TestRank_WordBoundaryRoads(t *testing.T) {
-	options := []Option{
-		{Const: "USUJS", Title: "HAMPTON"},
-		{Const: "USPHF", Title: "HAMPTON/HAMPTON ROADS"},
-	}
-
-	got := rank(options, "roads")
-	if len(got) != 1 || got[0].Const != "USPHF" {
-		t.Fatalf("expected the word-boundary match, got %+v", got)
-	}
+func TestSearch_WordBoundaryBeforeSubstring(t *testing.T) {
+	data := `[
+		{"const":"USSJL","title":"SOUTHAMPTON"},
+		{"const":"USHTO","title":"EAST HAMPTON"},
+		{"const":"USPHF","title":"HAMPTON/HAMPTON ROADS"}
+	]`
+	expectValues(t, searchValues(t, data, "hampton", nil, "const"), []string{"USPHF", "USHTO", "USSJL"})
 }
 
-func TestRank_ShorterTitleThenConst(t *testing.T) {
-	options := []Option{
-		{Const: "USHPN", Title: "HAMPTON"},
-		{Const: "GBHMP", Title: "HAMPTON"},
-		{Const: "USHPF", Title: "HAMPTON FALLS"},
-	}
-
-	got := rank(options, "hamp")
-	if len(got) != 3 || got[0].Const != "GBHMP" || got[1].Const != "USHPN" || got[2].Const != "USHPF" {
-		t.Fatalf("expected shorter titles, then const, got %+v", got)
-	}
+func TestSearch_WordBoundaryRoads(t *testing.T) {
+	data := `[
+		{"const":"USUJS","title":"HAMPTON"},
+		{"const":"USPHF","title":"HAMPTON/HAMPTON ROADS"}
+	]`
+	expectValues(t, searchValues(t, data, "roads", nil, "const"), []string{"USPHF"})
 }
 
-func TestRank_EqualLengthOrdersByConstNotTitle(t *testing.T) {
-	options := []Option{
-		{Const: "Z", Title: "PORT A"},
-		{Const: "A", Title: "PORT B"},
-	}
-
-	got := rank(options, "port")
-	if len(got) != 2 || got[0].Const != "A" || got[1].Const != "Z" {
-		t.Fatalf("expected const order for equal-length titles, got %+v", got)
-	}
+func TestSearch_ShorterTitleThenConst(t *testing.T) {
+	data := `[
+		{"const":"USHPN","title":"HAMPTON"},
+		{"const":"GBHMP","title":"HAMPTON"},
+		{"const":"USHPF","title":"HAMPTON FALLS"}
+	]`
+	expectValues(t, searchValues(t, data, "hamp", nil, "const"), []string{"GBHMP", "USHPN", "USHPF"})
 }
 
-func TestRank_ExactConst(t *testing.T) {
-	options := []Option{
-		{Const: "USUJS", Title: "HAMPTON"},
-		{Const: "GBHMP", Title: "HAMPTON"},
-	}
-
-	got := rank(options, "usujs")
-	if len(got) != 1 || got[0].Const != "USUJS" {
-		t.Fatalf("expected the exact const, got %+v", got)
-	}
+func TestSearch_EqualLengthOrdersByConstNotTitle(t *testing.T) {
+	data := `[
+		{"const":"Z","title":"PORT A"},
+		{"const":"A","title":"PORT B"}
+	]`
+	expectValues(t, searchValues(t, data, "port", nil, "const"), []string{"A", "Z"})
 }
 
-func TestRank_EmptyQueryKeepsArtifactOrder(t *testing.T) {
-	options := []Option{
-		{Const: "b", Title: "Beta"},
-		{Const: "a", Title: "Alpha"},
-	}
+func TestSearch_ExactConst(t *testing.T) {
+	data := `[
+		{"const":"USUJS","title":"HAMPTON"},
+		{"const":"GBHMP","title":"HAMPTON"}
+	]`
+	expectValues(t, searchValues(t, data, "usujs", nil, "const"), []string{"USUJS"})
+}
 
-	got := rank(options, "   ")
-	if len(got) != 2 || got[0].Const != "b" || got[1].Const != "a" {
-		t.Fatalf("expected artifact order, got %+v", got)
-	}
+func TestSearch_EmptyQueryKeepsArtifactOrder(t *testing.T) {
+	data := `[
+		{"const":"b","title":"Beta"},
+		{"const":"a","title":"Alpha"}
+	]`
+	expectValues(t, searchValues(t, data, "   ", nil, "const"), []string{"b", "a"})
+}
+
+func TestSearch_EmptySearchKeysUseTheDefault(t *testing.T) {
+	data := `[
+		{"const":"LK","title":"Sri Lanka"},
+		{"const":"GB","title":"United Kingdom"}
+	]`
+	expectValues(t, searchValues(t, data, "lk", []string{}, "const"), []string{"LK"})
+	expectValues(t, searchValues(t, data, "united", []string{}, "const"), []string{"GB"})
 }
 
 func TestSearch_LimitAndOffset(t *testing.T) {
@@ -128,34 +132,101 @@ func TestSearch_LimitAndOffset(t *testing.T) {
 		{"const":"4","title":"Galle"}
 	]}`)
 
-	got, err := Search(raw, "colombo", "", 1, 1)
+	got, err := Search(raw, "colombo", "", nil, 1, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got.Total != 3 || got.Offset != 1 || got.Limit != 1 {
 		t.Fatalf("unexpected envelope: %+v", got)
 	}
-	if len(got.Items) != 1 || got.Items[0].Const != "3" {
-		t.Fatalf("expected the second-ranked match, got %+v", got.Items)
+	expectValues(t, values(t, got.Items, "const"), []string{"3"})
+}
+
+func TestSearch_ErrorsWhenNotAnArtifact(t *testing.T) {
+	if _, err := Search(json.RawMessage(`not json`), "", "", nil, 0, 20); err == nil {
+		t.Fatal("expected an error")
 	}
 }
 
-func TestSearch_ErrorsWhenConstOrTitleMissing(t *testing.T) {
-	cases := []struct {
-		name string
-		raw  string
-	}{
-		{name: "missing title", raw: `{"data":[{"const":"LK"},{"const":"GB","title":"United Kingdom"}]}`},
-		{name: "missing const", raw: `{"data":[{"title":"Sri Lanka"}]}`},
-		{name: "empty title", raw: `{"data":[{"const":"LK","title":""}]}`},
+func TestSearch_KeepsRowsWithoutConstOrTitle(t *testing.T) {
+	data := `[
+		{"const":"LK"},
+		{"title":"Sri Lanka"},
+		{"const":"GB","title":""}
+	]`
+	expectValues(t, searchValues(t, data, "lk", nil, "const"), []string{"LK"})
+	expectValues(t, searchValues(t, data, "sri", nil, "title"), []string{"Sri Lanka"})
+	expectValues(t, searchValues(t, data, "gb", nil, "const"), []string{"GB"})
+}
+
+func TestSearch_ReturnsTheWholeRow(t *testing.T) {
+	raw := json.RawMessage(`{"data":[
+		{"const":"22V4","title":"20x8 6, Mechanical","description":"20x8 6, Mechanical ventilation system","group":"Ventilated","size":20}
+	]}`)
+
+	got, err := Search(raw, "22v4", "", nil, 0, 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if _, err := Search(json.RawMessage(tc.raw), "", "", 0, 20); err == nil {
-				t.Fatal("expected an error")
-			}
-		})
+	if len(got.Items) != 1 {
+		t.Fatalf("expected one match, got %d", len(got.Items))
 	}
+	var row map[string]any
+	if err := json.Unmarshal(got.Items[0], &row); err != nil {
+		t.Fatalf("item is not an object: %s", got.Items[0])
+	}
+	want := map[string]any{
+		"const":       "22V4",
+		"title":       "20x8 6, Mechanical",
+		"description": "20x8 6, Mechanical ventilation system",
+		"group":       "Ventilated",
+		"size":        float64(20),
+	}
+	if fmt.Sprint(row) != fmt.Sprint(want) {
+		t.Fatalf("got %v, want %v", row, want)
+	}
+}
+
+func TestSearch_CustomSearchKeys(t *testing.T) {
+	data := `[
+		{"foo":"A1","boo":"Alpha"},
+		{"foo":"B2","boo":"Beta"},
+		{"foo":"AL9","boo":"Gamma"}
+	]`
+	// "al" is a prefix of boo "Alpha" and of foo "AL9". Both rank in the prefix tier, and their
+	// first keys (boo) have equal length, so the next key (foo) decides: "a1" before "al9".
+	expectValues(t, searchValues(t, data, "al", []string{"boo", "foo"}, "foo"), []string{"A1", "AL9"})
+	expectValues(t, searchValues(t, data, "beta", []string{"boo", "foo"}, "foo"), []string{"B2"})
+}
+
+func TestSearch_MatchesOnlyTheSearchKeys(t *testing.T) {
+	data := `[
+		{"foo":"A1","boo":"Alpha"}
+	]`
+	expectValues(t, searchValues(t, data, "alpha", []string{"foo"}, "foo"), []string{})
+	expectValues(t, searchValues(t, data, "alpha", nil, "foo"), []string{})
+	expectValues(t, searchValues(t, data, "alpha", []string{"boo"}, "foo"), []string{"A1"})
+}
+
+func TestSearch_FirstSearchKeyLengthBreaksTies(t *testing.T) {
+	data := `[
+		{"foo":"1","boo":"Colombo Harbour"},
+		{"foo":"2","boo":"Colombo"}
+	]`
+	// Both are in the prefix tier; the shorter first-key value wins.
+	expectValues(t, searchValues(t, data, "col", []string{"boo", "foo"}, "foo"), []string{"2", "1"})
+}
+
+func TestSearch_NumbersAndBooleansAreSearchable(t *testing.T) {
+	data := `[
+		{"code":42,"name":"Answer"},
+		{"code":true,"name":"Yes"},
+		{"code":["42"],"name":"List"},
+		{"code":{"value":"42"},"name":"Object"},
+		{"code":null,"name":"Null"}
+	]`
+	expectValues(t, searchValues(t, data, "42", []string{"code"}, "name"), []string{"Answer"})
+	expectValues(t, searchValues(t, data, "true", []string{"code"}, "name"), []string{"Yes"})
 }
 
 func TestSearch_ParentScopesPageAndTotal(t *testing.T) {
@@ -166,19 +237,33 @@ func TestSearch_ParentScopesPageAndTotal(t *testing.T) {
 		{"const":"d","title":"Unscoped"}
 	]}`)
 
-	got, err := Search(raw, "", "Tea", 1, 1)
+	got, err := Search(raw, "", "Tea", nil, 1, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.Total != 2 || got.Offset != 1 || got.Limit != 1 || len(got.Items) != 1 || got.Items[0].Const != "b" {
-		t.Fatalf("expected the second Tea row and a scoped total, got %+v", got)
+	if got.Total != 2 || got.Offset != 1 || got.Limit != 1 {
+		t.Fatalf("expected a scoped total, got %+v", got)
 	}
+	expectValues(t, values(t, got.Items, "const"), []string{"b"})
 
-	all, err := Search(raw, "", "", 0, 20)
+	all, err := Search(raw, "", "", nil, 0, 20)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if all.Total != 4 {
 		t.Fatalf("expected an empty parent to keep every row, got total %d", all.Total)
 	}
+}
+
+func TestSearch_MalformedParentsMatchNoParent(t *testing.T) {
+	raw := json.RawMessage(`{"data":[
+		{"const":"a","title":"Tea Plant","parents":"Tea"},
+		{"const":"b","title":"Tea Bush","parents":["Tea"]}
+	]}`)
+
+	got, err := Search(raw, "", "Tea", nil, 0, 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expectValues(t, values(t, got.Items, "const"), []string{"b"})
 }

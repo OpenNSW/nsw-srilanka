@@ -19,11 +19,18 @@ paths:
     get:
       summary: Get a static reference-data artifact
       description: |
-        Returns the raw JSON artifact registered under `id` at the given
-        `version`. The response is cacheable by the caller's own browser for
-        up to one year (see the `Cache-Control` response header) —
-        `(id, version)` identifies immutable content — but marked `private`
-        since this endpoint is scope-protected.
+        Without `q`, `offset` or `limit`, returns the raw JSON artifact
+        registered under `id` at the given `version`.
+
+        With any of them, searches the artifact's `data` rows instead and
+        returns one page of them (`StaticDataSearchPage`): rows are kept when
+        `parent` is empty or in their `parents` list, ranked against `q` on the
+        `searchKeys` row keys, and returned exactly as the artifact has them.
+
+        Either response is cacheable by the caller's own browser for up to one
+        year (see the `Cache-Control` response header) — `(id, version)`
+        identifies immutable content — but marked `private` since this
+        endpoint is scope-protected.
 
         Requires scope `task:read`.
       operationId: getStaticData
@@ -40,9 +47,54 @@ paths:
           schema:
             type: string
           example: "2026.1"
+        - name: q
+          in: query
+          required: false
+          description: |
+            Search text, matched case-insensitively on the `searchKeys` values. Rows
+            rank by the best match on any key: exact value, then prefix, then a
+            later word, then substring. Empty keeps artifact order.
+          schema:
+            type: string
+          example: "colombo"
+        - name: searchKeys
+          in: query
+          required: false
+          description: |
+            Comma-separated row keys to search, in priority order; ties go to the
+            shorter value of the first key, then to the other keys in order. Each key
+            uses letters, digits and underscores only. Defaults to `title,const`.
+            String, number and boolean values are searched; other values are not.
+          schema:
+            type: string
+          example: "title,const"
+        - name: parent
+          in: query
+          required: false
+          description: Keeps only rows whose `parents` list contains this value. Empty keeps every row.
+          schema:
+            type: string
+          example: "Tea"
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: Page size, capped at 100.
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
       responses:
         '200':
-          description: OK. The raw JSON artifact; its shape is defined by the artifact itself, not by this endpoint.
+          description: |
+            OK. Without `q`, `offset` or `limit`: the raw JSON artifact, its shape
+            defined by the artifact itself. With any of them: one page of rows.
           headers:
             Cache-Control:
               schema:
@@ -51,9 +103,11 @@ paths:
           content:
             application/json:
               schema:
-                description: Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
+                oneOf:
+                  - description: The raw artifact. Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
+                  - $ref: '#/components/schemas/StaticDataSearchPage'
         '400':
-          description: Missing `version` query parameter.
+          description: Missing `version`, invalid `offset` / `limit`, or a `searchKeys` entry that is not letters, digits and underscores.
           content:
             application/json:
               schema:
@@ -91,6 +145,35 @@ components:
       bearerFormat: JWT
 
   schemas:
+    StaticDataSearchPage:
+      type: object
+      required:
+        - items
+        - total
+        - offset
+        - limit
+      properties:
+        items:
+          type: array
+          description: The matching rows, each exactly as the artifact has it.
+          items:
+            type: object
+            additionalProperties: true
+          example:
+            - const: "VCMBC"
+              title: "Colombo Cargo Verification"
+        total:
+          type: integer
+          format: int64
+          description: Number of rows that match, across all pages.
+          example: 1
+        offset:
+          type: integer
+          example: 0
+        limit:
+          type: integer
+          example: 20
+
     ErrorResponse:
       type: object
       required:
