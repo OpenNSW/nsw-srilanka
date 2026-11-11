@@ -33,6 +33,21 @@ type DocumentSaver interface {
 	Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error)
 }
 
+// StaticData names a code by its row in a static_data artifact: the title of
+// the row of artifact id, in that version, whose const is value, and whether
+// there is such a row. An unknown id or version matches artifact.ErrNotFound
+// and a malformed artifact artifact.ErrInvalid, which fail the step for an
+// admin; any other error is retried.
+type StaticData interface {
+	Title(ctx context.Context, id, version, value string) (title string, found bool, err error)
+}
+
+// staticDataResolver is the name a template calls the static data resolver by.
+const staticDataResolver = "staticdata"
+
+// errStaticDataCall marks a staticdata call the template itself gets wrong.
+var errStaticDataCall = errors.New("staticdata takes a static_data id, its version and a value")
+
 // HTMLDocumentGeneratorPlugin is a synchronous plugin that renders the
 // html_template named in the subtask template's plugin_properties against the
 // task's inputs, stores the document, and records where it went:
@@ -46,25 +61,35 @@ type DocumentSaver interface {
 // {{ .application.applicant_name }}. The template only arranges and formats
 // what it is given.
 //
+// A template names a code by its static_data row with the staticdata resolver:
+// {{ staticdata "customs-cusdec--port-of-entry-and-discharge" "1" .port }}
+// prints the title of the row whose const is .port, in that version of that
+// artifact. An empty or missing value prints nothing, and a value no row has
+// prints as it is, as htmlgen's lookup helper does.
+//
 // The stored file's metadata is written to the task's own state at
 // <output_namespace> as {key, name, mime_type, size}; the workflow reads the
 // key from there through the node's output_mapping, and a client fetches the
 // document through the storage API with it.
 type HTMLDocumentGeneratorPlugin struct {
-	templates HTMLTemplateSource
-	files     DocumentSaver
+	templates  HTMLTemplateSource
+	files      DocumentSaver
+	staticData StaticData
 }
 
-// NewHTMLDocumentGeneratorPlugin builds the plugin. Both dependencies must be
+// NewHTMLDocumentGeneratorPlugin builds the plugin. All dependencies must be
 // non-nil.
-func NewHTMLDocumentGeneratorPlugin(templates HTMLTemplateSource, files DocumentSaver) *HTMLDocumentGeneratorPlugin {
+func NewHTMLDocumentGeneratorPlugin(templates HTMLTemplateSource, files DocumentSaver, staticData StaticData) *HTMLDocumentGeneratorPlugin {
 	if templates == nil {
 		panic("templates is nil")
 	}
 	if files == nil {
 		panic("files is nil")
 	}
-	return &HTMLDocumentGeneratorPlugin{templates: templates, files: files}
+	if staticData == nil {
+		panic("staticData is nil")
+	}
+	return &HTMLDocumentGeneratorPlugin{templates: templates, files: files, staticData: staticData}
 }
 
 type htmlDocumentGeneratorConfig struct {
@@ -108,9 +133,21 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 	if err != nil {
 		return inputError(fmt.Errorf("html_document_generator: encode inputs: %w", err))
 	}
-	doc, err := htmlgen.Generate(ctx.Context, tmpl, data)
+	doc, err := htmlgen.Generate(ctx.Context, tmpl, data, htmlgen.WithResolvers(htmlgen.Resolvers{
+		staticDataResolver: p.resolveStaticData,
+	}))
 	if err != nil {
-		return inputError(fmt.Errorf("html_document_generator: render template %q: %w", cfg.TemplateID, err))
+		err = fmt.Errorf("html_document_generator: render template %q: %w", cfg.TemplateID, err)
+		switch {
+		// The template asks for static data that isn't there, or asks wrongly.
+		case errors.Is(err, artifact.ErrNotFound), errors.Is(err, artifact.ErrInvalid), errors.Is(err, errStaticDataCall):
+			return configError(err)
+		// The static data could not be read this time; a retry may.
+		case errors.Is(err, htmlgen.ErrResolver):
+			return err
+		default:
+			return inputError(err)
+		}
 	}
 
 	// Every run stores what it rendered, including a Temporal retry and a
@@ -133,6 +170,41 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 		"size":      meta.Size,
 	}
 	return nil
+}
+
+// resolveStaticData is the staticdata resolver: the title of the row of
+// static_data artifact args[0], version args[1], whose const is args[2].
+func (p *HTMLDocumentGeneratorPlugin) resolveStaticData(ctx context.Context, args ...any) (any, error) {
+	if len(args) != 3 {
+		return nil, fmt.Errorf("%w, got %d arguments", errStaticDataCall, len(args))
+	}
+	id, idOK := args[0].(string)
+	version, versionOK := args[1].(string)
+	if !idOK || !versionOK || strings.TrimSpace(id) == "" || strings.TrimSpace(version) == "" {
+		return nil, fmt.Errorf("%w: the id and the version must be non-empty text", errStaticDataCall)
+	}
+	var code string
+	switch v := args[2].(type) {
+	case nil:
+	case string:
+		code = v
+	case json.Number:
+		code = v.String()
+	default:
+		return nil, fmt.Errorf("%w: the value must be text or a number, got %T", errStaticDataCall, v)
+	}
+	if code == "" {
+		return "", nil
+	}
+
+	title, found, err := p.staticData.Title(ctx, id, version, code)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return code, nil
+	}
+	return title, nil
 }
 
 // documentFilename is the stored document's name. Storage takes the key's
