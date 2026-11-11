@@ -49,6 +49,7 @@ Then read CONTRIBUTING.md's "Releasing" section for the conventions, and the new
 
 Put it directly under `## [Unreleased]` — moving in anything already there — headed `## [X.Y.Z] - YYYY-MM-DD` and dated today in Sri Lanka time (`TZ=Asia/Colombo date +%F`, not the machine's own date, which may be in another timezone): by convention a release is dated the day its release PR merges, in Sri Lanka time (UTC+05:30). Use these subsections in this order, and leave out any that would be empty:
 
+- `### TL;DR` — first, in place of an opening paragraph. Up to four bullets in plain words: **What's new** (what users and agencies will notice), **What you need to do** (required steps, downtime and migrations, or that there are none), **Watch for** (rollback limits and risks; leave it out when there are none) and **Security** (leave it out when there's nothing). It may explain a little more than the sections below, but it adds no fact they don't have.
 - `### Upgrade notes` — what a deployer must do or know when moving from the previous version: new migrations (say if one is slow or can't be rolled back), env vars and config keys that are new, renamed or removed (with defaults), config file format changes, IdP changes (scopes, clients, roles, groups), Helm values changes, and everything labelled `breaking change`. Say what to change, not only that something changed.
 - `### Added`, `### Changed`, `### Fixed` — the changes a deployer or an agency would notice, one line each with the PR linked. Fold related PRs (a backend and a frontend part, say) into one line. Don't list every PR; the release page already does.
 - `### Security` — fixes and hardening worth knowing about.
@@ -65,7 +66,7 @@ Deployers read the section to find what to do, so write it for them to read in f
 
 - One point per bullet, in one or two short sentences. Use plain words, and no long explanations.
 - Say what changes and what to do. Give a reason only when a step would look wrong without one, in one short sentence.
-- Open with two or three short sentences at most: what the release does, and whether it has required steps.
+- Keep each TL;DR bullet to two or three short sentences.
 - Leave out how the system works inside: engine or library internals, missing tooling, how a PR was tested or audited, and internal terms. A PR's notes for developers are not Known issues: carry over only what an operator can see or act on.
 - If the section runs long, cut it. The linked PRs hold the details.
 
