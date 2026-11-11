@@ -513,6 +513,23 @@ func TestHandleGetTask_SuccessAudited(t *testing.T) {
 	assert.Equal(t, "user-trader-1", recs[0].ActorID)
 }
 
+// The view reports the manifest version the task resolves its templates through, which
+// its forms load their static data at.
+func TestHandleGetTask_ReportsManifestVersion(t *testing.T) {
+	handler := getTaskHandler(t, pendingHSCodeTask(), &stubTemplates{})
+	in := ownerInput("Trader", "trader")
+
+	recorder := getTask(t, handler, &in)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var body struct {
+		ManifestVersion *int `json:"manifest_version"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	require.NotNil(t, body.ManifestVersion, "manifest_version is missing from the view")
+	assert.Equal(t, 1, *body.ManifestVersion)
+}
+
 // When handler.Audit is nil, a denied task read must not panic and still return 404.
 func TestHandleGetTask_DeniedNilAuditDoesNotPanic(t *testing.T) {
 	templates := &stubTemplates{}
