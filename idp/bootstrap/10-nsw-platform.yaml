@@ -498,4 +498,4 @@ name: Private_User
 ouId: 01a13912-d1d8-7926-b674-4acac460492f
 systemAttributes:
   display: username
-schema: {"username":{"type":"string","required":true,"unique":true},"password":{"type":"string","required":false,"credential":true},"email":{"type":"string","required":true,"unique":true,"regex":"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"},"phone_number":{"type":"string","required":false,"regex":"^\\+?[1-9]\\d{1,14}$"},"given_name":{"type":"string","required":false},"family_name":{"type":"string","required":false}}
+schema: {"username":{"type":"string","required":true,"unique":true},"password":{"type":"string","required":false,"credential":true},"email":{"type":"string","required":true,"unique":true,"regex":"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"},"phone_number":{"type":"string","required":false,"regex":"^\\+?[0-9]\\d{1,14}$"},"given_name":{"type":"string","required":false},"family_name":{"type":"string","required":false}}
