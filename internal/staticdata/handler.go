@@ -2,8 +2,10 @@ package staticdata
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/OpenNSW/core/artifact"
@@ -31,8 +33,9 @@ func NewHandler(artifacts *artifact.Set) *Handler {
 
 // HandleGet handles GET /api/v1/static-data/{id}?version=.
 // Without q, offset, or limit it returns the raw artifact. With any of those
-// it loads the artifact, applies parent when present, ranks string matches,
-// and returns one page.
+// it loads the artifact, applies parent when present, ranks matches on the
+// searchKeys row keys (comma-separated; default title,const), and returns one
+// page of the original rows.
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	version := r.URL.Query().Get("version")
@@ -67,13 +70,19 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request, id, versi
 	}
 	finalOffset, finalLimit := pagination.ResolvePaginationParams(offset, limit)
 
+	searchKeys, err := parseSearchKeys(r.URL.Query().Get("searchKeys"))
+	if err != nil {
+		httputil.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	raw, err := Load(r.Context(), h.artifacts, id, version)
 	if err != nil {
 		writeLoadError(w, r, err, id, version)
 		return
 	}
 
-	result, err := Search(raw, strings.TrimSpace(r.URL.Query().Get("q")), r.URL.Query().Get("parent"), nil, finalOffset, finalLimit)
+	result, err := Search(raw, strings.TrimSpace(r.URL.Query().Get("q")), r.URL.Query().Get("parent"), searchKeys, finalOffset, finalLimit)
 	if err != nil {
 		httputil.InternalServerError(w, r, "failed to search static data", err, "id", id, "version", version)
 		return
@@ -81,6 +90,28 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request, id, versi
 
 	w.Header().Set("Cache-Control", cacheControlImmutable)
 	httputil.JSON(w, http.StatusOK, result)
+}
+
+// searchKeyPattern is the shape of a row key a search may name: the same characters an
+// x-search.displayTemplate placeholder accepts, so a key can never hold the comma that
+// separates searchKeys.
+var searchKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+
+// parseSearchKeys reads the comma-separated searchKeys parameter. Empty entries are ignored,
+// and none at all means Search's default keys.
+func parseSearchKeys(param string) ([]string, error) {
+	var keys []string
+	for _, key := range strings.Split(param, ",") {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if !searchKeyPattern.MatchString(key) {
+			return nil, fmt.Errorf("invalid searchKeys entry %q: use letters, digits and underscores", key)
+		}
+		keys = append(keys, key)
+	}
+	return keys, nil
 }
 
 func isSearch(r *http.Request) bool {

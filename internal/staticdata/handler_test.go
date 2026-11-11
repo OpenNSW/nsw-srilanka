@@ -176,3 +176,88 @@ func TestHandler_HandleGet_InvalidLimit(t *testing.T) {
 		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }
+
+func TestHandler_HandleGet_SearchKeys(t *testing.T) {
+	body := []byte(`{"data":[
+		{"const":"22V4","title":"20x8 6, Mechanical","description":"Mechanical ventilation system"},
+		{"const":"22G1","title":"20x8 6, General","description":"General purpose"}
+	]}`)
+	reg := newTestRegistry(t, "containers", "1", "refdata/containers/1.json", body)
+	h := NewHandler(reg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/static-data/containers?version=1&q=ventilation&searchKeys=title,description", nil)
+	req.SetPathValue("id", "containers")
+	w := httptest.NewRecorder()
+	h.HandleGet(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got SearchResult
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if got.Total != 1 || len(got.Items) != 1 {
+		t.Fatalf("expected one match, got %+v", got)
+	}
+	expectValues(t, values(t, got.Items, "const"), []string{"22V4"})
+	expectValues(t, values(t, got.Items, "description"), []string{"Mechanical ventilation system"})
+}
+
+func TestHandler_HandleGet_SearchRowWithoutTitle(t *testing.T) {
+	reg := newTestRegistry(t, "codes", "1", "refdata/codes/1.json", []byte(`{"data":[{"const":"LK"}]}`))
+	h := NewHandler(reg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/static-data/codes?version=1&q=lk", nil)
+	req.SetPathValue("id", "codes")
+	w := httptest.NewRecorder()
+	h.HandleGet(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestHandler_HandleGet_InvalidSearchKeys(t *testing.T) {
+	reg := newTestRegistry(t, "codes", "1", "refdata/codes/1.json", []byte(`{"data":[]}`))
+	h := NewHandler(reg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/static-data/codes?version=1&q=a&searchKeys=boo,foo.bar", nil)
+	req.SetPathValue("id", "codes")
+	w := httptest.NewRecorder()
+	h.HandleGet(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestParseSearchKeys(t *testing.T) {
+	cases := []struct {
+		param   string
+		want    []string
+		wantErr bool
+	}{
+		{param: "", want: nil},
+		{param: "boo,foo", want: []string{"boo", "foo"}},
+		{param: " boo , ,foo,", want: []string{"boo", "foo"}},
+		{param: "title_2", want: []string{"title_2"}},
+		{param: "foo.bar", wantErr: true},
+		{param: "boo,{foo}", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.param, func(t *testing.T) {
+			got, err := parseSearchKeys(tc.param)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error, got %v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			expectValues(t, got, tc.want)
+		})
+	}
+}
