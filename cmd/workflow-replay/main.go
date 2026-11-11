@@ -75,7 +75,7 @@ func run(paths []string, out io.Writer, logger sdklog.Logger) int {
 // task's activity ID from the workflow ID, so a replay under the replayer's default ID would
 // schedule activities the history doesn't have.
 func replay(replayer worker.WorkflowReplayer, logger sdklog.Logger, path string) error {
-	//nolint:gosec // G703: reading the files the operator names is this command's job; it runs with their own permissions.
+	// #nosec G304 G703 -- reading the files the operator names is this command's job; it runs with their own permissions.
 	f, err := os.Open(path)
 	if err != nil {
 		return err
