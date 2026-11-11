@@ -43,7 +43,7 @@ Write it outside the repo (`$TMPDIR` or `/tmp`) so it is never committed. It is 
 - every PR in the range, grouped the way the GitHub Release will group them (by label, or by title type where a PR was merged without one), each with its Deployment Notes;
 - the deployer-facing changes: files changed, migrations added or removed, env vars the server started or stopped reading, and diffs of `.env.example`, the Helm values, the portal's runtime settings, the API scopes and `go.mod`.
 
-Then read CONTRIBUTING.md's "Releasing" section for the conventions, and the newest section of `CHANGELOG.md` to match its voice.
+Then read CONTRIBUTING.md's "Releasing" section for the conventions, and the newest section of `CHANGELOG.md` for its structure: its subsections and its links, not its length.
 
 ## Write the section
 
@@ -58,6 +58,16 @@ The difference between a deployer's line and a restated PR title:
 
 - Deployer's line: "Resolving a parked workflow step needs the new `consignment:adminwrite` scope: add it to the `NSW Admin` role in ThunderID, and have admins sign in again. ([#489](https://github.com/OpenNSW/nsw-srilanka/pull/489))"
 - Restated title (avoid): "feat(admin): resolve nodes parked for admin intervention (backend) [Part 1/2] (#489)"
+
+### Keep it short and plain
+
+Deployers read the section to find what to do, so write it for them to read in full.
+
+- One point per bullet, in one or two short sentences. Use plain words, and no long explanations.
+- Say what changes and what to do. Give a reason only when a step would look wrong without one, in one short sentence.
+- Open with two or three short sentences at most: what the release does, and whether it has required steps.
+- Leave out how the system works inside: engine or library internals, missing tooling, how a PR was tested or audited, and internal terms. A PR's notes for developers are not Known issues: carry over only what an operator can see or act on.
+- If the section runs long, cut it. The linked PRs hold the details.
 
 Set `version.txt` to `vX.Y.Z`, the tag name; the CHANGELOG heading stays `X.Y.Z`. Merging the release PR is what releases that version.
 
@@ -74,7 +84,8 @@ Finally, update the link references at the foot of the file:
 2. `bash .github/scripts/changelog-section.sh X.Y.Z | grep -oE '\]\([^)]*\)' | grep -v '^](https://'` must print nothing — any output is a relative link.
 3. `bash .github/scripts/check-version.sh vX.Y.Z <previous vX.Y.Z>` passes, and `git status --short` shows only `CHANGELOG.md` and `version.txt` modified.
 4. Re-read the Upgrade notes against the collector output: each one has a source.
+5. Read the whole section once as a deployer, and cut any line they can't act on or check.
 
 ## Hand off
 
-Show the user the drafted section, then the open questions: PRs that look like they need an upgrade step but say nothing, PRs merged without a release-notes label, and anything you could not confirm. Don't commit unless asked. The release PR goes through the `create-pull-request` skill. Tell the user plainly that merging it releases `vX.Y.Z` — the merge commit is tagged and published automatically — so they merge only when ready to ship. If it won't merge today (Sri Lanka time), tell them to update the heading's date on the day it does; the release run warns when the two differ.
+Show the user the drafted section, then the open questions: PRs that look like they need an upgrade step but say nothing, PRs merged without a release-notes label, anything you could not confirm, and any line you carried over from a PR's notes for developers. Don't commit unless asked. The release PR goes through the `create-pull-request` skill. Tell the user plainly that merging it releases `vX.Y.Z` — the merge commit is tagged and published automatically — so they merge only when ready to ship. If it won't merge today (Sri Lanka time), tell them to update the heading's date on the day it does; the release run warns when the two differ.
