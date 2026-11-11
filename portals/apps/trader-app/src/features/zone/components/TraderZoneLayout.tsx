@@ -1,11 +1,14 @@
 import type { Alert, AlertVariant, AuditEntry, ZoneAction, ZoneView } from '@/features/zone/types'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
+import { useMemo } from 'react'
+import { SearchServiceProvider } from '@opennsw/jsonforms-renderers'
 import { workflowStatusI18nKey, workflowStatusTone } from '@/features/consignment/workflowStatus'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
 import { zoneWidthClass } from '@/features/zone/width'
 import { Banner, CopyableId, StatusBadge, Surface } from '@portals/ui'
+import { taskSearchServices } from '@/services/searchService'
 
 type Props = {
   task: ZoneView
@@ -23,17 +26,21 @@ export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0, title }: P
   const { t } = useTranslation()
   const alert: Alert | undefined =
     task.alert ?? (task.state === 'ON_HOLD' ? { variant: 'warning', message: t('tasks.onHoldBanner') } : undefined)
+  // The task's forms load static data as the task's own manifest lists it.
+  const searchServices = useMemo(() => taskSearchServices(task.manifest_version), [task.manifest_version])
   return (
     <div className={`${zoneWidthClass(task)} mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8`}>
       <Header task={task} title={title} />
       {alert !== undefined && <AlertBanner alert={alert} />}
-      {task.view.map((component) => (
-        <Zone
-          key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}
-          component={component}
-          onAction={onSubmitForm}
-        />
-      ))}
+      <SearchServiceProvider services={searchServices}>
+        {task.view.map((component) => (
+          <Zone
+            key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}
+            component={component}
+            onAction={onSubmitForm}
+          />
+        ))}
+      </SearchServiceProvider>
       {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
     </div>
   )

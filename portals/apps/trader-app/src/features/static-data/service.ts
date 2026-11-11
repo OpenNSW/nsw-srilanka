@@ -6,13 +6,24 @@ import type { StaticDataOption, StaticDataResponse } from './types'
 
 const SEARCH_LIMIT = 20
 
-function staticDataParams(params: Record<string, unknown> | undefined): { id: string; version: string } {
+type StaticDataParams = { id: string; manifestVersion: number }
+
+function isManifestVersion(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+}
+
+// params.id is the field's x-search.params.id; params.manifestVersion is the task's, added by
+// withManifestVersion.
+function staticDataParams(params: Record<string, unknown> | undefined): StaticDataParams {
   const id = params?.id
-  const version = params?.version
-  if (typeof id !== 'string' || typeof version !== 'string') {
-    throw new Error('static-data search service requires x-search.params.id and .params.version (both strings)')
+  if (typeof id !== 'string') {
+    throw new Error('static-data search service requires x-search.params.id (a string)')
   }
-  return { id, version }
+  const manifestVersion = params?.manifestVersion
+  if (!isManifestVersion(manifestVersion)) {
+    throw new Error("static-data search service requires the task's manifest version (see withManifestVersion)")
+  }
+  return { id, manifestVersion }
 }
 
 // The artifact source isn't type-checked against this contract, so a malformed entry (a bare
@@ -26,10 +37,9 @@ function isStaticDataOption(value: unknown): value is StaticDataOption {
   )
 }
 
-// (id, version) identifies immutable content (see internal/staticdata's Cache-Control), so a
-// successful fetch is kept for the lifetime of the page: every field pointing at the same
-// artifact, and every reopen of the same dropdown, reuses it instead of re-fetching. A failed
-// fetch is evicted so the next call retries.
+// (id, manifestVersion) identifies immutable content (see internal/staticdata's Cache-Control), so a successful fetch is kept for the lifetime of the
+// page: every field pointing at the same artifact, and every reopen of the same dropdown,
+// reuses it instead of re-fetching. A failed fetch is evicted so the next call retries.
 //
 // The cached promise is deliberately never aborted: closing one dropdown (or a debounced query
 // change) must not cancel a fetch that another field, or a later reopen, is also waiting on. The
@@ -37,15 +47,15 @@ function isStaticDataOption(value: unknown): value is StaticDataOption {
 // for a shared cache entry — so it is not forwarded here.
 const optionsCache = new Map<string, Promise<StaticDataOption[]>>()
 
-function fetchOptions(id: string, version: string): Promise<StaticDataOption[]> {
-  const key = `${id}\0${version}`
+function fetchOptions({ id, manifestVersion }: StaticDataParams): Promise<StaticDataOption[]> {
+  const key = `${id}\0${manifestVersion}`
   const cached = optionsCache.get(key)
   if (cached) return cached
 
   const promise = http
     .request<StaticDataResponse>({
       url: `${API_BASE_URL}/api/v1/static-data/${encodeURIComponent(id)}`,
-      params: { version },
+      params: { manifestVersion },
       attachToken: true,
     })
     .then(({ data }) => data.data.filter(isStaticDataOption))
@@ -66,9 +76,10 @@ function parentParam(params: Record<string, unknown> | undefined): string | unde
   return typeof parent === 'string' && parent.length > 0 ? parent : undefined
 }
 
-// Generic search service for `x-search.service: "static-data"` fields. One field's artifact
-// (id + version) is selected entirely via x-search.params, so this single registration backs
-// every static-data field in every form.
+// Generic search service for `x-search.service: "static-data"` fields. A field names its artifact
+// by x-search.params.id and loads it as the task's manifest version lists it, which
+// withManifestVersion adds to params. This single registration backs every static-data field in
+// every form.
 //
 // An empty query with no cursor still downloads the artifact, which is what small lists do on
 // open. A typed query, or "load more", sends q, offset, and limit so the API ranks one page.
@@ -76,19 +87,19 @@ function parentParam(params: Record<string, unknown> | undefined): string | unde
 // so the returned page and its total stay inside the parent scope.
 export const staticDataSearchService: SearchService = {
   async search({ query, cursor, signal, params }) {
-    const { id, version } = staticDataParams(params)
+    const selected = staticDataParams(params)
     const q = query.trim()
     const offset = typeof cursor === 'number' ? cursor : 0
     const parent = parentParam(params)
     if (!q && offset === 0) {
-      const options = await fetchOptions(id, version)
+      const options = await fetchOptions(selected)
       const scoped = parent ? options.filter((option) => option.parents?.includes(parent)) : options
       return { options: toSearchOptions(scoped) }
     }
 
     const { data } = await http.request<PaginatedResponse<StaticDataOption>>({
-      url: `${API_BASE_URL}/api/v1/static-data/${encodeURIComponent(id)}`,
-      params: { version, q: q || undefined, offset, limit: SEARCH_LIMIT, parent },
+      url: `${API_BASE_URL}/api/v1/static-data/${encodeURIComponent(selected.id)}`,
+      params: { manifestVersion: selected.manifestVersion, q: q || undefined, offset, limit: SEARCH_LIMIT, parent },
       attachToken: true,
       signal,
     })
@@ -100,9 +111,19 @@ export const staticDataSearchService: SearchService = {
   },
 
   async resolve(value, params) {
-    const { id, version } = staticDataParams(params)
-    const options = await fetchOptions(id, version)
+    const options = await fetchOptions(staticDataParams(params))
     const match = options.find((option) => option.const === value)
     return match ? { id: match.const, name: match.title } : undefined
   },
+}
+
+// withManifestVersion returns service with manifestVersion added to every call's params, so a
+// task's forms load static data as the task's own manifest lists it.
+export function withManifestVersion(service: SearchService, manifestVersion: number): SearchService {
+  const bind = (params: Record<string, unknown> | undefined) => ({ ...params, manifestVersion })
+  const bound: SearchService = { search: (args) => service.search({ ...args, params: bind(args.params) }) }
+  if (service.resolve) {
+    bound.resolve = async (value, params) => service.resolve?.(value, bind(params))
+  }
+  return bound
 }

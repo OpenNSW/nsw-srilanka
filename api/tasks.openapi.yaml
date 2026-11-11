@@ -654,17 +654,28 @@ components:
 
     TaskResponse:
       description: |
-        The task's zone view plus its title and its claim, as the caller sees
-        it. `claim` is present only where the task can be claimed.
+        The task's zone view plus its title, its manifest version and its
+        claim, as the caller sees it. `claim` is present only where the task
+        can be claimed.
       allOf:
         - $ref: '#/components/schemas/ZoneView'
         - type: object
+          required:
+            - manifest_version
           properties:
             title:
               type: string
               description: |
                 The task's name: the title of its render config, else the id of
                 its task template.
+            manifest_version:
+              type: integer
+              minimum: 1
+              description: |
+                The artifact manifest version the task resolves its templates
+                through. Its forms load static data at this version
+                (`GET /api/v1/static-data/{id}?manifestVersion=`), so they show
+                the data the task's own manifest lists.
             claim:
               $ref: '#/components/schemas/TaskClaim'
 

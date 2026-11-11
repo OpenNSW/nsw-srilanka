@@ -181,7 +181,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
 	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, false, nil))
-	resp := taskResponse{ZoneView: zv, Title: Title(ctx, h.RenderConfigOf, record)}
+	resp := taskResponse{ZoneView: zv, Title: Title(ctx, h.RenderConfigOf, record), ManifestVersion: record.ManifestVersion}
 	if taskTemplate.Claimable {
 		// From the stored record, not the view: the view only swaps file values.
 		claim := h.claimOf(ctx, in, record)
