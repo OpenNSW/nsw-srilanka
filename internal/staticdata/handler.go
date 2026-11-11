@@ -73,7 +73,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request, id, versi
 		return
 	}
 
-	result, err := Search(raw, strings.TrimSpace(r.URL.Query().Get("q")), r.URL.Query().Get("parent"), finalOffset, finalLimit)
+	result, err := Search(raw, strings.TrimSpace(r.URL.Query().Get("q")), r.URL.Query().Get("parent"), nil, finalOffset, finalLimit)
 	if err != nil {
 		httputil.InternalServerError(w, r, "failed to search static data", err, "id", id, "version", version)
 		return

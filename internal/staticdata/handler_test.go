@@ -82,7 +82,7 @@ func TestHandler_HandleGet_Search(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if got.Total != 2 || got.Offset != 0 || got.Limit != 1 || len(got.Items) != 1 || got.Items[0].Title != "Colombo" {
+	if got.Total != 2 || got.Offset != 0 || got.Limit != 1 || len(got.Items) != 1 || values(t, got.Items, "title")[0] != "Colombo" {
 		t.Fatalf("unexpected page: %+v", got)
 	}
 }
@@ -108,7 +108,7 @@ func TestHandler_HandleGet_SearchParent(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if got.Total != 2 || len(got.Items) != 1 || got.Items[0].Const != "a" {
+	if got.Total != 2 || len(got.Items) != 1 || values(t, got.Items, "const")[0] != "a" {
 		t.Fatalf("expected parent to scope the page and total, got %+v", got)
 	}
 }
@@ -130,7 +130,7 @@ func TestHandler_HandleGet_SearchOffset(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if got.Total != 2 || got.Offset != 1 || len(got.Items) != 1 || got.Items[0].Title != "Port of Colombo" {
+	if got.Total != 2 || got.Offset != 1 || len(got.Items) != 1 || values(t, got.Items, "title")[0] != "Port of Colombo" {
 		t.Fatalf("unexpected page: %+v", got)
 	}
 }
