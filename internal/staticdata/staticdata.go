@@ -1,6 +1,8 @@
-// Package staticdata exposes large, versioned JSON reference data to the
-// frontend by id, sourced through the artifact registry instead of being
-// bundled into the SPA build or embedded in this binary.
+// Package staticdata exposes large, versioned JSON reference data by id,
+// sourced through the artifact registry instead of being bundled into the SPA
+// build or embedded in this binary: to the frontend through Handler, and to
+// server-side callers, such as a document naming a stored code, through Load
+// and Find.
 package staticdata
 
 import (

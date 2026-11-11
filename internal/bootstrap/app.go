@@ -950,6 +950,25 @@ func (p registryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]b
 	return htmltemplate.Load(ctx, reg, id)
 }
 
+// registryStaticData adapts static_data artifacts to the HTML document
+// generator's StaticData. Each call reads the artifact through the registry,
+// so an edited artifact is seen on the next render, as everywhere else.
+type registryStaticData struct {
+	artifacts *artifact.Set
+}
+
+func (s registryStaticData) Title(ctx context.Context, id, version, value string) (string, bool, error) {
+	raw, err := staticdata.Load(ctx, s.artifacts, id, version)
+	if err != nil {
+		return "", false, err
+	}
+	row, ok, err := staticdata.Find(raw, value)
+	if err != nil {
+		return "", false, fmt.Errorf("static data %q version %q: %w: %w", id, version, artifact.ErrInvalid, err)
+	}
+	return row.Title, ok, nil
+}
+
 // initTask consolidates the task-orchestration engine registrations, remote
 // configs, and wiring against core/taskflow + core/workflow. It builds and
 // starts the orchestration stack on MICRO_WORKFLOW_QUEUE; the returned
@@ -966,7 +985,7 @@ func (p registryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]b
 // taskplugins.Register does for the same reason — seven of them inline was most
 // of initTask's branching, and adding an eighth meant editing a function that
 // has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, staticData taskplugins.StaticData, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -978,7 +997,7 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)},
 		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
 		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
-		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files)},
+		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files, staticData)},
 		{taskplugins.TaskTypeSLPACaseContainers, taskplugins.NewSLPACaseContainersPlugin(caseTasks)},
 		{taskplugins.TaskTypeRemoteFileArchiver, taskplugins.NewRemoteFileArchiverPlugin(fetcher, files)},
 	}
@@ -1035,7 +1054,7 @@ func initTask(
 	}
 	taskStore := gormstore.New(db)
 
-	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, taskStore, remoteManager); err != nil {
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService, registryStaticData{artifacts: artifacts}, taskStore, remoteManager); err != nil {
 		return nil, nil, err
 	}
 

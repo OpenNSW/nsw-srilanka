@@ -38,6 +38,23 @@ func Search(raw json.RawMessage, query, parent string, offset, limit int) (Searc
 	return pagination.NewPageResult(page, int64(len(matched)), offset, limit), nil
 }
 
+// Find returns the first row of raw whose const is value, and whether there is
+// one. raw is one static_data artifact body, as Load returns it, and its rows
+// are read as Search reads them, so a row without a const or a title is an
+// error. Unlike Search, Find matches the const exactly and never the title.
+func Find(raw json.RawMessage, value string) (Option, bool, error) {
+	options, err := parseOptions(raw)
+	if err != nil {
+		return Option{}, false, err
+	}
+	for _, opt := range options {
+		if opt.Const == value {
+			return opt, true, nil
+		}
+	}
+	return Option{}, false, nil
+}
+
 // filterByParent runs before ranking and pagination so page contents and total
 // describe the same parent scope. A row with no parents list does not match.
 func filterByParent(options []Option, parent string) []Option {
