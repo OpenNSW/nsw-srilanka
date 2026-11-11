@@ -38,10 +38,12 @@ type EngineNodeDTO struct {
 	// UNKNOWN), so the UI can guide an admin without parsing LastError.
 	ParkCategory string `json:"park_category,omitempty"`
 	// InputMapping and OutputMapping are the node's mappings, set only while it is parked. In
-	// InputMapping the key is the workflow variable read (a trailing "?" marks it optional) and
-	// the value is the task input it fills; in OutputMapping the key is the task result field
-	// (same "?" convention) and the value is the workflow variable it writes. So a RETRY fixes
-	// InputMapping keys, and a COMPLETE patch supplies OutputMapping values.
+	// InputMapping the key is the workflow variable read (a trailing "?" or "?!" marks it
+	// optional) and the value is the task input it fills; in OutputMapping the key is the task
+	// result field and the value is the workflow variable it writes. There a trailing "?" marks
+	// the field optional, and the variable keeps its value when the field is absent; with "?!",
+	// the variable is removed instead. So a RETRY fixes InputMapping keys, and a COMPLETE patch
+	// supplies OutputMapping values.
 	InputMapping  map[string]string `json:"input_mapping,omitempty"`
 	OutputMapping map[string]string `json:"output_mapping,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
