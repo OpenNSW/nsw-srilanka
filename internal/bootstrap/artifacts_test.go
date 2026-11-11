@@ -51,8 +51,6 @@ func TestRegistryTemplateProviderUsesTheContextVersion(t *testing.T) {
 	}
 }
 
-// initArtifacts makes the highest manifest current unless a pin names another, and loads
-// a source with only manifest.json (an artifacts repository checkout) as version 1.
 // registryStaticData.Title names a code by its row, and reports a malformed
 // artifact as artifact.ErrInvalid, so the generator fails the step for an admin
 // instead of retrying it.
@@ -90,6 +88,8 @@ func TestRegistryStaticData_Title(t *testing.T) {
 	}
 }
 
+// initArtifacts makes the highest manifest current unless a pin names another, and loads
+// a source with only manifest.json (an artifacts repository checkout) as version 1.
 func TestInitArtifacts(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {
