@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -52,6 +53,43 @@ func TestRegistryTemplateProviderUsesTheContextVersion(t *testing.T) {
 
 // initArtifacts makes the highest manifest current unless a pin names another, and loads
 // a source with only manifest.json (an artifacts repository checkout) as version 1.
+// registryStaticData.Title names a code by its row, and reports a malformed
+// artifact as artifact.ErrInvalid, so the generator fails the step for an admin
+// instead of retrying it.
+func TestRegistryStaticData_Title(t *testing.T) {
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"ports.json":   []byte(`{"data":[{"const":"LKCMB","title":"COLOMBO"}]}`),
+		"notitle.json": []byte(`{"data":[{"const":"LKCMB"}]}`),
+		"manifest_v1.json": []byte(`{"artifacts":[
+			{"id":"ports","kind":"static_data","version":"1","path":"ports.json"},
+			{"id":"notitle","kind":"static_data","version":"1","path":"notitle.json"}]}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := registryStaticData{artifacts: set}
+
+	cases := map[string]struct {
+		id, version, value string
+		wantTitle          string
+		wantFound          bool
+		wantErr            error
+	}{
+		"a known code":          {"ports", "1", "LKCMB", "COLOMBO", true, nil},
+		"an unknown code":       {"ports", "1", "XXABC", "", false, nil},
+		"an unknown version":    {"ports", "2", "LKCMB", "", false, artifact.ErrNotFound},
+		"a row without a title": {"notitle", "1", "LKCMB", "", false, artifact.ErrInvalid},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			title, found, err := s.Title(context.Background(), tc.id, tc.version, tc.value)
+			if !errors.Is(err, tc.wantErr) || title != tc.wantTitle || found != tc.wantFound {
+				t.Fatalf("got %q, %v, %v; want %q, %v, %v", title, found, err, tc.wantTitle, tc.wantFound, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestInitArtifacts(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {
