@@ -478,7 +478,7 @@ name: Admin_User
 ouId: 01a1a224-2db6-7eb0-8113-d7d3abf81c1d
 systemAttributes:
   display: username
-schema: {"username":{"type":"string","required":true,"unique":true},"password":{"type":"string","required":false,"credential":true},"email":{"type":"string","required":true,"unique":true,"regex":"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"},"phone_number":{"type":"string","required":false,"regex":"^\\+?[1-9]\\d{1,14}$"},"given_name":{"type":"string","required":false},"family_name":{"type":"string","required":false}}
+schema: {"username":{"type":"string","required":true,"unique":true},"password":{"type":"string","required":false,"credential":true},"email":{"type":"string","required":true,"unique":true,"regex":"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"},"phone_number":{"type":"string","required":false,"regex":"^((\\+?94)?0?[1-9]\\d{8}|\\+([1-8]\\d{1,14}|9[0-35-9]\\d{1,13}))$"},"given_name":{"type":"string","required":false},"family_name":{"type":"string","required":false}}
 ---
 # File: Government_User.yaml
 resource_type: user_type
