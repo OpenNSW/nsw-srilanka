@@ -237,15 +237,17 @@ func TestDetailListsStartableFlows(t *testing.T) {
 	}
 }
 
-func TestConsignmentDetailStartableFlowsRequireWriteScope(t *testing.T) {
+// TestConsignmentDetailListsFlowsTheCallerMayStart checks the trader's permission
+// and the admin view's informational list of trader and CHA flows.
+func TestConsignmentDetailListsFlowsTheCallerMayStart(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		admin    bool
 		canStart bool
 		want     []FlowOption
 	}{
-		{name: "trader with write scope", canStart: true, want: []FlowOption{auxFlow}},
-		{name: "trader without write scope", want: []FlowOption{}},
+		{name: "trader who may start flows", canStart: true, want: []FlowOption{auxFlow}},
+		{name: "trader who may not start flows", want: []FlowOption{}},
 		{name: "admin lists trader and CHA flows", admin: true, want: []FlowOption{auxFlow, {TemplateID: "cha_flow", Label: "CHA flow"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
