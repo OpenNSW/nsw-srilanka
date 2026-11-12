@@ -61,3 +61,17 @@ func Load(ctx context.Context, set *artifact.Set, id, version string) (json.RawM
 	w, err := artifact.GetExplicit[loadable](ctx, set, id, version)
 	return w.RawMessage, err
 }
+
+// LoadAt fetches the static data artifact id as manifest version manifestVersion lists it: the
+// row without a version, else its highest explicit version (see artifact.Latest). A case pins
+// the manifest version it starts on, so its forms keep the data they opened with while a later
+// manifest ships a new file under the same id. A manifest version that is not published returns
+// an error matching artifact.ErrUnknownManifestVersion.
+func LoadAt(ctx context.Context, set *artifact.Set, id string, manifestVersion int) (json.RawMessage, error) {
+	reg, err := set.Registry(ctx, manifestVersion)
+	if err != nil {
+		return nil, err
+	}
+	w, err := artifact.Latest[loadable](ctx, reg, id)
+	return w.RawMessage, err
+}
