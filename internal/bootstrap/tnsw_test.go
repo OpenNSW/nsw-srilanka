@@ -111,3 +111,25 @@ func TestMountTNSW_StartFlowScope(t *testing.T) {
 		t.Errorf("with only %s: refused for %q, want %q", scopes.ConsignmentWrite, got, scopes.ConsignmentFlowWrite)
 	}
 }
+
+func TestCanStartConsignmentFlows(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		principal *authn.Principal
+		want      bool
+	}{
+		{name: "with flow write scope", principal: &authn.Principal{Kind: authn.KindUser, Scopes: []string{scopes.ConsignmentFlowWrite}}, want: true},
+		{name: "with consignment write only", principal: &authn.Principal{Kind: authn.KindUser, Scopes: []string{scopes.ConsignmentWrite}}},
+		{name: "unauthenticated"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			if tc.principal != nil {
+				ctx = authn.ContextWithPrincipal(ctx, tc.principal)
+			}
+			if got := canStartConsignmentFlows(ctx); got != tc.want {
+				t.Errorf("canStartConsignmentFlows = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}

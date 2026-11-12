@@ -3,7 +3,6 @@
 export const SCOPES = {
   CONSIGNMENT_READ: 'consignment:read',
   CONSIGNMENT_WRITE: 'consignment:write',
-  CONSIGNMENT_FLOW_WRITE: 'consignment:flow:write',
   TASK_READ: 'task:read',
   TASK_WRITE: 'task:write',
   CONSIGNMENT_ADMIN_READ: 'consignment:adminread',

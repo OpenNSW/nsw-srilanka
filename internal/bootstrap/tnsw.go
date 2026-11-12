@@ -4,12 +4,15 @@ package bootstrap
 // default), in place of the agency's routes in agency.go.
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/payment"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
@@ -65,4 +68,10 @@ func mountTNSW(
 	// SLPA Webhook Endpoint. Authenticated by the HMAC signature on the request
 	// itself — see slpa.VerifySignature — so no token middleware here.
 	mux.Handle("POST /webhooks/slpa", http.HandlerFunc(h.slpa.HandleWebhook))
+}
+
+// canStartConsignmentFlows checks the scope required by the flow start route.
+func canStartConsignmentFlows(ctx context.Context) bool {
+	p, ok := authn.ScopePrincipalFromContext(ctx)
+	return ok && authz.HasScope(p, scopes.ConsignmentFlowWrite)
 }
