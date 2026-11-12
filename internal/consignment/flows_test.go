@@ -236,3 +236,50 @@ func TestDetailListsStartableFlows(t *testing.T) {
 		})
 	}
 }
+
+// TestConsignmentDetailListsFlowsTheCallerMayStart checks the trader's permission
+// and the admin view's informational list of trader and CHA flows.
+func TestConsignmentDetailListsFlowsTheCallerMayStart(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		admin    bool
+		canStart bool
+		want     []FlowOption
+	}{
+		{name: "trader who may start flows", canStart: true, want: []FlowOption{auxFlow}},
+		{name: "trader who may not start flows", want: []FlowOption{}},
+		{name: "admin lists trader and CHA flows", admin: true, want: []FlowOption{auxFlow, {TemplateID: "cha_flow", Label: "CHA flow"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, sqlMock, _ := newFlowsService(t)
+			taskStore := new(MockTaskStore)
+			svc.taskStore = taskStore
+			companies := new(MockCompanyService)
+			id := uuid.NewString()
+			expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
+			router := mustNewRouter(t, svc, nil, companies, nil)
+			router.canStartFlows = func(context.Context) bool { return tc.canStart }
+			path := "/api/v1/consignments/" + id
+			handler := router.HandleGetConsignmentByID
+			taskFilter := store.TaskFilter{CaseID: id, Roles: []string{partyRoleTrader}}
+			if tc.admin {
+				path = "/api/v1/admin/consignments/" + id
+				handler = router.HandleAdminGetConsignmentByID
+				taskFilter.Roles = nil
+			} else {
+				companies.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co-trader"}, nil)
+			}
+			taskStore.On("GetTasks", mock.Anything, taskFilter).Return(nil).Once()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.SetPathValue("id", id)
+			req = req.WithContext(withAuthContextRoles(req.Context(), "trader", "trader-ou", "Trader"))
+			w := httptest.NewRecorder()
+			handler(w, req)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var got DetailDTO
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+			assert.Equal(t, tc.want, got.StartableFlows)
+			taskStore.AssertExpectations(t)
+		})
+	}
+}

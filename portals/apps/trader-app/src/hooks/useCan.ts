@@ -7,7 +7,6 @@ import { SCOPES } from '@/constants/scopes'
 const ABILITIES = {
   'consignment.view': SCOPES.CONSIGNMENT_READ,
   'consignment.create': SCOPES.CONSIGNMENT_WRITE,
-  'consignment.startFlow': SCOPES.CONSIGNMENT_FLOW_WRITE,
   'task.view': SCOPES.TASK_READ,
   'task.act': SCOPES.TASK_WRITE,
   'admin.view': SCOPES.CONSIGNMENT_ADMIN_READ,
