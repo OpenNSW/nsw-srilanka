@@ -34,19 +34,20 @@ type DocumentSaver interface {
 }
 
 // StaticData names a code by its row in a static_data artifact: the title of
-// the row of artifact id, in that version, whose const is value, and whether
-// there is such a row. An unknown id or version matches artifact.ErrNotFound
-// and a malformed artifact artifact.ErrInvalid, which fail the step for an
-// admin; any other error is retried.
+// the row of artifact id whose const is value, in that artifact as manifest
+// version manifestVersion lists it, and whether there is such a row. An id that
+// manifest doesn't list matches artifact.ErrNotFound and a malformed artifact
+// artifact.ErrInvalid, which fail the step for an admin; any other error is
+// retried.
 type StaticData interface {
-	Title(ctx context.Context, id, version, value string) (title string, found bool, err error)
+	Title(ctx context.Context, manifestVersion int, id, value string) (title string, found bool, err error)
 }
 
 // staticDataResolver is the name a template calls the static data resolver by.
 const staticDataResolver = "staticdata"
 
 // errStaticDataCall marks a staticdata call the template itself gets wrong.
-var errStaticDataCall = errors.New("staticdata takes a static_data id, its version and a value")
+var errStaticDataCall = errors.New("staticdata takes a static_data id and a value")
 
 // HTMLDocumentGeneratorPlugin is a synchronous plugin that renders the
 // html_template named in the subtask template's plugin_properties against the
@@ -62,10 +63,11 @@ var errStaticDataCall = errors.New("staticdata takes a static_data id, its versi
 // what it is given.
 //
 // A template names a code by its static_data row with the staticdata resolver:
-// {{ staticdata "customs-cusdec--port-of-entry-and-discharge" "1" .port }}
-// prints the title of the row whose const is .port, in that version of that
-// artifact. An empty or missing value prints nothing, and a value no row has
-// prints as it is, as htmlgen's lookup helper does.
+// {{ staticdata "customs-cusdec--port-of-entry-and-discharge" .port }}
+// prints the title of the row whose const is .port, in that artifact as the
+// manifest version the task started on lists it, the manifest version the
+// template itself comes from. An empty or missing value prints nothing, and a
+// value no row has prints as it is, as htmlgen's lookup helper does.
 //
 // The stored file's metadata is written to the task's own state at
 // <output_namespace> as {key, name, mime_type, size}; the workflow reads the
@@ -133,8 +135,11 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 	if err != nil {
 		return inputError(fmt.Errorf("html_document_generator: encode inputs: %w", err))
 	}
+	manifestVersion := ctx.Record.ManifestVersion
 	doc, err := htmlgen.Generate(ctx.Context, tmpl, data, htmlgen.WithResolvers(htmlgen.Resolvers{
-		staticDataResolver: p.resolveStaticData,
+		staticDataResolver: func(rctx context.Context, args ...any) (any, error) {
+			return p.resolveStaticData(rctx, manifestVersion, args...)
+		},
 	}))
 	if err != nil {
 		err = fmt.Errorf("html_document_generator: render template %q: %w", cfg.TemplateID, err)
@@ -172,19 +177,24 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 	return nil
 }
 
-// resolveStaticData is the staticdata resolver: the title of the row of
-// static_data artifact args[0], version args[1], whose const is args[2].
-func (p *HTMLDocumentGeneratorPlugin) resolveStaticData(ctx context.Context, args ...any) (any, error) {
-	if len(args) != 3 {
+// resolveStaticData is the staticdata resolver for a task on manifest version
+// manifestVersion: the title of the row of static_data artifact args[0] whose
+// const is the last argument.
+//
+// A template in a published manifest may name a version between the two, as
+// in {{ staticdata "<id>" "1" .port }}. Published manifests never change, so
+// the resolver accepts that form and ignores the version: the manifest that
+// holds such a template lists the static data at the version it names.
+func (p *HTMLDocumentGeneratorPlugin) resolveStaticData(ctx context.Context, manifestVersion int, args ...any) (any, error) {
+	if len(args) != 2 && len(args) != 3 {
 		return nil, fmt.Errorf("%w, got %d arguments", errStaticDataCall, len(args))
 	}
-	id, idOK := args[0].(string)
-	version, versionOK := args[1].(string)
-	if !idOK || !versionOK || strings.TrimSpace(id) == "" || strings.TrimSpace(version) == "" {
-		return nil, fmt.Errorf("%w: the id and the version must be non-empty text", errStaticDataCall)
+	id, ok := args[0].(string)
+	if !ok || strings.TrimSpace(id) == "" {
+		return nil, fmt.Errorf("%w: the id must be non-empty text", errStaticDataCall)
 	}
 	var code string
-	switch v := args[2].(type) {
+	switch v := args[len(args)-1].(type) {
 	case nil:
 	case string:
 		code = v
@@ -197,7 +207,7 @@ func (p *HTMLDocumentGeneratorPlugin) resolveStaticData(ctx context.Context, arg
 		return "", nil
 	}
 
-	title, found, err := p.staticData.Title(ctx, id, version, code)
+	title, found, err := p.staticData.Title(ctx, manifestVersion, id, code)
 	if err != nil {
 		return nil, err
 	}
