@@ -433,6 +433,9 @@ func TestFileHandler_UploadRejects(t *testing.T) {
 	}{
 		{"no principal", `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`, nil, http.StatusUnauthorized, "authentication required"},
 		{"bad body", `{`, user("alice"), http.StatusBadRequest, "invalid request body"},
+		{"unknown field", `{"filename":"a.pdf","mime_type":"application/pdf","size":10,"key":"k"}`, user("alice"), http.StatusBadRequest, `invalid request body: unknown field \"key\"`},
+		{"trailing data", `{"filename":"a.pdf","mime_type":"application/pdf","size":10}{}`, user("alice"), http.StatusBadRequest, "invalid request body"},
+		{"body over the limit", `{"filename":"` + strings.Repeat("a", maxUploadRequestBytes) + `.pdf"}`, user("alice"), http.StatusRequestEntityTooLarge, "request body too large"},
 		{"no filename", `{"mime_type":"application/pdf","size":10}`, user("alice"), http.StatusBadRequest, "filename is required"},
 		{"no type", `{"filename":"a.pdf","size":10}`, user("alice"), http.StatusBadRequest, "mime_type is required"},
 		{"no size", `{"filename":"a.pdf","mime_type":"application/pdf"}`, user("alice"), http.StatusBadRequest, "size must be greater than 0"},
