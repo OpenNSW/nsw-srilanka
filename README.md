@@ -1,317 +1,106 @@
-# NSW Sri Lanka Platform
+# National Single Window for Trade - Sri Lanka
 
-[![Go Version](https://img.shields.io/badge/Go-1.27-blue.svg)](https://golang.org)
-![Platform](https://img.shields.io/badge/NSW-Platform-green.svg)
+<!-- markdownlint-disable-next-line MD033 -->
+<p align="center"><img src="portals/apps/trader-app/public/branding/one-trade-logo.png" alt="OneTrade — Trade . Connect . Grow" width="360"></p>
 
-`nsw-srilanka` is the deployer-specific application repository for the **Sri Lanka instance** of the National Single Window (NSW) Platform.
+[![Built on OpenNSW Core](https://img.shields.io/badge/built%20on-OpenNSW%2Fcore-2EA44F)](https://github.com/OpenNSW/core)
+[![Artifacts from one-trade-artifacts](https://img.shields.io/badge/artifacts%20from-OpenNSW%2Fone--trade--artifacts-4169E1)](https://github.com/OpenNSW/one-trade-artifacts)
+[![Last Commit](https://img.shields.io/github/last-commit/OpenNSW/nsw-srilanka?logo=github)](https://github.com/OpenNSW/nsw-srilanka/commits/main)
+[![Open Issues](https://img.shields.io/github/issues/OpenNSW/nsw-srilanka?logo=github)](https://github.com/OpenNSW/nsw-srilanka/issues)
 
-It depends on the open-source core engine published at [github.com/OpenNSW/core](https://github.com/OpenNSW/core) and wires Sri Lanka–specific service endpoints, payment gateways, and agency workflow configurations on top of it.
+[![Temporal](https://img.shields.io/badge/Temporal-1.28-000000?logo=temporal&logoColor=white)](https://temporal.io)
+[![ThunderID](https://img.shields.io/badge/ThunderID-1.1-FF7300)](https://thunderid.dev)
+[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-000000?logo=opentelemetry&logoColor=white)](https://opentelemetry.io)
 
----
+An integrated platform to enhance trade competitiveness through digital transformation.
 
-## Repository Layout
+`nsw-srilanka` is the application repository for **Sri Lanka's National Single Window (NSW) for Trade**.
 
-```text
-nsw-srilanka/
-├── cmd/
-│   ├── server/                            # Main API entry point: loads config, builds the app, runs the HTTP server
-│   └── otc/                               # CLI for applying one-trade-artifacts config against a running instance
-├── internal/                              # Application code — bootstrap wiring, consignment/profile domains,
-│                                           # task plugins & authz, replay engine, audit, catalog, static data
-├── external-integration/                  # Sri Lanka–specific integrations
-│   ├── payment/                           #   Payment gateways (GovPay+)
-│   ├── customs/                          #   Customs declaration integration (ASYCUDA)
-│   ├── ephyto/                           #   IPPC ePhyto Hub client
-│   └── slpa/                             #   Sri Lanka Ports Authority (CMS, gate pass, consolidation, invoicing…)
-├── test/e2e/replay/                       # End-to-end replay tests (config-driven harness, mock agency/gateway)
-├── migrations/                            # PostgreSQL migration files (up/down SQL)
-├── portals/                                # Trader Portal frontend (React/Vite monorepo)
-├── idp/                                    # Identity Provider (ThunderID) configuration and seed resources
-├── deployments/helm/                       # Helm chart for deploying the stack
-├── docs/                                   # WORKFLOW_GUIDE.md and other developer docs
-├── configs/                                 # Runtime configs only (no workflow/form artifacts)
-│   ├── config.example.yaml                  # Template for config.yaml (server config — local/native dev)
-│   ├── config.docker.example.yaml           # Template for config.docker.yaml (server config — Docker Compose)
-│   └── companies.example.json               # Template for companies.json
-├── compose.yml / compose.override.yml     # Docker Compose stack (base + dev hot-reload override)
-├── .env.example                            # Template for .env (secrets and Docker Compose host settings)
-├── Dockerfile
-├── Makefile
-├── go.mod
-└── go.sum
-```
+It is built on [OpenNSW/core](https://github.com/OpenNSW/core), with workflows and forms from [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts).
 
-The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured by `artifactLoader` in `config.yaml` — see [`configs/config.example.yaml`](configs/config.example.yaml)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest.json` file is the index that tells the artifact registry which file each artifact ID resolves to. A release publishes it as an immutable `manifest_v<N>.json`; the server loads every published version, and `manifest.json` as version 1 where there are none.
+## Why it matters for Sri Lanka
 
-For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
+- **For traders: one portal for everything.** Submit applications to every agency, pay the fees, and track the status of each agency's tasks, all in one place.
+- **For agencies: their own portal.** Each agency's officers review traders' applications in a portal with the agency's own branding.
+
+Less paperwork, faster clearance, lower costs.
+
+## Architecture
+
+![Architecture of the National Single Window: traders and CHAs use TNSW and agency officers use the CDA, FCAU, NPQS, SLTB and EFC agencies on the TNSW platform; they rely on GovTech-run infrastructure (ThunderID, Temporal, email, audit, PostgreSQL and S3 object storage) and connect to SLPA's CMS, GovPay, SLC Edge and ASYCUDA, an SMS provider, and the IPPC hub](docs/diagrams/architecture.svg)
 
 ---
 
 ## How to Run Locally
 
+You need Go 1.27+, Docker with Compose v2, Node.js 24.15+, pnpm 12.16+ and [golangci-lint v2](https://golangci-lint.run).
+
+1. **Clone the artifacts** next to this repo. The agencies load their workflows and forms from it:
+
+   ```bash
+   git clone https://github.com/OpenNSW/one-trade-artifacts.git ../one-trade-artifacts
+   ```
+
+2. **Set up** (installs tools and creates local config files from the examples):
+
+   ```bash
+   make setup
+   ```
+
+3. **Start** the database, identity provider, Temporal, the NSW API and Trader Portal, and the agencies:
+
+   ```bash
+   make dev
+   ```
+
+4. **Open** the Trader Portal at <http://localhost:5173>. The API runs at <http://localhost:8080> (`/health` returns `ok`).
+
+Each agency runs its own API and officer portal next to NSW:
+
+| Agency                                   | Portal                  | API                     |
+| ---------------------------------------- | ----------------------- | ----------------------- |
+| National Plant Quarantine Service (NPQS) | <http://localhost:5174> | <http://localhost:8081> |
+| Food Control Administration Unit (FCAU)  | <http://localhost:5175> | <http://localhost:8082> |
+| Coconut Development Authority (CDA)      | <http://localhost:5176> | <http://localhost:8083> |
+| Export Facilitation Center (EFC)         | <http://localhost:5178> | <http://localhost:8085> |
+| Sri Lanka Tea Board (SLTB)               | <http://localhost:5179> | <http://localhost:8086> |
+
+Changes to the NSW API and Trader Portal reload automatically. The agencies don't; rebuild one after a change with `docker compose up -d --build <agency>-api <agency>-portal`. Each agency's setup is in `configs/agency/<agency>/README.md`, and how agency mode works is in [docs/agency.md](docs/agency.md).
+
+Run `make help` to see all commands.
+
 > [!NOTE]
-> ⚠️ **This quickstart is for local development only.** The local IdP serves plain
-> HTTP (`server.http_only: true` in `idp/deployment.yaml`), so the example configs
-> reach it over `http://` with no TLS settings. For non-local environments, serve the
-> IdP over HTTPS with a trusted certificate chain. The insecure-TLS escape hatches
-> (`authn.insecureSkipTLSVerify`, `services[].auth.oauth2.insecureSkipTLSVerify`) are
-> honored only when `APP_ENV=development`; never set that outside local dev.
-
-### 1. First-time setup
-
-```bash
-make setup
-```
-
-This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, `configs/companies.json` and `configs/{config,config.docker}.yaml`. Existing files are never overwritten, so it is safe to re-run.
-
-Configure outbound HTTP services in the YAML config's top-level `services` list.
-Secret values use quoted `{{env:NAME}}` or `{{file:/path}}` placeholders.
-
-> [!IMPORTANT]
-> **Upgrading an existing clone to the plain-HTTP IdP.** Because `make setup` keeps
-> your existing files, change the IdP URLs (`localhost:8090`, `thunderid:8090`) from
-> `https://` to `http://` yourself in `configs/{config,config.docker}.yaml`
-> and `portals/apps/trader-app/public/config.js`. `PUBLIC_URL`, `PORT` and `HOSTNAME` in
-> `idp/.env` are no longer read and can go. Then run `docker compose up` so
-> `thunderid-setup` re-imports the Console with `http://` redirect URIs, and sign in
-> again: the token issuer is now `http://localhost:8090`.
-
-> [!NOTE]
-> `make setup` requires **golangci-lint v2** to already be installed; it stops with an error otherwise.
-> See the [official install guide](https://golangci-lint.run) for all platforms, e.g.:
->
-> - macOS/Linux (Homebrew): `brew install golangci-lint`
-> - Any platform with Go: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`
-
-Edit the seeded files for your environment before starting the stack. See the [Configuration Reference](#configuration-reference) for what each one holds.
-
-### 2. Start the Docker Stack
-
-The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
-
-```bash
-make dev      # development: hot reload (air for Go, Vite HMR for the portal)
-make preview  # build and run the real images from the Dockerfiles, locally
-make otel     # optional: local OpenObserve for OTLP (not part of deps/dev)
-make help     # list all targets
-```
-
-This spins up:
-
-- **`nsw-postgres`** (Port `5432`): Database populated with base tables/schemas.
-- **`thunderid`** (Port `8090`): ThunderID Identity Provider.
-- **`temporal`** (Port `7233`) & **`temporal-ui`** (Port `8233`): Temporal workflow orchestration engine.
-- **`tnsw-api`** (Port `8080`): The Go backend server.
-- **`tnsw-web`** (Port `5173`): The React Trader Portal frontend.
-
-`make otel` starts **OpenObserve** on `http://localhost:5080` (Compose profile `otel`, ephemeral, loopback-only). It is not included in `make deps` or `make dev`. To export from TNSW only, uncomment the local `otel` block in `configs/config.docker.yaml` (Compose API) or `configs/config.yaml` (native API), then restart the API. Sign in with `root@example.com` / `Complexpass#123` (fixed local defaults in `compose.yml`).
-
-> [!IMPORTANT]
-> **`docker compose up` gives you the _development_ stack.**
-> A `compose.override.yml` sits next to `compose.yml` and Docker Compose
-> **auto-merges it** on any bare `docker compose` command — so a plain
-> `docker compose up` runs the hot-reload dev stack (stock language images,
-> source bind-mounted, `air`/Vite recompiling in place). The real built images
-> from the Dockerfiles are **only** used when the override is excluded with
-> `-f compose.yml`.
->
-> | Goal                  | Command                                                                 |
-> | --------------------- | ----------------------------------------------------------------------- |
-> | Dev (hot reload)      | `make dev` &nbsp;·&nbsp; `docker compose up`                            |
-> | Preview (real images) | `make preview` &nbsp;·&nbsp; `docker compose -f compose.yml up --build` |
->
-> **CI/deploy scripts that shell out to `docker compose` directly must pass
-> `-f compose.yml`** (or call `make preview`), otherwise they will silently build
-> and run the dev stack.
-
-In development, edits to Go files trigger an `air` rebuild and frontend edits hot-reload via Vite — no image rebuild and no container restart needed.
-
-The Trader Portal frontend runs as part of the stack — `make dev` serves it via the Vite dev server at `http://localhost:5173`, with backend requests going to `localhost:8080` and auth to the Thunder IDP at `localhost:8090`. No separate repository or process is required.
-
-### 3. Iterating on Go code
-
-In `make dev`, the API container runs [`air`](https://github.com/air-verse/air) against your bind-mounted source. Saving a `.go` file triggers an automatic rebuild and restart of the server inside the container — usually a second or two — while PostgreSQL, Temporal, and the IDP keep running undisturbed. There is nothing to restart manually.
-
-To watch the rebuild output:
-
-```bash
-make logs
-```
-
-#### Working against the core engine (`OpenNSW/core`)
-
-This repo depends on the core engine as a normal, version-pinned Go module — there is **no** sibling clone, `replace` directive, or `GOWORK` setting involved by default (see [Upstream Dependency](#upstream-dependency)). Two common workflows:
-
-- **Bump to a newer engine release** — update `go.mod` to a new version and let the dev container pick it up on its next rebuild:
-
-  ```bash
-  go get github.com/OpenNSW/core@latest
-  go mod tidy
-  ```
-
-- **Develop the engine and this repo together** — use the [native cross-repo workflow](#native-cross-repo-development) below for a live edit loop across both repositories.
-
-#### Native cross-repo development
-
-The dev container is hermetic: it builds from the pinned `go.mod` version, ignores any `go.work` (`GOWORK=off`), and does **not** mount sibling repos. That's intentional — it keeps every container build reproducible. When you need to edit `OpenNSW/core` and see the change live, run the **Go API natively on your host** and use Docker only for the backing services:
-
-1. **Clone `OpenNSW/core`** next to `nsw-srilanka` and create a workspace (`go.work` is gitignored, so this stays personal):
-
-   ```bash
-   go work init . ../core
-   ```
-
-2. **Prepare config** — the `configs/config.yaml` seeded by `make setup` already points the DB, Temporal and IdP at `localhost`, and `.env` supplies the secrets it references. Its `services` section also uses `localhost` endpoints for outbound calls.
-3. **Start everything except the API and portal** (db, temporal, idp, migrations, …) so you run those two natively:
-
-   ```bash
-   make deps
-   ```
-
-4. **Run the API on the host**, where your `go.work` is fully honored:
-
-   ```bash
-   go run ./cmd/server
-   ```
-
-Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a native debugger. The ports `docker compose` publishes come from `.env` (e.g. `DB_PORT`), while the host binary connects to the ones in `configs/config.yaml` (`db.postgres.port`) — keep the two in step.
-
-> Don't mix the two: if `make dev` is already running, its `api` container holds port `8080` — run `make down` (or just `docker compose stop api`) before starting the native server.
-
----
-
-### 4. Verify
-
-- Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
-- Observability: `make otel` for a local OpenObserve, then uncomment the local `otel` block in the config the API loads (see the example files). Leave `otel` commented (or omit it) for a no-op. Audit (`category=audit`) is OTLP-only.
-- Log export starts before dependency initialization. Startup failures are logged and telemetry is flushed for up to five seconds before exit. Configuration-load failures remain in the container log because telemetry settings are not yet available; collector failures are also reported locally.
-- Logs will report DB connection, Temporal worker startup, and the artifact manifests loaded via the artifact loader from `tnsw/manifest_v<N>.json`, or `tnsw/manifest.json` as version 1 where there are none, in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
-
-### 5. Simulating a payment webhook (dev only)
-
-INFO-type gateways (e.g. `govpay`) don't fire a real callback. To advance a `PENDING_PAYMENT` task manually:
-
-```bash
-curl -X POST "http://localhost:8080/api/v1/payments/govpay/webhook" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "transactionID": "TNSWPYRMTWMY",
-    "subinstId": "sub-001",
-    "serviceid": "FCAU",
-    "serviceName": "FCAU Application Fee",
-    "data": [
-      {
-        "seq": "1",
-        "paramName": "refNo",
-        "value": "TNSWPYRMTWMY"
-      },
-      {
-        "seq": "2",
-        "paramName": "amount",
-        "value": "1500"
-      },
-      {
-        "seq": "3",
-        "paramName": "currency",
-        "value": "LKR"
-      },
-      {
-        "seq": "4",
-        "paramName": "status",
-        "value": "SUCCESS"
-      },
-      {
-        "seq": "5",
-        "paramName": "paymentMethod",
-        "value": "ONLINE_BANKING"
-      }
-    ]
-  }'
-```
-
-REDIRECT-type gateways (e.g. `lankapay`) fire this webhook on their own after a successful redirect.
+> This setup is for local development only.
 
 ---
 
 ## Database migrations
 
-Schema migrations live in `migrations/` as `NNNNNN_name.sql` files, numbered from
-`000001` in order, each holding a `-- @UP` and a `-- @DOWN` block. A new
-migration's `@DOWN` must undo its schema changes, and an applied migration is
-never edited: the **Migrations** check in CI enforces both (see
-[CONTRIBUTING.md](CONTRIBUTING.md#migration-check-migrationsyml)).
-They are applied by the standalone migrator from
-[`agency`](https://github.com/OpenNSW/agency) (`backend/cmd/migrate`),
-which tracks applied versions in a `__migrations` table and runs each migration
-in its own transaction.
+Migrations are SQL files in `migrations/`, applied automatically to the NSW and agency databases when the stack starts.
 
-**In Docker (default):** the `migrate` service builds the dedicated `migrate`
-image target (SQL files baked in), runs `migrate up` to completion, and the `api`
-service waits on it via `depends_on: service_completed_successfully`. A fresh
-`db` volume already creates the database, so there is no separate "create DB"
-step. To reset everything, wipe the volume:
+| Task                    | Command                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| Create a new migration  | `make migration name=add_example_table`                                                |
+| Apply a new migration   | `docker compose up -d --build migrate cda-init efc-init npqs-init sltb-init fcau-init` |
+| See applied and pending | `docker compose run --rm migrate migrate status`                                       |
+| Roll back the latest    | `docker compose run --rm migrate migrate down`                                         |
+| Reset the database      | `make clean`, then `make dev`                                                          |
 
-```bash
-make clean        # docker compose down -v — drops the db volume
-make deps         # brings the stack back up; migrate re-applies from scratch
-```
-
-Run ad-hoc commands against the running stack:
-
-```bash
-docker compose run --rm migrate status   # show applied / pending
-docker compose run --rm migrate down     # roll back the latest migration
-```
-
-**Locally (native, without Docker):** install the tool once, then run it on the
-same `configs/config.yaml` the server uses — it reads the `db` section (its
-`driver` and `postgres` keys) and nothing else. Every `{{env:…}}` placeholder in
-the file must resolve, so source `.env` first:
-
-```bash
-# Read the pin out of the Dockerfile rather than repeating it — MIGRATE_VERSION
-# there is the single source of truth, and compose and the Makefile both defer to it.
-go install github.com/OpenNSW/agency/backend/cmd/migrate@"$(sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)"
-
-set -a; . ./.env; set +a
-CONFIG_PATH=./configs/config.yaml \
-  migrate up        # or: status | down | generate <name>
-```
-
-`migrate generate <name>` scaffolds the next `NNNNNN_<name>.sql` with empty
-`@UP`/`@DOWN` stubs; it needs no database, so `make migration name=<name>` runs
-it with no config file at all.
-
-## Upstream Dependency
-
-The core engine is pulled directly from GitHub via Go modules:
-
-```text
-github.com/OpenNSW/core v0.0.0-…  // pinned to a specific commit
-```
-
-To pull the latest release:
-
-```bash
-go get github.com/OpenNSW/core@latest
-go mod tidy
-```
-
-There is **no** `replace` directive and **no** sibling clone of `OpenNSW/core` required to build.
-
-The `OpenNSW/core` SDK provides all the infrastructure building blocks used by this application — workflow orchestration, task management, payment gateways, authentication, storage, notifications, and more. See the [core README](https://github.com/OpenNSW/core) for the full package reference and architecture overview.
+Each file has an `@UP` and a reversible `@DOWN` block. Never edit a migration that has already been applied. See [CONTRIBUTING.md](CONTRIBUTING.md#migration-check-migrationsyml) for details.
 
 ---
 
 ## Configuration Reference
 
-| File                         | Purpose                                                                                                                                                                                                      | Source of truth                      |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
-| `.env`                       | Secrets the config files reference, and Docker Compose host settings (ports)                                                                                                                                 | `.env.example`                       |
-| `idp/.env`                   | Identity Provider environment (client IDs, secrets, JWKS config)                                                                                                                                             | `idp/.env.example`                   |
-| `configs/companies.json`     | Seed company/trader records (registration, VAT/TIN, per-agency IDs)                                                                                                                                          | `configs/companies.example.json`     |
-| `configs/config.yaml`        | Server config (mandatory; `CONFIG_PATH`) — DB, server, outbound services, CORS, storage, auth, notification, artifact loader, `refid`, `payment` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml`        |
-| `configs/config.docker.yaml` | The same, for Docker Compose — reaches the other services by container hostname                                                                                                                              | `configs/config.docker.example.yaml` |
+`make setup` creates these files from their `.example` versions. Edit them for your environment.
 
-Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.
+| File                                       | What it holds                               |
+| ------------------------------------------ | ------------------------------------------- |
+| `.env`                                     | Secrets and Docker port settings            |
+| `idp/.env`                                 | Identity provider settings                  |
+| `configs/companies.json`                   | Sample companies and traders                |
+| `configs/config.yaml`                      | Server settings, for running without Docker |
+| `configs/config.docker.yaml`               | Server settings, for running with Docker    |
+| `portals/apps/trader-app/public/config.js` | Trader Portal settings                      |
+
+To write or change workflows and forms, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
