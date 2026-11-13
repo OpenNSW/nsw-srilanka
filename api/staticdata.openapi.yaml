@@ -4,7 +4,7 @@ info:
   description: |
     OpenAPI 3.0 specification for the static reference-data lookup endpoint.
     Serves immutable JSON artifacts (HS code lists, lookup tables, etc.) out
-    of the artifact registry, keyed by (id, version).
+    of the artifact registry, keyed by (id, manifestVersion).
 
     Requires a JWT bearer token (see `securitySchemes.BearerAuth`) carrying
     scope `task:read` — reused from the task domain since static data is
@@ -19,11 +19,14 @@ paths:
     get:
       summary: Get a static reference-data artifact
       description: |
-        Returns the raw JSON artifact registered under `id` at the given
-        `version`. The response is cacheable by the caller's own browser for
-        up to one year (see the `Cache-Control` response header) —
-        `(id, version)` identifies immutable content — but marked `private`
-        since this endpoint is scope-protected.
+        Returns the raw JSON artifact registered under `id` as artifact
+        manifest `manifestVersion` lists it: its row for `id` without a
+        version, else its highest explicit version. A task's forms send the
+        task's `manifest_version`, so they show the data the task's own
+        manifest lists. The response is cacheable by the caller's own browser
+        for up to one year (see the `Cache-Control` response header) —
+        `(id, manifestVersion)` identifies immutable content — but marked
+        `private` since this endpoint is scope-protected.
 
         Requires scope `task:read`.
       operationId: getStaticData
@@ -34,12 +37,14 @@ paths:
           schema:
             type: string
           example: "hscode-list"
-        - name: version
+        - name: manifestVersion
           in: query
           required: true
+          description: The artifact manifest version to resolve `id` through.
           schema:
-            type: string
-          example: "2026.1"
+            type: integer
+            minimum: 1
+          example: 3
       responses:
         '200':
           description: OK. The raw JSON artifact; its shape is defined by the artifact itself, not by this endpoint.
@@ -53,7 +58,7 @@ paths:
               schema:
                 description: Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
         '400':
-          description: Missing `version` query parameter.
+          description: Missing `manifestVersion` query parameter, or it is not a positive integer.
           content:
             application/json:
               schema:
@@ -71,7 +76,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: No artifact registered for this `(id, version)`.
+          description: No artifact registered for this `(id, manifestVersion)`, or the manifest version is not published.
           content:
             application/json:
               schema:

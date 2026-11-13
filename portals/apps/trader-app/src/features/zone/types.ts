@@ -157,6 +157,9 @@ export type ZoneView = {
   // step_id is the step the task is on. A submission is posted to it, so one made
   // against a step the task has since left is rejected (409) instead of applied.
   step_id?: string
+  // manifest_version is the artifact manifest version the task resolves its templates
+  // through. Its forms load static data at this version.
+  manifest_version?: number
   alert?: Alert
   audit?: AuditEntry[]
   // claim is absent where the deployment does not use task claims.
