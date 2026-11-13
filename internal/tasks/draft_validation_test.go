@@ -17,7 +17,6 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -148,6 +147,7 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 		Manager:         orchestrator.NewTaskManager(db, set, nil, extReg, wf, nil, nil),
 		Store:           db,
 		Files:           NewFileBinding(newFakeFileRefs(), nil, fixedRenderConfig(`{}`)),
+		CanAct:          mayAct,
 		MaxRequestBytes: 1024,
 	}
 	return h, db, wf
@@ -158,7 +158,7 @@ func callStep(method, path, body string, serve http.HandlerFunc) *httptest.Respo
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.SetPathValue("id", testTaskID)
 	req.SetPathValue("stepId", "step-1")
-	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+	req = asCaller(req, userPrincipal("bob"))
 	recorder := httptest.NewRecorder()
 	serve(recorder, req)
 	return recorder
