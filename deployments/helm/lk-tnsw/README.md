@@ -282,6 +282,16 @@ frontend:
     logoUrlDark: /branding/logo-dark.png # optional
 ```
 
+### Backend memory
+
+`values.yaml` sets no `resources`. The backend holds a task submission in
+memory at several times its size, up to `backend.config.server.maxRequestBytes`
+per request, so the example gives it a memory request and limit, and sets
+`GOMEMLIMIT` in `backend.env` a little under the limit so the Go runtime
+collects garbage harder before the container reaches it. Size both from what
+the backend uses in your environment. Two or more replicas
+(`backend.replicaCount`) keep the API up while one restarts.
+
 ### Health checks
 
 Both components default their `livenessProbe`/`readinessProbe` to `GET

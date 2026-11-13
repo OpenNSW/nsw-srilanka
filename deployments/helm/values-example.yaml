@@ -61,7 +61,23 @@ backend:
     type: ClusterIP
     port: 80
 
-  # Only what config.yaml cannot hold: APP_ENV, and the secrets referenced
+  # The backend holds a task submission in memory at several times its size, up
+  # to backend.config server.maxRequestBytes per request. The limit makes the
+  # container, not the node, run out first; size both values from what the
+  # backend uses in your environment, and keep GOMEMLIMIT (in env below) a
+  # little under the limit.
+  resources:
+    requests:
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+  # Two or more replicas keep the API up while one restarts. Nothing in the
+  # backend runs on a schedule, and its Temporal workers share their task
+  # queues; confirm your environment supports more than one before raising it.
+  replicaCount: 1
+
+  # Only what config.yaml cannot hold: APP_ENV, GOMEMLIMIT, and the secrets referenced
   # as {{env:NAME}} — each pulled from a
   # Kubernetes Secret, never inlined.
   env:
@@ -69,6 +85,10 @@ backend:
     # insecureSkipTLSVerify. Leave unset in any real deployment — the
     # backend then fails closed rather than trusting an unverified cert.
     APP_ENV: ""
+
+    # The Go runtime collects garbage harder as the heap nears this, so it stays
+    # under resources.limits.memory above. About 85% of the limit.
+    GOMEMLIMIT: "870MiB"
 
     DB_PASSWORD:
       valueFrom:
