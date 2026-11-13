@@ -53,8 +53,16 @@ func NewHandler(cusdecService cusdec.WebhookService, cdnService cdn.CDNWebhookSe
 // Without it, such a callback is answered 503 for SLC Edge to retry (§2).
 // Configure it before serving requests.
 func (h *Handler) WithCallbackRetries() *Handler {
-	h.callbacks = newCallbackRetries(h.applyCallback, defaultCallbackRetryTiming)
+	h.callbacks = h.newRetries(defaultCallbackRetryTiming)
 	return h
+}
+
+// newRetries retries held callbacks through the handler's services on timing, and
+// audits how each one ended.
+func (h *Handler) newRetries(timing callbackRetryTiming) *callbackRetries {
+	retries := newCallbackRetries(h.applyCallback, timing)
+	retries.outcome = h.auditRetryOutcome
+	return retries
 }
 
 // holdIfEarly accepts a callback whose processing failed with err for retry,
@@ -65,6 +73,9 @@ func (h *Handler) holdIfEarly(w http.ResponseWriter, r *http.Request, eventType 
 		return false
 	}
 	h.callbacks.schedule(r.Context(), Callback{EventType: eventType, Body: body})
+	if audited, ok := w.(*callbackResponse); ok {
+		audited.held = true
+	}
 	slog.InfoContext(r.Context(), "slce: callback arrived early; accepted and held for retry",
 		"event", eventType, "reason", err)
 	w.WriteHeader(http.StatusAccepted)
@@ -86,7 +97,7 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	if _, known := authn.FromContext(r.Context()); known && h.auditor != nil {
 		response := &callbackResponse{ResponseWriter: w}
 		w = response
-		defer func() { h.auditCallback(r.Context(), body, response.status) }()
+		defer func() { h.auditCallback(r.Context(), body, response.status, response.held) }()
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

@@ -459,6 +459,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		if err != nil {
 			return nil, fmt.Errorf("failed to build the SLPA webhook handler: %w", err)
 		}
+		slpaHandler.WithAuditor(auditor)
 
 		companyHandler = company.NewHandler(companyService)
 		paymentHandler = payment.NewHTTPHandler(paymentService)

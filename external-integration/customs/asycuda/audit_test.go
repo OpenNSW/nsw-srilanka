@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
@@ -21,19 +23,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The repositories lock their lookups: a delivery's record and its retry's
+// outcome can both resolve the document at once.
 type auditDeclarationRepo struct {
 	cusdec.DeclarationRepository
 	decl    *cusdec.CusdecDeclaration
 	err     error
+	mu      sync.Mutex
 	lookups []string
 }
 
 func (r *auditDeclarationRepo) GetByEdgeID(_ context.Context, id string) (*cusdec.CusdecDeclaration, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.lookups = append(r.lookups, id)
 	return r.decl, r.err
 }
 
 func (r *auditDeclarationRepo) GetByCusdecRef(_ context.Context, ref cusdec.DocumentReference) (*cusdec.CusdecDeclaration, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.lookups = append(r.lookups, ref.String())
 	return r.decl, r.err
 }
@@ -42,15 +51,20 @@ type auditDispatchNoteRepo struct {
 	cdn.DispatchNoteRepository
 	note    *cdn.DispatchNote
 	err     error
+	mu      sync.Mutex
 	lookups []string
 }
 
 func (r *auditDispatchNoteRepo) GetByEdgeID(_ context.Context, id string) (*cdn.DispatchNote, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.lookups = append(r.lookups, id)
 	return r.note, r.err
 }
 
 func (r *auditDispatchNoteRepo) GetByCDNRef(_ context.Context, ref cdn.DocumentReference) (*cdn.DispatchNote, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.lookups = append(r.lookups, ref.String())
 	return r.note, r.err
 }
@@ -204,8 +218,139 @@ func TestSLCEHandler_AuditDuplicateAndCustomsRejection(t *testing.T) {
 			assert.Equal(t, false, records[0].Metadata["integrated"])
 			assert.Equal(t, "edge-1", records[0].Metadata["edgeId"])
 			assert.NotContains(t, records[0].Metadata, "errors")
+			// A duplicate's 202 means it was applied before, not held for retry.
+			assert.NotContains(t, records[0].Metadata, "heldForRetry")
 		})
 	}
+}
+
+// A callback held for retry is recorded as received, marked as not applied yet.
+func TestSLCEHandler_AuditMarksAHeldCallback(t *testing.T) {
+	cs := new(mockCusdecService)
+	cs.On("ProcessCancellation", mock.Anything, mock.Anything).Return(cusdec.ErrCusdecNotFoundByRef).Once()
+	decls := &auditDeclarationRepo{decl: &cusdec.CusdecDeclaration{ID: "declaration-1", CaseID: "case-1"}}
+	client, capture := nswaudit.NewWithCapture()
+	h, held := withHeld(NewHandler(cs, new(mockCDNService)).WithAuditor(client, decls, nil))
+
+	w := httptest.NewRecorder()
+	h.HandleWebhook(w, callbackAuditRequest(cancelledPayload))
+
+	require.Equal(t, http.StatusAccepted, w.Code)
+	require.Len(t, held.held, 1)
+	records := capture.Records()
+	require.Len(t, records, 1)
+	r := records[0]
+	assert.Equal(t, nswaudit.StatusSuccess, r.Status)
+	assert.Equal(t, "declaration-1", r.TargetID)
+	assert.Equal(t, http.StatusAccepted, r.Metadata["httpStatus"])
+	assert.Equal(t, true, r.Metadata["heldForRetry"])
+	assert.NotContains(t, r.Metadata, "retryOutcome")
+}
+
+// A held callback gets a second record once its retries end, against the same
+// document, actor and trace as its delivery, saying how they ended.
+func TestSLCEHandler_AuditRetryOutcome(t *testing.T) {
+	for name, tc := range map[string]struct {
+		retried     []error // what each retry returns; the last repeats
+		window      time.Duration
+		wantStatus  nswaudit.Status
+		wantOutcome string
+		wantCode    any
+		wantTries   func(int) bool
+	}{
+		"applied": {
+			retried: []error{nil}, window: time.Minute,
+			wantStatus: nswaudit.StatusSuccess, wantOutcome: "applied", wantCode: nil,
+			wantTries: func(n int) bool { return n == 1 },
+		},
+		"refused": {
+			retried: []error{cusdec.ErrCusdecNotFoundByRef, cusdec.ErrCaseNotRecorded}, window: time.Minute,
+			wantStatus: nswaudit.StatusFailure, wantOutcome: "refused", wantCode: "callback_retry_refused",
+			wantTries: func(n int) bool { return n == 2 },
+		},
+		"given up": {
+			retried: []error{cusdec.ErrCusdecNotFoundByRef}, window: 30 * time.Millisecond,
+			wantStatus: nswaudit.StatusFailure, wantOutcome: "gave_up", wantCode: "callback_retry_exhausted",
+			wantTries: func(n int) bool { return n > 1 },
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cs := new(mockCusdecService)
+			cs.On("ProcessCancellation", mock.Anything, mock.Anything).Return(cusdec.ErrCusdecNotFoundByRef).Once()
+			for i, err := range tc.retried {
+				call := cs.On("ProcessCancellation", mock.Anything, mock.Anything).Return(err)
+				if i < len(tc.retried)-1 {
+					call.Once()
+				}
+			}
+			decls := &auditDeclarationRepo{decl: &cusdec.CusdecDeclaration{ID: "declaration-1", CaseID: "case-1"}}
+			client, capture := nswaudit.NewWithCapture()
+			h := NewHandler(cs, new(mockCDNService)).WithAuditor(client, decls, nil)
+			retries := h.newRetries(timing(tc.window))
+			h.callbacks = retries
+
+			w := httptest.NewRecorder()
+			h.HandleWebhook(w, callbackAuditRequest(cancelledPayload))
+			require.Equal(t, http.StatusAccepted, w.Code)
+			retries.wait()
+
+			records := capture.Records()
+			require.Len(t, records, 2)
+			// The retry can end before the delivery's own record is written.
+			delivery, outcome := records[0], records[1]
+			if _, ok := delivery.Metadata["retryOutcome"]; ok {
+				delivery, outcome = outcome, delivery
+			}
+			assert.Equal(t, true, delivery.Metadata["heldForRetry"])
+
+			assert.Equal(t, nswaudit.EventCustoms, outcome.EventType)
+			assert.Equal(t, nswaudit.ActionUpdate, outcome.Action)
+			assert.Equal(t, tc.wantStatus, outcome.Status)
+			assert.Equal(t, nswaudit.ActorService, outcome.ActorType)
+			assert.Equal(t, "customs-client", outcome.ActorID)
+			assert.Equal(t, "callback-trace", outcome.TraceID)
+			assert.Equal(t, nswaudit.TargetDeclaration, outcome.TargetType)
+			assert.Equal(t, "declaration-1", outcome.TargetID)
+			assert.Equal(t, "case-1", outcome.Metadata["caseId"])
+			assert.Equal(t, cusdec.EventCusdecCancelled, outcome.Metadata["eventType"])
+			assert.Equal(t, "CBEX1/2026/E/1047", outcome.Metadata["documentRef"])
+			assert.Equal(t, tc.wantOutcome, outcome.Metadata["retryOutcome"])
+			assert.Equal(t, tc.wantCode, outcome.Metadata["error_code"])
+			tries, ok := outcome.Metadata["retryAttempts"].(int)
+			require.True(t, ok)
+			assert.True(t, tc.wantTries(tries), "retryAttempts = %d", tries)
+			// The outcome answers no request, and was not itself held.
+			assert.NotContains(t, outcome.Metadata, "httpStatus")
+			assert.NotContains(t, outcome.Metadata, "heldForRetry")
+			assert.Empty(t, outcome.Message)
+		})
+	}
+}
+
+// Only a delivery from a known caller is audited, so only its retries report an
+// outcome; a handler with no auditor reports none.
+func TestSLCEHandler_AuditRetryOutcomeRequiresKnownCallerAndAuditor(t *testing.T) {
+	held := Callback{EventType: cusdec.EventCusdecCancelled, Body: []byte(cancelledPayload)}
+	known := callbackAuditRequest(cancelledPayload).Context()
+
+	client, capture := nswaudit.NewWithCapture()
+	h := NewHandler(new(mockCusdecService), new(mockCDNService)).WithAuditor(client, nil, nil)
+	h.auditRetryOutcome(context.Background(), held, 1, nil)
+	assert.Empty(t, capture.Records())
+
+	assert.NotPanics(t, func() {
+		NewHandler(new(mockCusdecService), new(mockCDNService)).auditRetryOutcome(known, held, 1, nil)
+	})
+}
+
+// The retries WithCallbackRetries configures report their outcomes to the audit.
+func TestSLCEHandler_WithCallbackRetriesAuditsOutcomes(t *testing.T) {
+	h := NewHandler(new(mockCusdecService), new(mockCDNService)).WithCallbackRetries()
+
+	retries, ok := h.callbacks.(*callbackRetries)
+	require.True(t, ok)
+	assert.Equal(t, defaultCallbackRetryTiming, retries.timing)
+	assert.NotNil(t, retries.outcome)
 }
 
 func TestSLCEHandler_AuditRequiresKnownCaller(t *testing.T) {
