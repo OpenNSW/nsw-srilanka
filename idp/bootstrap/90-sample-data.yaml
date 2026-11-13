@@ -242,6 +242,48 @@ attributes:
 credentials:
   password: "{{ .SAMPLE_USER_PASSWORD }}"
 ---
+# File: nppo_assistant.yaml
+resource_type: user
+id: 10d411a4-a07c-4d38-9f71-0cb815031893
+type: Government_User
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+attributes:
+  email: "nppo_assistant@government.dev"
+  family_name: "Assistant"
+  given_name: "NPPO"
+  phone_number: "+94771234590"
+  username: "nppo_assistant"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: nppo_inspector.yaml
+resource_type: user
+id: 0b5aeee4-7a86-480a-9ee5-a68516c39fcc
+type: Government_User
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+attributes:
+  email: "nppo_inspector@government.dev"
+  family_name: "Inspector"
+  given_name: "NPPO"
+  phone_number: "+94771234591"
+  username: "nppo_inspector"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: nppo_officer.yaml
+resource_type: user
+id: ec4bc14f-40d2-4432-ab75-ed5c8527259d
+type: Government_User
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+attributes:
+  email: "nppo_officer@government.dev"
+  family_name: "Officer"
+  given_name: "NPPO"
+  phone_number: "+94771234592"
+  username: "nppo_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
 # File: CHA.yaml
 resource_type: group
 id: 01a13912-d495-7400-b5bc-541433e05751
@@ -376,4 +418,34 @@ description: SLTB admins group
 ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
 members:
   - id: b36c9e91-e721-43c3-b0bc-6fea41eb8a75
+    type: user
+---
+# File: NPPO_Assistant_Group.yaml
+resource_type: group
+id: 5312213c-4a61-40c6-ab4c-7a6fc83ee3c4
+name: NPPO Assistant
+description: NPQS group for NPPO assistants
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+members:
+  - id: 10d411a4-a07c-4d38-9f71-0cb815031893
+    type: user
+---
+# File: NPPO_Inspector_Group.yaml
+resource_type: group
+id: 242cf25f-012b-42a1-9f77-871e3188cd0d
+name: NPPO Inspector
+description: NPQS group for NPPO inspectors
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+members:
+  - id: 0b5aeee4-7a86-480a-9ee5-a68516c39fcc
+    type: user
+---
+# File: NPPO_Officer_Group.yaml
+resource_type: group
+id: 67af8c48-6fbc-43d1-acc5-b6ec7f90c81d
+name: NPPO Officer
+description: NPQS group for NPPO officers
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+members:
+  - id: ec4bc14f-40d2-4432-ab75-ed5c8527259d
     type: user

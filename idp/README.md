@@ -315,6 +315,7 @@ scopes via a role:
 | EFC admin users        | `EFC Admin` role (via `EFC Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                |
 | `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `workflow:inject`, `task:write` on the EFC API                                                                          |
 | NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                                                                                            |
+| NPQS staff users       | `NPPO Assistant`, `NPPO Inspector` and `NPPO Officer` roles (each via its own group) → the `NPQS Officer` scopes                                                             |
 | NPQS admin users       | `NPQS Admin` role (via `NPQS Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                              |
 | SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                                                                                            |
 | SLTB admin users       | `SLTB Admin` role (via `SLTB Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                              |

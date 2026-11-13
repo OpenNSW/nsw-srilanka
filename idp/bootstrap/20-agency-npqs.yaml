@@ -1,4 +1,5 @@
-# Agency: NPQS. Its OU, API resource server, officer role and group, officer portal,
+# Agency: NPQS. Its OU, API resource server, officer, staff and admin roles and their
+# groups, officer portal,
 # and the NSW_TO_NPQS M2M client with its role (it injects into the agency and replies
 # on its parked steps). NPQS's own client for calling TNSW, NPQS_TO_NSW, is in
 # 15-tnsw-agency-clients.yaml. Needs 10-nsw-platform.yaml.
@@ -141,6 +142,84 @@ resource_type: group
 id: 4a7201d6-6bc6-446c-8961-f08386bfb79c
 name: NPQS Admins
 description: NPQS admins group
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+---
+# File: NPPO_Assistant.yaml
+resource_type: role
+id: d699d830-c3d8-4737-9558-15cc0b3dda15
+name: NPPO Assistant
+description: Role for NPPO assistants working tasks in the NPQS deployment
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+permissions:
+  - resourceServerId: 01a13912-cd09-7fe5-9b6f-e16c5523ca41
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 5312213c-4a61-40c6-ab4c-7a6fc83ee3c4
+    type: group
+---
+# File: NPPO_Assistant_Group.yaml
+resource_type: group
+id: 5312213c-4a61-40c6-ab4c-7a6fc83ee3c4
+name: NPPO Assistant
+description: NPQS group for NPPO assistants
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+---
+# File: NPPO_Inspector.yaml
+resource_type: role
+id: 52ff8a8e-c67e-467a-856a-9cb8996f95ef
+name: NPPO Inspector
+description: Role for NPPO inspectors working tasks in the NPQS deployment
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+permissions:
+  - resourceServerId: 01a13912-cd09-7fe5-9b6f-e16c5523ca41
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 242cf25f-012b-42a1-9f77-871e3188cd0d
+    type: group
+---
+# File: NPPO_Inspector_Group.yaml
+resource_type: group
+id: 242cf25f-012b-42a1-9f77-871e3188cd0d
+name: NPPO Inspector
+description: NPQS group for NPPO inspectors
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+---
+# File: NPPO_Officer.yaml
+resource_type: role
+id: 04c20b71-00cc-4d3e-9e62-84cf919a808c
+name: NPPO Officer
+description: Role for NPPO officers working tasks in the NPQS deployment
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+permissions:
+  - resourceServerId: 01a13912-cd09-7fe5-9b6f-e16c5523ca41
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 67af8c48-6fbc-43d1-acc5-b6ec7f90c81d
+    type: group
+---
+# File: NPPO_Officer_Group.yaml
+resource_type: group
+id: 67af8c48-6fbc-43d1-acc5-b6ec7f90c81d
+name: NPPO Officer
+description: NPQS group for NPPO officers
 ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
 ---
 # File: NPQSPortalApp.yaml
