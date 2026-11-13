@@ -130,3 +130,36 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 	// resolves.
 	return "", "", ErrNotWaitingYet
 }
+
+// recordedOrder is an order as the consignment that raised it recorded it: the
+// slug the CMS issued for it, and the case it was raised for.
+type recordedOrder struct {
+	Slug   string `gorm:"column:slug"`
+	CaseID string `gorm:"column:case_id"`
+}
+
+// orderRecords finds an order among those the consignments here recorded.
+type orderRecords interface {
+	recordedOrder(ctx context.Context, correlator string) (recordedOrder, bool, error)
+}
+
+// recordedOrder returns the order recorded under correlator, which is its slug
+// or its order number, and whether there is one. Every task of a consignment
+// that holds an order holds the same slug and case, so any one of them answers.
+//
+// TODO(#1078): read the order from the service-order table instead of core's.
+func (l taskLookup) recordedOrder(ctx context.Context, correlator string) (recordedOrder, bool, error) {
+	var order recordedOrder
+	err := l.db.WithContext(ctx).
+		Table(taskTable).
+		Select("data->'so'->>'slug' AS slug", "case_id").
+		Where("data->'so'->>'slug' = ? OR data->'so'->>'service_order_no' = ?", correlator, correlator).
+		Take(&order).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return recordedOrder{}, false, nil
+	}
+	if err != nil {
+		return recordedOrder{}, false, fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
+	}
+	return order, true, nil
+}
