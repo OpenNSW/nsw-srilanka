@@ -28,19 +28,20 @@ func (f fakeTemplates) HTMLTemplate(_ context.Context, id string) ([]byte, error
 	return []byte(src), nil
 }
 
-// fakeStaticData serves static data titles by "id@version", then const; an
-// artifact it lacks is not found, and the "down" artifact fails to read.
+// fakeStaticData serves static data titles by "id@manifestVersion", then
+// const; an artifact a manifest version lacks is not found, and the "down"
+// artifact fails to read.
 type fakeStaticData map[string]map[string]string
 
 var errStaticDataDown = errors.New("artifact store unavailable")
 
-func (f fakeStaticData) Title(_ context.Context, id, version, value string) (string, bool, error) {
+func (f fakeStaticData) Title(_ context.Context, manifestVersion int, id, value string) (string, bool, error) {
 	if id == "down" {
 		return "", false, errStaticDataDown
 	}
-	titles, ok := f[id+"@"+version]
+	titles, ok := f[fmt.Sprintf("%s@%d", id, manifestVersion)]
 	if !ok {
-		return "", false, fmt.Errorf("static data %q version %q: %w", id, version, artifact.ErrNotFound)
+		return "", false, fmt.Errorf("static data %q in manifest version %d: %w", id, manifestVersion, artifact.ErrNotFound)
 	}
 	title, found := titles[value]
 	return title, found, nil
@@ -81,7 +82,7 @@ func htmlDocCtx(inputs map[string]any) plugins.PluginContext {
 	return plugins.PluginContext{
 		Context:         context.Background(),
 		Inputs:          inputs,
-		Record:          &store.TaskRecord{TaskID: "task-1", Data: map[string]any{}},
+		Record:          &store.TaskRecord{TaskID: "task-1", ManifestVersion: 2, Data: map[string]any{}},
 		OutputNamespace: "permit_doc",
 	}
 }
@@ -205,7 +206,8 @@ func TestHTMLDocumentGenerator_Failures(t *testing.T) {
 	}
 }
 
-var portStaticData = fakeStaticData{"ports@1": {"LKCMB": "COLOMBO", "NLRTM": "ROTTERDAM", "123": "NUMERIC"}}
+// portStaticData lists ports in the manifest version htmlDocCtx's task runs on.
+var portStaticData = fakeStaticData{"ports@2": {"LKCMB": "COLOMBO", "NLRTM": "ROTTERDAM", "123": "NUMERIC"}}
 
 func TestHTMLDocumentGenerator_StaticDataNamesACode(t *testing.T) {
 	cases := map[string]struct {
@@ -222,7 +224,7 @@ func TestHTMLDocumentGenerator_StaticDataNamesACode(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			files := &fakeSaver{}
-			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" "1" .port }}</p>`}, files, portStaticData)
+			p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" .port }}</p>`}, files, portStaticData)
 
 			require.NoError(t, p.Execute(htmlDocCtx(tc.inputs), json.RawMessage(`{"template_id": "doc"}`)))
 
@@ -231,11 +233,47 @@ func TestHTMLDocumentGenerator_StaticDataNamesACode(t *testing.T) {
 	}
 }
 
+// The static data comes from the manifest version the task started on.
+func TestHTMLDocumentGenerator_StaticDataOfTheTasksManifestVersion(t *testing.T) {
+	staticData := fakeStaticData{
+		"ports@1": {"LKCMB": "COLOMBO"},
+		"ports@2": {"LKCMB": "PORT OF COLOMBO"},
+	}
+	for version, want := range map[int]string{1: "<p>COLOMBO</p>", 2: "<p>PORT OF COLOMBO</p>"} {
+		files := &fakeSaver{}
+		p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" .port }}</p>`}, files, staticData)
+		ctx := htmlDocCtx(map[string]any{"port": "LKCMB"})
+		ctx.Record.ManifestVersion = version
+
+		require.NoError(t, p.Execute(ctx, json.RawMessage(`{"template_id": "doc"}`)))
+
+		assert.Equal(t, want, string(files.content), "manifest version %d", version)
+	}
+}
+
+// A template that names a version between the id and the value, as templates
+// in published manifests do, still renders: the version is ignored, and the
+// static data comes from the task's manifest version.
+func TestHTMLDocumentGenerator_StaticDataVersionArgumentIsIgnored(t *testing.T) {
+	for _, tmpl := range []string{
+		`<p>{{ staticdata "ports" "1" .port }}</p>`,
+		`<p>{{ staticdata "ports" "9" .port }}</p>`,
+		`<p>{{ staticdata "ports" "" .port }}</p>`,
+	} {
+		files := &fakeSaver{}
+		p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": tmpl}, files, portStaticData)
+
+		require.NoError(t, p.Execute(htmlDocCtx(map[string]any{"port": "NLRTM"}), json.RawMessage(`{"template_id": "doc"}`)), tmpl)
+
+		assert.Equal(t, "<p>ROTTERDAM</p>", string(files.content), tmpl)
+	}
+}
+
 // A title is escaped like any other value.
 func TestHTMLDocumentGenerator_StaticDataTitleIsEscaped(t *testing.T) {
 	files := &fakeSaver{}
-	staticData := fakeStaticData{"ports@1": {"X": "<b>A & B</b>"}}
-	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" "1" .port }}</p>`}, files, staticData)
+	staticData := fakeStaticData{"ports@2": {"X": "<b>A & B</b>"}}
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"doc": `<p>{{ staticdata "ports" .port }}</p>`}, files, staticData)
 
 	require.NoError(t, p.Execute(htmlDocCtx(map[string]any{"port": "X"}), json.RawMessage(`{"template_id": "doc"}`)))
 
@@ -249,14 +287,16 @@ func TestHTMLDocumentGenerator_StaticDataFailures(t *testing.T) {
 		permanent bool
 		wantIs    error
 	}{
-		"unknown static data":    {`{{ staticdata "nope" "1" .port }}`, map[string]any{"port": "LKCMB"}, true, artifact.ErrNotFound},
-		"unknown version":        {`{{ staticdata "ports" "2" .port }}`, map[string]any{"port": "LKCMB"}, true, artifact.ErrNotFound},
-		"too few arguments":      {`{{ staticdata "ports" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
-		"empty version":          {`{{ staticdata "ports" "" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
-		"a list as the value":    {`{{ staticdata "ports" "1" .port }}`, map[string]any{"port": []any{"LKCMB"}}, true, errStaticDataCall},
-		"an id that isn't text":  {`{{ staticdata 5 "1" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
-		"a bool as the value":    {`{{ staticdata "ports" "1" .port }}`, map[string]any{"port": true}, true, errStaticDataCall},
-		"static data unreadable": {`{{ staticdata "down" "1" .port }}`, map[string]any{"port": "LKCMB"}, false, errStaticDataDown},
+		"unknown static data":               {`{{ staticdata "nope" .port }}`, map[string]any{"port": "LKCMB"}, true, artifact.ErrNotFound},
+		"unknown static data, with version": {`{{ staticdata "nope" "1" .port }}`, map[string]any{"port": "LKCMB"}, true, artifact.ErrNotFound},
+		"too few arguments":                 {`{{ staticdata .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
+		"too many arguments":                {`{{ staticdata "ports" "1" "x" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
+		"an empty id":                       {`{{ staticdata "" .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
+		"an id that isn't text":             {`{{ staticdata 5 .port }}`, map[string]any{"port": "LKCMB"}, true, errStaticDataCall},
+		"a list as the value":               {`{{ staticdata "ports" .port }}`, map[string]any{"port": []any{"LKCMB"}}, true, errStaticDataCall},
+		"a bool as the value":               {`{{ staticdata "ports" .port }}`, map[string]any{"port": true}, true, errStaticDataCall},
+		"a bool as the value, with version": {`{{ staticdata "ports" "1" .port }}`, map[string]any{"port": true}, true, errStaticDataCall},
+		"static data unreadable":            {`{{ staticdata "down" .port }}`, map[string]any{"port": "LKCMB"}, false, errStaticDataDown},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

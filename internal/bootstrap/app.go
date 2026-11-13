@@ -957,16 +957,18 @@ type registryStaticData struct {
 	artifacts *artifact.Set
 }
 
-func (s registryStaticData) Title(ctx context.Context, id, version, value string) (string, bool, error) {
-	raw, err := staticdata.Load(ctx, s.artifacts, id, version)
+// Title returns the title of the row whose const is value in static_data
+// artifact id, as manifest version manifestVersion lists it.
+func (s registryStaticData) Title(ctx context.Context, manifestVersion int, id, value string) (string, bool, error) {
+	raw, err := staticdata.LoadAt(ctx, s.artifacts, id, manifestVersion)
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("static data %q in manifest version %d: %w", id, manifestVersion, err)
 	}
-	row, ok, err := staticdata.Find(raw, value)
+	row, found, err := staticdata.Find(raw, value)
 	if err != nil {
-		return "", false, fmt.Errorf("static data %q version %q: %w: %w", id, version, artifact.ErrInvalid, err)
+		return "", false, fmt.Errorf("static data %q in manifest version %d: %w: %w", id, manifestVersion, artifact.ErrInvalid, err)
 	}
-	return row.Title, ok, nil
+	return row.Title, found, nil
 }
 
 // initTask consolidates the task-orchestration engine registrations, remote

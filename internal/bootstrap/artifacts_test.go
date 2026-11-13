@@ -51,16 +51,20 @@ func TestRegistryTemplateProviderUsesTheContextVersion(t *testing.T) {
 	}
 }
 
-// registryStaticData.Title names a code by its row, and reports a malformed
-// artifact as artifact.ErrInvalid, so the generator fails the step for an admin
-// instead of retrying it.
+// registryStaticData.Title names a code by its row in the static data the
+// manifest version it is given lists, and reports a malformed artifact as
+// artifact.ErrInvalid, so the generator fails the step for an admin instead of
+// retrying it.
 func TestRegistryStaticData_Title(t *testing.T) {
 	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
-		"ports.json":   []byte(`{"data":[{"const":"LKCMB","title":"COLOMBO"}]}`),
+		"ports_1.json": []byte(`{"data":[{"const":"LKCMB","title":"COLOMBO"}]}`),
+		"ports_2.json": []byte(`{"data":[{"const":"LKCMB","title":"PORT OF COLOMBO"}]}`),
 		"notitle.json": []byte(`{"data":[{"const":"LKCMB"}]}`),
 		"manifest_v1.json": []byte(`{"artifacts":[
-			{"id":"ports","kind":"static_data","version":"1","path":"ports.json"},
+			{"id":"ports","kind":"static_data","version":"1","path":"ports_1.json"},
 			{"id":"notitle","kind":"static_data","version":"1","path":"notitle.json"}]}`),
+		"manifest_v2.json": []byte(`{"artifacts":[
+			{"id":"ports","kind":"static_data","version":"2","path":"ports_2.json"}]}`),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -68,23 +72,32 @@ func TestRegistryStaticData_Title(t *testing.T) {
 	s := registryStaticData{artifacts: set}
 
 	cases := map[string]struct {
-		id, version, value string
-		wantTitle          string
-		wantFound          bool
-		wantErr            error
+		manifest  int
+		id, value string
+		wantTitle string
+		wantFound bool
+		wantErr   error
 	}{
-		"a known code":          {"ports", "1", "LKCMB", "COLOMBO", true, nil},
-		"an unknown code":       {"ports", "1", "XXABC", "", false, nil},
-		"an unknown version":    {"ports", "2", "LKCMB", "", false, artifact.ErrNotFound},
-		"a row without a title": {"notitle", "1", "LKCMB", "", false, artifact.ErrInvalid},
+		"a known code":                     {1, "ports", "LKCMB", "COLOMBO", true, nil},
+		"the static data of that manifest": {2, "ports", "LKCMB", "PORT OF COLOMBO", true, nil},
+		"an unknown code":                  {1, "ports", "XXABC", "", false, nil},
+		"an id the manifest doesn't list":  {2, "notitle", "LKCMB", "", false, artifact.ErrNotFound},
+		"an unpublished manifest version":  {3, "ports", "LKCMB", "", false, artifact.ErrUnknownManifestVersion},
+		"a row without a title":            {1, "notitle", "LKCMB", "", false, artifact.ErrInvalid},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			title, found, err := s.Title(context.Background(), tc.id, tc.version, tc.value)
+			title, found, err := s.Title(context.Background(), tc.manifest, tc.id, tc.value)
 			if !errors.Is(err, tc.wantErr) || title != tc.wantTitle || found != tc.wantFound {
 				t.Fatalf("got %q, %v, %v; want %q, %v, %v", title, found, err, tc.wantTitle, tc.wantFound, tc.wantErr)
 			}
 		})
+	}
+
+	// The manifest version passed in decides, not one on the context.
+	ctx := artifact.WithManifestVersion(context.Background(), 1)
+	if title, _, err := s.Title(ctx, 2, "ports", "LKCMB"); err != nil || title != "PORT OF COLOMBO" {
+		t.Fatalf("with version 1 on the context: got %q, %v; want manifest 2's title", title, err)
 	}
 }
 
