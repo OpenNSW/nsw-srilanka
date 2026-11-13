@@ -199,6 +199,17 @@ frontend:
   # Port nginx listens on inside the image (nginx-unprivileged, not 80).
   containerPort: 8080
 
+  # When enabled, a new portal pod waits until the backend's /health reports
+  # the backend version this release deploys (backend.image.tag, else the
+  # chart's appVersion), so an upgrade never serves a new screen against the
+  # old backend. The old pod keeps serving meanwhile. Needs an exact version
+  # tag such as 1.2.3: a tag like 1.2, latest or a digest never matches.
+  # After timeoutSeconds the pod starts anyway, so a backend that is down
+  # delays the portal by at most that long. See the chart README.
+  waitForBackend:
+    enabled: false
+    timeoutSeconds: 300
+
   service:
     type: ClusterIP
     port: 80
