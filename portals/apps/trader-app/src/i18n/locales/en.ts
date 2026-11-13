@@ -14,6 +14,13 @@ const en = {
       unauthorized: {
         title: 'Access Restricted',
         message: 'Your account is signed in, but it does not have access to this page.',
+        adminTitle: 'Welcome, administrator',
+        adminMessage: 'You are signed in with an admin account. There is nothing to show on this page yet.',
+        adminConsignmentIdPrompt: 'Please enter the consignment ID to step in.',
+        adminCaseIdPrompt: 'Please enter the case ID to step in.',
+        adminConsignmentIdPlaceholder: 'Consignment ID',
+        adminCaseIdPlaceholder: 'Case ID',
+        adminOpen: 'Open',
         signOut: 'Sign out',
       },
     },
