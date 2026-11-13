@@ -91,6 +91,9 @@ authn:
 catalog:
   roles:
     officer: NPQS Officer
+    nppo_assistant: NPPO Assistant
+    nppo_inspector: NPPO Inspector
+    nppo_officer: NPPO Officer
   clients:
     tnsw: NSW_TO_NPQS
 
