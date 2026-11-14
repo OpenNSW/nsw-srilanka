@@ -38,6 +38,14 @@ function textOf(node: ExtraProps['node']): string {
     .join('')
 }
 
+// copyValue returns the value a copy: link copies: its text, trimmed. Blank
+// text, or the bare backticks an empty template value leaves ([``](copy:)), is
+// no value.
+function copyValue(node: ExtraProps['node']): string {
+  const value = textOf(node).trim()
+  return /^`*$/.test(value) ? '' : value
+}
+
 export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
   const uploadCtx = useUpload()
 
@@ -52,8 +60,8 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
           p: ({ children }) => <p className="text-foreground-muted">{children}</p>,
           a: ({ children, href, node }) => {
             if (href?.startsWith(COPY_LINK_SCHEME)) {
-              const value = textOf(node)
-              return value ? <CopyableCode value={value} /> : <span>{children}</span>
+              const value = copyValue(node)
+              return value ? <CopyableCode value={value} /> : null
             }
 
             const ref = fileRef(href)
