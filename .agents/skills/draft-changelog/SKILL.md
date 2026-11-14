@@ -13,6 +13,7 @@ Drafts the next release's section of `CHANGELOG.md`. Deployers read that section
 - **Back every statement with evidence** — a PR, its Deployment Notes, or a diff from the collector. When a PR looks like it needs an upgrade step but nothing says what, read its diff; if it is still unclear, list it for the user as an open question instead of guessing. A wrong upgrade note does more harm than a missing one.
 - **Use absolute links** (`https://github.com/OpenNSW/nsw-srilanka/...`). The section is copied into the GitHub Release, where relative links break.
 - **Write for deployers, not developers.** Say what changes for a running deployment and what to do about it. Leave out refactors, tests, CI and internal renames unless a deployer would notice them.
+- **Leave out the workflow artifacts.** TNSW stays backward compatible with released artifacts, and each artifacts release names the oldest TNSW release it works with. So the section never pins a `one-trade-artifacts` commit or release, lists artifact changes, or asks to deploy artifacts with the upgrade. If a PR seems to need new artifacts, list it for the user as an open question, not as an upgrade step.
 
 ## Preflight
 
