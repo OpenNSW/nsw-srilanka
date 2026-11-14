@@ -95,7 +95,8 @@ You need:
 - **Postgres admin** access to create a database, and the Temporal CLI pointed at the
   cluster's Temporal frontend.
 - **Write access to `one-trade-artifacts`**, and to the TNSW deployment's configuration.
-- For **each officer**: username, email, phone (E.164), first and last name.
+- For **each officer**: username, email, a Sri Lankan phone number (e.g. `0771234567`),
+  first and last name.
 
 ### Names used in this guide
 

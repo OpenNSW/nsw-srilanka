@@ -227,6 +227,9 @@ documents as the reference. For an agency-mode agency,
 [the agency onboarding guide](../docs/guides/onboarding-agency-mode-agencies.md#step-2-set-up-the-agency-in-thunderid)
 walks through creating its resources in the console.
 
+A change to these documents doesn't reach a live IdP. When one changes, such as a user
+type's `phone_number` pattern, make the same change on each UAT and production IdP.
+
 ## Applications created
 
 | App           | Client ID             | Local URL               |

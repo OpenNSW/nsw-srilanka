@@ -98,8 +98,8 @@ You need:
   | SLPA CMS client key                    | `agztNvLSUA`             | Only if registered with SLPA; else omit                     |
   | Agency registration numbers (e.g. CDA) | `CDA-EXP-000123`         | Only for agencies the company is registered with            |
 
-- For **each user**: username, email, phone (E.164, e.g. `+94771234567`), first and last
-  name, and whether they are a trader, a CHA, or both.
+- For **each user**: username, email, a Sri Lankan phone number (e.g. `+94771234567` or
+  `0771234567`), first and last name, and whether they are a trader, a CHA, or both.
 
 Use the company ID as the OU handle. The two can differ, but keeping them equal removes a
 whole class of mismatch.
