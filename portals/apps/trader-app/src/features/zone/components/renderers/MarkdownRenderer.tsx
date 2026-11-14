@@ -1,7 +1,8 @@
 import type { MouseEvent } from 'react'
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform, type ExtraProps } from 'react-markdown'
 import { useUpload } from '@opennsw/jsonforms-renderers'
 import type { ZoneRendererProps } from '@/features/zone/types'
+import { CopyableCode } from './CopyableCode'
 
 // A template links to a task's file as [label](files:<ref>), where <ref> is the
 // file field's value: a reference the backend issued to this reader.
@@ -18,11 +19,31 @@ function fileRef(href: string | undefined): string | undefined {
   return STORAGE_KEY.test(href) ? href : undefined
 }
 
+// A template marks a value the reader may need to quote elsewhere, such as a
+// reference number, as [`<value>`](copy:): the value shows as code with a copy
+// button. Code outside such a link has no button.
+const COPY_LINK_SCHEME = 'copy:'
+
 // react-markdown drops the URL of a link whose scheme it does not know, so
-// files: links are kept as they are and every other URL gets its default
-// treatment.
+// files: and copy: links are kept as they are and every other URL gets its
+// default treatment.
 function urlTransform(url: string): string {
-  return url.startsWith(FILE_LINK_SCHEME) ? url : defaultUrlTransform(url)
+  return url.startsWith(FILE_LINK_SCHEME) || url.startsWith(COPY_LINK_SCHEME) ? url : defaultUrlTransform(url)
+}
+
+// textOf returns the text of a markdown element without its formatting.
+function textOf(node: ExtraProps['node']): string {
+  return (node?.children ?? [])
+    .map((child) => (child.type === 'text' ? child.value : child.type === 'element' ? textOf(child) : ''))
+    .join('')
+}
+
+// copyValue returns the value a copy: link copies: its text, trimmed. Blank
+// text, or the bare backticks an empty template value leaves ([``](copy:)), is
+// no value.
+function copyValue(node: ExtraProps['node']): string {
+  const value = textOf(node).trim()
+  return /^`*$/.test(value) ? '' : value
 }
 
 export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
@@ -37,7 +58,12 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
           h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mt-4 mb-2">{children}</h2>,
           h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mt-3 mb-1">{children}</h3>,
           p: ({ children }) => <p className="text-foreground-muted">{children}</p>,
-          a: ({ children, href }) => {
+          a: ({ children, href, node }) => {
+            if (href?.startsWith(COPY_LINK_SCHEME)) {
+              const value = copyValue(node)
+              return value ? <CopyableCode value={value} /> : null
+            }
+
             const ref = fileRef(href)
             if (href?.startsWith(FILE_LINK_SCHEME) && !ref) {
               return <span>{children}</span>

@@ -1,6 +1,7 @@
 export { Banner, type BannerVariant } from './components/Banner'
 export { Breadcrumb, type BreadcrumbItem } from './components/Breadcrumb'
 export { ConfirmDialog } from './components/ConfirmDialog'
+export { CopyButton } from './components/CopyButton'
 export { CopyableId } from './components/CopyableId'
 export { CountBadge } from './components/CountBadge'
 export { ErrorBoundary } from './components/ErrorBoundary'

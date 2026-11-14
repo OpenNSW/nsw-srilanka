@@ -6,3 +6,10 @@ import { afterEach } from 'vitest'
 afterEach(() => {
   cleanup()
 })
+
+// Radix's tooltip and popper positioning call ResizeObserver, which jsdom leaves out.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
