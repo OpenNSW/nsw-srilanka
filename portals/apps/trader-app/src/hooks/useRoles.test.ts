@@ -43,14 +43,16 @@ describe('labelRoles', () => {
     ])
   })
 
-  it('shows a role that has no label by its own name', () => {
-    expect(labelRoles(['CDA Officer'], labels)).toEqual([
-      { role: 'CDA Officer', title: 'CDA Officer', description: undefined },
-    ])
+  it('leaves out a role that has no label, keeping token order', () => {
+    expect(labelRoles(['CHA', 'CDA Officer', 'Trader'], labels).map((r) => r.role)).toEqual(['CHA', 'Trader'])
+  })
+
+  it('has no roles when no role is labelled', () => {
+    expect(labelRoles(['Trader', 'CHA'], {})).toEqual([])
   })
 
   it('does not take a label from Object.prototype', () => {
-    expect(labelRoles(['constructor', '__proto__'], labels).map((r) => r.title)).toEqual(['constructor', '__proto__'])
+    expect(labelRoles(['constructor', '__proto__', 'toString'], labels)).toEqual([])
   })
 })
 
@@ -60,22 +62,19 @@ describe('useRoles', () => {
     auth.profile = undefined
   })
 
-  it('labels the roles in the ID token', () => {
-    auth.profile = { roles: ['Trader', 'CDA Officer'] }
+  it('labels the roles in the ID token that the deployment names', () => {
+    auth.profile = { roles: ['CDA Officer', 'Trader'] }
     const { result } = renderHook(() => useRoles())
 
-    expect(result.current).toEqual([
-      { role: 'Trader', title: 'Trader', description: 'Creates consignments.' },
-      { role: 'CDA Officer', title: 'CDA Officer', description: undefined },
-    ])
+    expect(result.current).toEqual([{ role: 'Trader', title: 'Trader', description: 'Creates consignments.' }])
   })
 
   it('reads the claim the deployment names', () => {
     config.claim = 'groups'
-    auth.profile = { roles: ['Trader'], groups: ['CHA'] }
+    auth.profile = { roles: ['CHA'], groups: ['Trader'] }
     const { result } = renderHook(() => useRoles())
 
-    expect(result.current.map((r) => r.role)).toEqual(['CHA'])
+    expect(result.current.map((r) => r.role)).toEqual(['Trader'])
   })
 
   it('has no roles when the token has no such claim or nobody is signed in', () => {

@@ -15,11 +15,12 @@ window.__APP_CONFIG__ = {
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
   // The ID-token claim holding the user's roles (an array of role names), which the user
-  // menu lists. Needs the 'role' scope above. For an IdP that models roles as groups, set
+  // menu reads. Needs the 'role' scope above. For an IdP that models roles as groups, set
   // the claim to 'groups'. Defaults to 'roles'.
   IDP_ROLE_CLAIM_NAME: 'roles',
-  // Optional. How the user menu shows each role, keyed by the role name in the token: a
-  // title and an optional description. A role left out shows its own name.
+  // The roles the user menu lists, keyed by the role name in the token, each with a title
+  // and an optional description. The IdP may also put the user's roles for other
+  // applications in the claim; the menu leaves out every role not named here.
   IDP_ROLE_LABELS: JSON.stringify({
     Trader: { title: 'Trader', description: 'Creates and manages consignments for your company.' },
     CHA: { title: 'Customs House Agent', description: 'Acts for traders on their consignments.' },

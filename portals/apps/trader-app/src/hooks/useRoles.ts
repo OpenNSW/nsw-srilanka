@@ -5,7 +5,7 @@ import { ROLE_CLAIM_NAME, ROLE_LABELS, type RoleLabel } from '@/constants/roles'
 export interface UserRole {
   // The role as it appears in the token.
   role: string
-  // What the user menu shows: the configured label, else the role itself.
+  // What the user menu shows: the role's configured title.
   title: string
   description?: string
 }
@@ -19,15 +19,22 @@ export function rolesFromClaim(value: unknown): string[] {
   return [...new Set(roles)]
 }
 
+// The roles that have a label, in token order, each with its title and
+// description. The IdP may put the user's roles for other applications in the
+// claim too; the labels name the roles this deployment shows, so a role with
+// no label is left out.
 export function labelRoles(roles: string[], labels: Record<string, RoleLabel>): UserRole[] {
-  return roles.map((role) => {
+  return roles.flatMap((role) => {
     // hasOwn: a role named like an Object.prototype member has no label.
-    const label = Object.hasOwn(labels, role) ? labels[role] : undefined
-    return { role, title: label?.title ?? role, description: label?.description }
+    if (!Object.hasOwn(labels, role)) {
+      return []
+    }
+    const { title, description } = labels[role]
+    return [{ role, title, description }]
   })
 }
 
-// The roles the IdP put in the signed-in user's ID token, labelled for display.
+// The roles in the signed-in user's ID token that this deployment labels.
 export function useRoles(): UserRole[] {
   const profile = useAuth().user?.profile
 

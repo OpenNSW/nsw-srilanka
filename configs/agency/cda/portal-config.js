@@ -9,8 +9,10 @@ window.__APP_CONFIG__ = {
   APP_URL: 'http://localhost:5176',
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
-  // The ID-token claim holding the officer's roles, which the user menu lists.
+  // The ID-token claim holding the officer's roles, which the user menu reads.
   IDP_ROLE_CLAIM_NAME: 'roles',
+  // The roles the user menu lists, with a title and description for each. Any other role
+  // in the claim, such as one for another portal on the same IdP, is left out.
   IDP_ROLE_LABELS: JSON.stringify({
     'CDA Officer': {
       title: 'CDA Officer',
