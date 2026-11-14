@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button, Text, TextArea, Tooltip } from '@radix-ui/themes'
-import { ConfirmDialog, StatusBadge, type StatusTone } from '@portals/ui'
+import { CodeBlock, ConfirmDialog, StatusBadge, type StatusTone } from '@portals/ui'
 import { ArrowLeftIcon, InfoCircledIcon } from '@radix-ui/react-icons'
 import { useResolveAdminIntervention } from '@/features/admin/hooks'
 import type { AdminResolutionAction, ParkCategory } from '@/features/admin/types'
@@ -210,9 +210,9 @@ export function ResolveAdminInterventionView({
 
         {target.lastError && (
           <Section title="Last error">
-            <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-32 whitespace-pre-wrap break-all">
+            <CodeBlock label="Last error" className="max-h-32">
               {target.lastError}
-            </pre>
+            </CodeBlock>
           </Section>
         )}
 
@@ -245,9 +245,9 @@ export function ResolveAdminInterventionView({
           <>
             <Section title="Cached task result">
               {target.cachedTaskResult ? (
-                <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48 whitespace-pre-wrap break-all">
+                <CodeBlock label="Cached task result" className="max-h-48">
                   {JSON.stringify(target.cachedTaskResult, null, 2)}
-                </pre>
+                </CodeBlock>
               ) : (
                 <Text size="2" color="gray" className="block">
                   No cached results for this node.
@@ -282,9 +282,9 @@ export function ResolveAdminInterventionView({
           note="Current values in this workflow instance. A patch is written into these and stays for the rest of the workflow."
         >
           {target.globalVariables && Object.keys(target.globalVariables).length > 0 ? (
-            <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-64 whitespace-pre-wrap break-all">
+            <CodeBlock label="Workflow variables" className="max-h-64">
               {JSON.stringify(target.globalVariables, null, 2)}
-            </pre>
+            </CodeBlock>
           ) : (
             <Text size="2" color="gray" className="block">
               No variables recorded for this workflow.

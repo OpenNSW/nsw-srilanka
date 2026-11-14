@@ -1,5 +1,6 @@
 export { Banner, type BannerVariant } from './components/Banner'
 export { Breadcrumb, type BreadcrumbItem } from './components/Breadcrumb'
+export { CodeBlock } from './components/CodeBlock'
 export { ConfirmDialog } from './components/ConfirmDialog'
 export { CopyButton } from './components/CopyButton'
 export { CopyableId } from './components/CopyableId'
