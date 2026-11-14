@@ -715,7 +715,7 @@ frontend:
     APP_URL: "https://trader.example.com"
     IDP_SCOPES: "openid,profile,email,group,role,ou,consignment:read,consignment:write,consignment:flow:write,task:read,task:write,company:read,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite"
     # The ID-token claim that holds the user's roles (an array of role names), which the user menu
-    # lists. Needs the "role" scope above. Defaults to "roles".
+    # reads. Needs the "role" scope above. Defaults to "roles".
     IDP_ROLE_CLAIM_NAME: "roles"
     # The roles the user menu lists, keyed by the role name in the token, each with a title and an
     # optional description. The IdP may also put the user's roles for other applications in the
