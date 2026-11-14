@@ -13,7 +13,7 @@ Sri Lanka’s National Single Window uses `OpenNSW/core`.
 - `migrations/`: PostgreSQL migrations; `test/e2e/replay/`: replay tests and JSON fixtures.
 - `configs/`, `idp/`, `deployments/helm/`, and `docs/`: runtime configuration, identity setup, deployment charts, and documentation.
 
-Workflow and form artifacts live separately in `OpenNSW/one-trade-artifacts` under `tnsw/` and load at startup.
+Workflow and form artifacts live separately in `OpenNSW/one-trade-artifacts` under `tnsw/`, load at startup, and are released separately. Keep TNSW backward compatible with the artifacts already released: a deployment upgrades TNSW without changing its artifacts. Add what artifacts need as something they opt in to, and never change how TNSW reads what released artifacts already use. Each artifacts release names the oldest TNSW release it works with, so a PR's Deployment Notes never ask for an artifacts release or pin.
 
 ## Build, Test, and Development Commands
 
@@ -38,8 +38,6 @@ Write comments about the code as it is now, not about how it got there. Don't me
 The OpenAPI specs in `api/*.openapi.yaml` are the HTTP API's contract; nothing generates them, so they drift unless edited by hand. Change the spec in the same PR as any change to a path, parameter, request or response field, or status code. A field can appear in several schemas and specs (e.g. a summary and a detail DTO, or the consignment and admin APIs), so grep `api/` for its name and update every one. Note a removed or renamed field in the PR's Deployment Notes and mark it breaking with `!`.
 
 OAuth scopes are part of the contract too. `internal/scopes/scopes.go` names the scope each route requires, and the trader portal shows each screen and button by the same names in `portals/apps/trader-app/src/constants/scopes.ts`. Nothing checks that the two match, and a mismatch hides the portal's screens without an error, so add, rename or remove a scope in both in the same PR. Grep for the scope and update every other place that names it: the specs' "Requires scope" text, the IdP bootstrap and `idp/README.md`, each `IDP_SCOPES` (`config.example.js`, `configs/agency/*/portal-config.js`, the Helm values), and the replay fixtures. Note a removed or renamed scope in the PR's Deployment Notes and mark it breaking with `!`.
-
-The workflow and form artifacts in `OpenNSW/one-trade-artifacts` are released separately, so keep TNSW backward compatible with the artifacts already released: a deployment upgrades TNSW without changing its artifacts. Add what artifacts need as something they opt in to, and never change how TNSW reads what released artifacts already use. Each artifacts release names the oldest TNSW release it works with, so a PR's Deployment Notes never ask for an artifacts release or pin.
 
 ## Testing Guidelines
 
