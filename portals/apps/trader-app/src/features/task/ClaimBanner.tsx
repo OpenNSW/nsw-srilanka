@@ -1,8 +1,7 @@
-import { useState } from 'react'
 import { Button, Spinner, Text } from '@radix-ui/themes'
 import { LockClosedIcon, LockOpen1Icon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import { ConfirmDialog, StatusBadge, Surface } from '@portals/ui'
+import { ConfirmDialog, StatusBadge, Surface, useConfirm } from '@portals/ui'
 import type { TaskClaim } from '@/features/zone/types'
 
 type Props = {
@@ -24,7 +23,7 @@ type Props = {
 // A claim is a hint for other users: it never locks the task.
 export function ClaimBanner({ claim, completed, canChange, busy, error, onClaim, onRelease }: Props) {
   const { t } = useTranslation()
-  const [confirmingTakeOver, setConfirmingTakeOver] = useState(false)
+  const takeOver = useConfirm()
   const changeable = canChange && !completed
   const name = claim.holder?.name || t('tasks.claim.anotherUser')
 
@@ -67,19 +66,12 @@ export function ClaimBanner({ claim, completed, canChange, busy, error, onClaim,
         )}
         {changeable && claim.holder && !claim.mine && (
           <>
-            <Button
-              variant="soft"
-              size="2"
-              onClick={() => setConfirmingTakeOver(true)}
-              disabled={busy}
-              className="cursor-pointer"
-            >
+            <Button variant="soft" size="2" onClick={() => takeOver.ask()} disabled={busy} className="cursor-pointer">
               {busy ? <Spinner size="1" /> : <LockClosedIcon />}
               {t('tasks.claim.takeOver')}
             </Button>
             <ConfirmDialog
-              open={confirmingTakeOver}
-              onOpenChange={setConfirmingTakeOver}
+              {...takeOver.dialogProps}
               title={t('tasks.claim.takeOverTitle')}
               description={
                 claim.holder.name
@@ -89,7 +81,7 @@ export function ClaimBanner({ claim, completed, canChange, busy, error, onClaim,
               confirmLabel={t('tasks.claim.takeOver')}
               cancelLabel={t('tasks.claim.cancel')}
               onConfirm={() => {
-                setConfirmingTakeOver(false)
+                takeOver.close()
                 onClaim()
               }}
             />

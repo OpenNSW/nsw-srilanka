@@ -1,6 +1,5 @@
-import { useState } from 'react'
 import { Button } from '@radix-ui/themes'
-import { StatusBadge, type StatusTone } from '@portals/ui'
+import { StatusBadge, useConfirm, type StatusTone } from '@portals/ui'
 import { ChevronRightIcon } from '@radix-ui/react-icons'
 import type { AdminWorkflowKind, EngineEdge, EngineNode, EngineNodeStatus } from '@/features/admin/types'
 import { formatDateTime } from '@/features/consignment/utils'
@@ -69,7 +68,7 @@ export function NodeRow({
 }) {
   const childIds = node.child_workflow_ids ?? []
   const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task', expandSignal)
-  const [forceParkOpen, setForceParkOpen] = useState(false)
+  const forcePark = useConfirm()
   // Resolving and force-parking intervene in the flow; for an admin who may not, the row only reports.
   const canIntervene = useCan('admin.intervene')
   // Only a TASK node that is waiting can be force-parked: on a consignment workflow that closes its
@@ -144,12 +143,11 @@ export function NodeRow({
           )}
           {canForcePark && (
             <>
-              <Button variant="soft" color="gray" size="1" onClick={() => setForceParkOpen(true)}>
+              <Button variant="soft" color="gray" size="1" onClick={() => forcePark.ask()}>
                 Force park
               </Button>
               <ForceParkDialog
-                open={forceParkOpen}
-                onOpenChange={setForceParkOpen}
+                {...forcePark.dialogProps}
                 workflowId={workflowId}
                 workflowKind={workflowKind}
                 nodeId={node.id}

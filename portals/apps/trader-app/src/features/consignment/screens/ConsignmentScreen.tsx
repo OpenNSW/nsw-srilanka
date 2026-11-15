@@ -22,6 +22,7 @@ import {
   RowLink,
   Surface,
   Table,
+  useConfirm,
 } from '@portals/ui'
 import { ConsignmentStateBadge } from '@/features/consignment/components/ConsignmentStateBadge'
 import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge'
@@ -68,7 +69,7 @@ export function ConsignmentScreen() {
 
   const { mutate: create, isPending: creating, error: createError } = useMutation(createConsignment)
   // A consignment can't be deleted once created, so the button asks first.
-  const [confirmingCreate, setConfirmingCreate] = useState(false)
+  const confirmCreate = useConfirm()
 
   // Runs from the confirmation dialog, which stays open, busy, until the
   // create ends. A failure shows under the button.
@@ -79,7 +80,7 @@ export function ConsignmentScreen() {
     } catch (error) {
       console.error('Failed to create consignment:', error)
     } finally {
-      setConfirmingCreate(false)
+      confirmCreate.close()
     }
   }
 
@@ -92,7 +93,7 @@ export function ConsignmentScreen() {
           <Can I="consignment.create">
             <div className="flex flex-col items-end gap-2">
               <Button
-                onClick={() => setConfirmingCreate(true)}
+                onClick={() => confirmCreate.ask()}
                 disabled={creating}
                 loading={creating}
                 // Below Radix's xs breakpoint (520px) the button shows the short
@@ -116,8 +117,7 @@ export function ConsignmentScreen() {
               )}
             </div>
             <ConfirmDialog
-              open={confirmingCreate}
-              onOpenChange={setConfirmingCreate}
+              {...confirmCreate.dialogProps}
               title={t('consignments.list.confirm.title')}
               description={t('consignments.list.confirm.description')}
               confirmLabel={t('consignments.list.confirm.create')}

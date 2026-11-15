@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Badge, Button } from '@radix-ui/themes'
 import { ChevronDownIcon, ChevronRightIcon, CubeIcon, ExclamationTriangleIcon, LayersIcon } from '@radix-ui/react-icons'
-import { ConfirmDialog, Surface } from '@portals/ui'
+import { ConfirmDialog, Surface, useConfirm } from '@portals/ui'
 import { useTranslation } from 'react-i18next'
 import type { FlowOption } from '@/features/consignment/types.ts'
 
@@ -19,7 +19,7 @@ interface AuxiliaryServicesProps {
 export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const [pending, setPending] = useState<FlowOption | null>(null)
+  const confirm = useConfirm<FlowOption>()
   const [starting, setStarting] = useState(false)
   const [failed, setFailed] = useState<FlowOption | null>(null)
 
@@ -30,13 +30,12 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
     setFailed(null)
     try {
       await onStart(flow.templateId)
-      setPending(null)
     } catch (err) {
       console.error('Failed to start flow:', err)
-      setPending(null)
       setFailed(flow)
     } finally {
       setStarting(false)
+      confirm.close()
     }
   }
 
@@ -86,7 +85,7 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
                 </div>
                 <Button
                   size="2"
-                  onClick={() => setPending(flow)}
+                  onClick={() => confirm.ask(flow)}
                   disabled={starting}
                   aria-label={t('consignments.detail.flows.startService', { label: flow.label })}
                 >
@@ -101,13 +100,12 @@ export function AuxiliaryServices({ flows, onStart }: AuxiliaryServicesProps) {
       </section>
 
       <ConfirmDialog
-        open={pending !== null}
-        onOpenChange={(open) => !open && setPending(null)}
-        title={t('consignments.detail.flows.confirmTitle', { label: pending?.label ?? '' })}
-        description={t('consignments.detail.flows.confirmDescription', { label: pending?.label ?? '' })}
+        {...confirm.dialogProps}
+        title={t('consignments.detail.flows.confirmTitle', { label: confirm.subject?.label ?? '' })}
+        description={t('consignments.detail.flows.confirmDescription', { label: confirm.subject?.label ?? '' })}
         confirmLabel={t('consignments.detail.flows.start')}
         cancelLabel={t('consignments.detail.flows.cancel')}
-        onConfirm={() => pending && void start(pending)}
+        onConfirm={() => confirm.subject && void start(confirm.subject)}
         busy={starting}
       />
     </Surface>

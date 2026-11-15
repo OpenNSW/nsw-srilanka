@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { Theme } from '@radix-ui/themes'
 import { describe, expect, it, vi } from 'vitest'
 import { NodeRow } from '@/features/admin/components/engine/NodeRow'
@@ -50,6 +50,17 @@ describe('NodeRow', () => {
 
     renderRow(waiting)
     expect(screen.getByRole('button', { name: 'Force park' })).toBeTruthy()
+  })
+
+  it('opens the force-park dialog from Force park, and closes it on Cancel', () => {
+    auth.scope = 'openid consignment:adminread consignment:adminwrite'
+    renderRow(waiting)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Force park' }))
+    expect(screen.getByRole('alertdialog', { name: 'Force park node' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
   it('only reports to an admin who may not intervene', () => {

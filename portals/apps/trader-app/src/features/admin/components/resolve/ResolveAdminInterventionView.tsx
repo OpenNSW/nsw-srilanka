@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button, Text, TextArea, Tooltip } from '@radix-ui/themes'
-import { ConfirmDialog, StatusBadge, type StatusTone } from '@portals/ui'
+import { ConfirmDialog, StatusBadge, useConfirm, type StatusTone } from '@portals/ui'
 import { ArrowLeftIcon, InfoCircledIcon } from '@radix-ui/react-icons'
 import { useResolveAdminIntervention } from '@/features/admin/hooks'
 import type { AdminResolutionAction, ParkCategory } from '@/features/admin/types'
@@ -135,7 +135,7 @@ export function ResolveAdminInterventionView({
   // Gates the actual submit behind an explicit re-confirmation — this mutates a live workflow
   // (possibly irreversibly for ABORT) and there's no undo, so "Submit" opens this dialog instead
   // of calling submit() directly.
-  const [confirmOpen, setConfirmOpen] = useState(false)
+  const confirm = useConfirm()
   const currentAction = ADMIN_ACTIONS.find((a) => a.action === action)
 
   // Warns under the edit box while the draft isn't valid JSON — an invalid final value would
@@ -160,12 +160,12 @@ export function ResolveAdminInterventionView({
       try {
         globalVariablesPatch = JSON.parse(variablesPatchText) as Record<string, unknown>
       } catch {
-        setConfirmOpen(false)
+        confirm.close()
         setPatchError('Variables must be valid JSON.')
         return
       }
     }
-    setConfirmOpen(false)
+    confirm.close()
     try {
       await resolve.mutate(
         target.workflowId,
@@ -374,7 +374,7 @@ export function ResolveAdminInterventionView({
           <Button variant="soft" color="gray" onClick={onBack} disabled={submitting}>
             Cancel
           </Button>
-          <Button disabled={!action || !reason.trim() || submitting} onClick={() => setConfirmOpen(true)}>
+          <Button disabled={!action || !reason.trim() || submitting} onClick={() => confirm.ask()}>
             {submitting ? 'Submitting…' : 'Submit'}
           </Button>
         </div>
@@ -382,8 +382,7 @@ export function ResolveAdminInterventionView({
         {/* A live workflow signal, not a draft — there's no undo once it's sent (ABORT fails the
             whole workflow outright), so Submit opens this instead of calling submit() directly. */}
         <ConfirmDialog
-          open={confirmOpen}
-          onOpenChange={setConfirmOpen}
+          {...confirm.dialogProps}
           title={`Confirm ${currentAction?.label ?? ''}`}
           description={
             <>
@@ -393,7 +392,7 @@ export function ResolveAdminInterventionView({
           confirmLabel={`Yes, ${currentAction?.label.toLowerCase() ?? ''}`}
           cancelLabel="Cancel"
           onConfirm={() => {
-            setConfirmOpen(false)
+            confirm.close()
             void submit()
           }}
           color={currentAction?.color}

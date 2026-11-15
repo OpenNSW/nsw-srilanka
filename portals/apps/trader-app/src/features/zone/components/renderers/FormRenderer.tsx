@@ -3,7 +3,7 @@ import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema, Translator } from '@jsonforms/core'
 import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button, Text } from '@radix-ui/themes'
-import { Banner, ConfirmDialog } from '@portals/ui'
+import { Banner, ConfirmDialog, useConfirm } from '@portals/ui'
 import { CheckIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { handleLabel, type Handle, type ZoneAction, type ZoneRendererProps } from '@/features/zone/types'
@@ -115,11 +115,9 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [pendingCommand, setPendingCommand] = useState<string | null>(null)
   // When the last draft save succeeded; null hides the "Draft saved" note.
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null)
-  // The handle the confirmation dialog asks about, and whether the dialog is
-  // open. The handle stays set while the dialog closes, so its text holds
-  // through the closing animation.
-  const [confirming, setConfirming] = useState<Handle | null>(null)
-  const [confirmOpen, setConfirmOpen] = useState(false)
+  // The handle the confirmation dialog asks about.
+  const confirm = useConfirm<Handle>()
+  const confirming = confirm.subject
   const [showErrors, setShowErrors] = useState(false)
   // formDataKey of the data as last saved (a draft or a submission), or as
   // JsonForms first reported it on mount: it emits once on mount, after
@@ -260,7 +258,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       .finally(() => {
         setSubmitting(false)
         setPendingCommand(null)
-        setConfirmOpen(false)
+        confirm.close()
       })
   }
 
@@ -282,8 +280,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       dispatch(h)
       return
     }
-    setConfirming(h)
-    setConfirmOpen(true)
+    confirm.ask(h)
   }
 
   // Autosave: a form that can save a draft does so once its input has stayed
@@ -296,10 +293,10 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   })
   const canAutosave = draftHandle !== undefined
   useEffect(() => {
-    if (!unsaved || submitting || confirmOpen || !canAutosave) return
+    if (!unsaved || submitting || confirm.open || !canAutosave) return
     const timer = setTimeout(autosaveDraft, AUTOSAVE_DRAFT_MS)
     return () => clearTimeout(timer)
-  }, [unsaved, submitting, confirmOpen, canAutosave])
+  }, [unsaved, submitting, confirm.open, canAutosave])
 
   // The "Draft saved" note next to the buttons fades after a few seconds.
   useEffect(() => {
@@ -374,8 +371,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       )}
       {confirming && (
         <ConfirmDialog
-          open={confirmOpen}
-          onOpenChange={setConfirmOpen}
+          {...confirm.dialogProps}
           title={t('tasks.confirm.title', { action: confirmingLabel })}
           description={t('tasks.confirm.description')}
           confirmLabel={confirmingLabel}
