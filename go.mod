@@ -28,7 +28,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/shopspring/decimal v1.6.0
 	github.com/stretchr/testify v1.12.1
@@ -44,8 +44,8 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.opentelemetry.io/proto/otlp v1.11.1
-	go.temporal.io/sdk v1.50.0
-	golang.org/x/text v0.43.0
+	go.temporal.io/sdk v1.51.0
+	golang.org/x/text v0.44.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.6.3
@@ -93,10 +93,10 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.47.0 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
-	go.temporal.io/api v1.64.1 // indirect
+	go.temporal.io/api v1.64.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
