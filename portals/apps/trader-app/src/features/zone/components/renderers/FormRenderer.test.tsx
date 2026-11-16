@@ -61,7 +61,7 @@ describe('FormRenderer', () => {
     fireEvent.click(formButton('Submit'))
 
     const dialog = screen.getByRole('alertdialog', { name: 'Submit?' })
-    expect(within(dialog).getByText(/can't be changed or undone/)).toBeTruthy()
+    expect(within(dialog).getByText(/cannot be changed or undone/)).toBeTruthy()
     expect(onAction).not.toHaveBeenCalled()
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Submit' }))
