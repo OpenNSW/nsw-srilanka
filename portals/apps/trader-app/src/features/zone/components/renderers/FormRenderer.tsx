@@ -361,8 +361,11 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           />
         </FormStepsProvider>
       </div>
+      {/* A stepper nested deeper in the uiSchema keeps its own sticky
+          Back/Continue footer (z-index 1) as well as this bar; z-2 keeps
+          this bar on top of it. */}
       {actions && !stepper && (
-        <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-up">
+        <div className="sticky bottom-0 z-2 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-up">
           {/* On a phone the buttons stack, each the full width of the bar. */}
           <div className="px-4 py-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
             {actions}
