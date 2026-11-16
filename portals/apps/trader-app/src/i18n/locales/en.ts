@@ -199,7 +199,7 @@ const en = {
       // button's label.
       confirm: {
         title: '{{action}}?',
-        description: "Once you go ahead, this step can't be changed or undone. Check your answers before you continue.",
+        description: 'Once confirmed, this action cannot be changed or undone. Please review before you continue.',
         cancel: 'Go back',
       },
       validation: {
