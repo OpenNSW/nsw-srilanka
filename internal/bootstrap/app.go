@@ -217,8 +217,10 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
-	// A listed flow that is not a workflow could never start, so it stops the server here.
-	if err := cfg.Flows.CheckWorkflows(ctx, artifacts); err != nil {
+	// A listed flow that is not a workflow could never start, and a client flow whose task
+	// reads a role the catalog lacks would be owned in a role no one holds, so either stops
+	// the server here.
+	if err := cfg.Flows.CheckWorkflows(ctx, artifacts, globalCatalog); err != nil {
 		_ = database.Close(db)
 		return nil, err
 	}

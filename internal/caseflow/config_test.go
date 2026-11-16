@@ -2,8 +2,13 @@ package caseflow
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/OpenNSW/core/artifact"
+	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
+	workflow "github.com/OpenNSW/core/workflow"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 )
@@ -15,7 +20,7 @@ var testCatalog = &catalog.Catalog{
 
 func TestConfigValidate(t *testing.T) {
 	user := UserFlow{ID: "export", Label: "Export", Roles: []string{"trader"}}
-	client := ClientFlow{ID: "notice", Clients: []string{"tnsw"}, Owner: "trader"}
+	client := ClientFlow{ID: "notice", Clients: []string{"tnsw"}}
 	for name, tc := range map[string]struct {
 		cfg     Config
 		wantErr string
@@ -28,11 +33,9 @@ func TestConfigValidate(t *testing.T) {
 		"user without label":       {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "export", Roles: []string{"trader"}}}}}, "label is required"},
 		"user role not in catalog": {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "export", Label: "Export", Roles: []string{"officer"}}}}}, `roles names "officer"`},
 		"user listed twice":        {Config{Users: UserFlows{Workflows: []UserFlow{user, user}}}, "listed twice"},
-		"client without clients":   {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Owner: "trader"}}}}, "clients is required"},
-		"client not in catalog":    {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"cda"}, Owner: "trader"}}}}, `clients names "cda"`},
+		"client without clients":   {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice"}}}}, "clients is required"},
+		"client not in catalog":    {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"cda"}}}}}, `clients names "cda"`},
 		"client listed twice":      {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{client, client}}}, "listed twice"},
-		"client without owner":     {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}}}}}, "owner is required"},
-		"owner not in catalog":     {Config{Clients: ClientFlows{OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}, Owner: "officer"}}}}, `owner names "officer"`},
 		"client flows without OU":  {Config{Clients: ClientFlows{Workflows: []ClientFlow{client}}}, "clients.ouHandle is required"},
 		"case name mapped":         {Config{Clients: ClientFlows{CaseColumns: map[string]string{"name": "/traderCompany/name"}}}, ""},
 		"unknown case column":      {Config{Clients: ClientFlows{CaseColumns: map[string]string{"state": "/flow"}}}, `caseColumns names "state"`},
@@ -52,24 +55,73 @@ func TestConfigValidate(t *testing.T) {
 	}
 }
 
-// Every listed workflow, in a list that is on or off, must be in the current manifest.
+// Every listed workflow, in a list that is on or off, must be in the current manifest. A
+// client flow's must have one task, read by roles the catalog defines.
 func TestConfigCheckWorkflows(t *testing.T) {
 	ctx := context.Background()
+	cat := &catalog.Catalog{Roles: map[string]string{"reviewer": "CDA Reviewer", "officer": "CDA Officer"}}
 	ok := Config{
 		Users:   UserFlows{Enabled: true, Workflows: []UserFlow{{ID: "export"}}},
 		Clients: ClientFlows{Workflows: []ClientFlow{{ID: "notice"}}},
 	}
-	if err := ok.CheckWorkflows(ctx, newArtifacts()); err != nil {
+	if err := ok.CheckWorkflows(ctx, newArtifacts(), cat); err != nil {
 		t.Errorf("listed workflows in the manifest: err = %v", err)
 	}
-	for name, cfg := range map[string]Config{
-		"user flow not a workflow":   {Users: UserFlows{Workflows: []UserFlow{{ID: "nope"}}}},
-		"client flow not a workflow": {Clients: ClientFlows{Workflows: []ClientFlow{{ID: "nope"}}}},
+	for name, tc := range map[string]struct {
+		cfg     Config
+		wantErr string
+	}{
+		"user flow not a workflow":   {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "nope"}}}}, `flows.users lists workflow "nope"`},
+		"client flow not a workflow": {Config{Clients: ClientFlows{Workflows: []ClientFlow{{ID: "nope"}}}}, `flows.clients lists workflow "nope"`},
 		// legacy is only in manifest v1; v2 is current.
-		"only in an older manifest": {Users: UserFlows{Workflows: []UserFlow{{ID: "legacy"}}}},
+		"only in an older manifest": {Config{Users: UserFlows{Workflows: []UserFlow{{ID: "legacy"}}}}, `flows.users lists workflow "legacy"`},
+		// A user flow needs no task; a client flow does.
+		"client flow without a task":  {Config{Clients: ClientFlows{Workflows: []ClientFlow{{ID: "export"}}}}, "has 0 tasks"},
+		"client flow with two tasks":  {Config{Clients: ClientFlows{Workflows: []ClientFlow{{ID: "pair"}}}}, "has 2 tasks"},
+		"client flow task unread":     {Config{Clients: ClientFlows{Workflows: []ClientFlow{{ID: "unread"}}}}, "has no read.roles"},
+		"client flow role no catalog": {Config{Clients: ClientFlows{Workflows: []ClientFlow{{ID: "stranger"}}}}, `reads role "auditor"`},
 	} {
-		if err := cfg.CheckWorkflows(ctx, newArtifacts()); err == nil {
-			t.Errorf("%s: want an error", name)
+		err := tc.cfg.CheckWorkflows(ctx, newArtifacts(), cat)
+		if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			t.Errorf("%s: err = %v, want one containing %q", name, err, tc.wantErr)
+		}
+	}
+}
+
+// A client flow's case is owned by the list's OU in the read.roles of the flow's one task,
+// as the manifest version it is given holds them.
+func TestClientFlowsOwner(t *testing.T) {
+	ctx := context.Background()
+	set := newArtifacts()
+	load := func(version int, id string) (*artifact.Registry, workflow.WorkflowDefinition) {
+		t.Helper()
+		reg, err := set.Registry(ctx, version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		def, err := workflowdef.Load(ctx, reg, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return reg, def
+	}
+	list := ClientFlows{OUHandle: "cda"}
+	for version, roles := range map[int][]string{1: {"officer"}, 2: {"reviewer", "officer"}} {
+		reg, def := load(version, "notice")
+		got, err := list.Owner(ctx, reg, def)
+		if want := (&Owner{OUHandle: "cda", Roles: roles}); err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("v%d: owner = %+v, err = %v; want %+v", version, got, err, want)
+		}
+	}
+	for name, tc := range map[string]struct{ workflow, wantErr string }{
+		"no task":             {"export", "has 0 tasks"},
+		"two tasks":           {"pair", "has 2 tasks"},
+		"task without read":   {"unread", "has no read.roles"},
+		"task not in version": {"orphan", `failed to load task template "missing"`},
+	} {
+		reg, def := load(2, tc.workflow)
+		if _, err := list.Owner(ctx, reg, def); err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			t.Errorf("%s: err = %v, want one containing %q", name, err, tc.wantErr)
 		}
 	}
 }

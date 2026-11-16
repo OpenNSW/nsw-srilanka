@@ -87,8 +87,8 @@ authn:
   audience: https://api.cda.nsw-agency.local
 
 # The catalog: the logical names the agency's workflow rules use, mapped to
-# this deployment's IdP token roles and OAuth2 client ids. A role owns an
-# injected case only where case_parties records it for the agency's OU;
+# this deployment's IdP token roles and OAuth2 client ids. Every role a
+# task's read.roles names must be here, or the server refuses to start;
 # tnsw names the client TNSW calls this agency as.
 catalog:
   roles:
@@ -98,8 +98,8 @@ catalog:
 
 # The workflows TNSW may start on a case here, one per officer task
 # (POST /api/v1/internal/cases/{caseId}/flows). Starting one creates the case
-# if it is new and records this agency's OU (ouHandle) as its owner in the
-# flow's owner role, which decides which officers see the case and its tasks.
+# if it is new and records this agency's OU (ouHandle) as its owner in each
+# role the flow's task names in read.roles, so officers in those roles see it.
 flows:
   clients:
     enabled: true
@@ -108,18 +108,18 @@ flows:
     # in the case's attributes.
     caseColumns: { name: /traderCompany/name }
     workflows:
-      - { id: cda_officer_verification, clients: [tnsw], owner: officer }
-      - { id: cda_lot_adjustment_review, clients: [tnsw], owner: officer }
-      - { id: cda_review_result, clients: [tnsw], owner: officer }
-      - { id: cda_asycuda_green_check, clients: [tnsw], owner: officer }
-      - { id: cda_kcfn_inspection_review, clients: [tnsw], owner: officer }
-      - { id: cda_kcfn_issue_letter, clients: [tnsw], owner: officer }
-      - { id: cda_kcfn_asycuda_verification, clients: [tnsw], owner: officer }
-      - { id: cda_kernel_asycuda_review, clients: [tnsw], owner: officer }
-      - { id: cda_payment_review_receipt, clients: [tnsw], owner: officer }
-      - { id: cda_payment_confirm, clients: [tnsw], owner: officer }
-      - { id: cda_kcfn_payment_review_receipt, clients: [tnsw], owner: officer }
-      - { id: cda_kcfn_payment_confirm, clients: [tnsw], owner: officer }
+      - { id: cda_officer_verification, clients: [tnsw] }
+      - { id: cda_lot_adjustment_review, clients: [tnsw] }
+      - { id: cda_review_result, clients: [tnsw] }
+      - { id: cda_asycuda_green_check, clients: [tnsw] }
+      - { id: cda_kcfn_inspection_review, clients: [tnsw] }
+      - { id: cda_kcfn_issue_letter, clients: [tnsw] }
+      - { id: cda_kcfn_asycuda_verification, clients: [tnsw] }
+      - { id: cda_kernel_asycuda_review, clients: [tnsw] }
+      - { id: cda_payment_review_receipt, clients: [tnsw] }
+      - { id: cda_payment_confirm, clients: [tnsw] }
+      - { id: cda_kcfn_payment_review_receipt, clients: [tnsw] }
+      - { id: cda_kcfn_payment_confirm, clients: [tnsw] }
 
 # The cda folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's

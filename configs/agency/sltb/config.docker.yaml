@@ -88,8 +88,8 @@ authn:
   audience: https://api.sltb.nsw-agency.local
 
 # The catalog: the logical names the agency's workflow rules use, mapped to
-# this deployment's IdP token roles and OAuth2 client ids. A role owns an
-# injected case only where case_parties records it for the agency's OU;
+# this deployment's IdP token roles and OAuth2 client ids. Every role a
+# task's read.roles names must be here, or the server refuses to start;
 # tnsw names the client TNSW calls this agency as.
 catalog:
   roles:
@@ -99,8 +99,8 @@ catalog:
 
 # The workflows TNSW may start on a case here, one per officer task
 # (POST /api/v1/internal/cases/{caseId}/flows). Starting one creates the case
-# if it is new and records this agency's OU (ouHandle) as its owner in the
-# flow's owner role, which decides which officers see the case and its tasks.
+# if it is new and records this agency's OU (ouHandle) as its owner in each
+# role the flow's task names in read.roles, so officers in those roles see it.
 flows:
   clients:
     enabled: true
@@ -109,17 +109,17 @@ flows:
     # in the case's attributes.
     caseColumns: { name: /traderCompany/name }
     workflows:
-      - { id: sltb_officer_review, clients: [tnsw], owner: officer }
-      - { id: sltb_final_decision, clients: [tnsw], owner: officer }
-      - { id: sltb_levy_payment_review_receipt, clients: [tnsw], owner: officer }
-      - { id: sltb_levy_payment_confirm_office, clients: [tnsw], owner: officer }
-      - { id: sltb_sample_ack_dropoff, clients: [tnsw], owner: officer }
-      - { id: sltb_sample_draw, clients: [tnsw], owner: officer }
-      - { id: sltb_lab_decision, clients: [tnsw], owner: officer }
-      - { id: sltb_tasting_result, clients: [tnsw], owner: officer }
-      - { id: sltb_lab_testing, clients: [tnsw], owner: officer }
-      - { id: sltb_payment_review_receipt, clients: [tnsw], owner: officer }
-      - { id: sltb_payment_confirm, clients: [tnsw], owner: officer }
+      - { id: sltb_officer_review, clients: [tnsw] }
+      - { id: sltb_final_decision, clients: [tnsw] }
+      - { id: sltb_levy_payment_review_receipt, clients: [tnsw] }
+      - { id: sltb_levy_payment_confirm_office, clients: [tnsw] }
+      - { id: sltb_sample_ack_dropoff, clients: [tnsw] }
+      - { id: sltb_sample_draw, clients: [tnsw] }
+      - { id: sltb_lab_decision, clients: [tnsw] }
+      - { id: sltb_tasting_result, clients: [tnsw] }
+      - { id: sltb_lab_testing, clients: [tnsw] }
+      - { id: sltb_payment_review_receipt, clients: [tnsw] }
+      - { id: sltb_payment_confirm, clients: [tnsw] }
 
 # The sltb folder of a one-trade-artifacts clone, which compose bind-mounts
 # at /app/artifacts: ../one-trade-artifacts/sltb by default, or set

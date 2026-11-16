@@ -98,11 +98,11 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidBody)
 		return
 	}
-	// The owner is recorded with the flow, so a flow that is recorded is owned, and a
-	// retry of a failed start finds both.
-	owner := &Owner{Role: flow.Owner, OUHandle: h.list.OUHandle}
+	// The deployment's OU owns the case in the roles the flow's task reads (ClientFlows.Owner).
+	// It is recorded with the flow, so a flow that is recorded is owned, and a retry of a
+	// failed start finds both.
 	f, err := h.flows.StartFlow(ctx, StartRequest{
-		CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars, Owner: owner,
+		CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars, Owner: h.list.Owner,
 		Case: caseInfo(req.Attributes, h.list.CaseColumns),
 	})
 	if err != nil {
