@@ -166,10 +166,10 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       translate: ((id: string, defaultMessage?: string, values?: Record<string, unknown>) => {
         const formKey = `form.${id}`
         if (i18n.exists(formKey)) {
-          return String(t(formKey as never, values))
+          return String(t(formKey as never, values ?? {}))
         }
         if (i18n.exists(id)) {
-          return String(t(id as never, values))
+          return String(t(id as never, values ?? {}))
         }
         return defaultMessage
       }) as Translator,
