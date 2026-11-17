@@ -4,10 +4,8 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -34,9 +32,7 @@ const (
 	errTaskNotFound         = "task not found"
 	errAuthenticationReq    = "authentication required"
 	errForbiddenTaskAction  = "you may not perform this action on this task"
-	errInvalidRequestBody   = "invalid request body"
 	errStaleStep            = "this step is no longer active; refetch the task"
-	errRequestBodyTooLarge  = "request body too large"
 	errFileNotReference     = "a file in the submission is not a file reference; upload it again"
 	errFileNotYours         = "a file in the submission was issued to someone else"
 	errFileExpired          = "a file in the submission has expired; refetch the task and submit again"
@@ -214,8 +210,6 @@ func (h *HTTPHandler) canAct(ctx context.Context, record store.TaskRecord, in ta
 // completes only that step, so a submission for a step the task has since left is
 // rejected (409) instead of applied to a later one.
 func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Request) {
-	// TODO: retrieve the authenticated context and validate it against the
-	// task's ownership bounds before completing the step.
 	taskID := r.PathValue("id")
 	if taskID == "" {
 		slog.ErrorContext(r.Context(), "tasks: missing task id in request")
@@ -229,6 +223,10 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	record, ok := h.admitSubmitter(w, r, taskID, stepID, "taskId", taskID, "stepId", stepID)
+	if !ok {
+		return
+	}
 	payload, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
 	if !ok {
 		return
@@ -236,7 +234,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	// Captured before the call: core may strip system keys from the payload.
 	// The same list is what a file-resolution denial records.
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", payload[orchestrator.CommandVar]}
-	if !h.resolveFiles(w, r, taskID, stepID, payload, attrs) {
+	if !h.resolveFiles(w, r, record, payload, attrs) {
 		return
 	}
 	err := h.Manager.CompleteTaskStep(r.Context(), taskID, stepID, payload)
@@ -269,6 +267,10 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 		return
 	}
 
+	record, ok := h.admitSubmitter(w, r, taskID, stepID, "taskId", taskID, "stepId", stepID)
+	if !ok {
+		return
+	}
 	payload, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
 	if !ok {
 		return
@@ -276,7 +278,7 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	// Captured before the call: core may strip system keys from the payload.
 	// The same list is what a file-resolution denial records.
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", payload[orchestrator.CommandVar]}
-	if !h.resolveFiles(w, r, taskID, stepID, payload, attrs) {
+	if !h.resolveFiles(w, r, record, payload, attrs) {
 		return
 	}
 	err = h.Manager.CompleteTaskStepByToken(r.Context(), token, payload)
@@ -308,21 +310,25 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	attrs := []any{"taskId", taskID, "stepId", stepID, "draft", true}
+	record, ok := h.admitSubmitter(w, r, taskID, stepID, attrs...)
+	if !ok {
+		return
+	}
 	req, ok := h.decodeEnvelope(w, r, "taskId", taskID, "stepId", stepID)
 	if !ok {
 		return
 	}
 	if req.Command != "" {
 		slog.ErrorContext(r.Context(), "tasks: draft request names a command", "taskId", taskID, "stepId", stepID, "command", req.Command)
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		httputil.Error(w, r, http.StatusBadRequest, httputil.MsgInvalidBody)
 		return
 	}
 	payload := req.Payload
 	if payload == nil {
 		payload = make(map[string]any)
 	}
-	attrs := []any{"taskId", taskID, "stepId", stepID, "draft", true}
-	if !h.resolveFiles(w, r, taskID, stepID, payload, attrs) {
+	if !h.resolveFiles(w, r, record, payload, attrs) {
 		return
 	}
 	// Marked as a draft save so the payload schema extension knows a draft by the
@@ -343,7 +349,7 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 
 	if req.Command == "" {
 		slog.ErrorContext(r.Context(), "tasks: failed to parse request", append(logAttrs, "error", errors.New("invalid request body: must contain 'command' (string)"))...)
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		httputil.Error(w, r, http.StatusBadRequest, httputil.MsgInvalidBody)
 		return nil, false
 	}
 
@@ -359,105 +365,122 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 }
 
 // decodeEnvelope reads the {command, payload} envelope the completion and draft
-// routes take: one JSON value within the size limit, whose payload does not set
-// the reserved "__command" key. On a bad request it writes the error response and
-// returns false. logAttrs name the step in the log lines.
+// routes take: one JSON value within the size limit, with no field the envelope does
+// not declare, whose payload does not set the reserved "__command" key. An empty body
+// reads as an empty envelope: a route that needs a command checks for one. On a bad
+// request it audits the failure, writes the error response and returns false.
+// logAttrs name the step in the log lines.
 func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, logAttrs ...any) (completeTaskStepRequest, bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
-
 	ctx := r.Context()
 	var req completeTaskStepRequest
-	fail := func(status int, message string, err error) {
+	audit := func(status int, message string, err error) {
 		slog.ErrorContext(ctx, "tasks: failed to parse request", append(logAttrs, "error", err)...)
 		meta := taskAuditMeta(status, message, logAttrs...)
 		if req.Command != "" {
 			meta["command"] = req.Command
 		}
 		h.auditTaskUpdate(ctx, attrString(logAttrs, "taskId"), true, meta)
-		httputil.Error(w, r, status, message)
 	}
 
-	// The body must contain at most one JSON value: json.Decoder.Decode only parses the
-	// first value and silently ignores anything after it, so a second Decode call is
-	// required to confirm nothing trails it.
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			fail(http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err)
-			return completeTaskStepRequest{}, false
-		}
-
-		// An empty body is tolerated here; a route that needs a command checks for one.
-		// Only fail on genuinely malformed JSON.
-		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
-			fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: malformed JSON"))
-			return completeTaskStepRequest{}, false
-		}
-
-		// If unexpected data follows the first JSON value, reject the request.
-	} else if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			fail(http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err)
-			return completeTaskStepRequest{}, false
-		}
-		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: unexpected data after JSON value"))
+	switch err := httputil.DecodeJSON(w, r, h.MaxRequestBytes, &req); {
+	case err == nil, errors.Is(err, httputil.ErrBodyEmpty):
+	case errors.Is(err, httputil.ErrBodyTooLarge):
+		audit(http.StatusRequestEntityTooLarge, httputil.MsgBodyTooLarge, err)
+		httputil.WriteDecodeError(w, r, err)
+		return completeTaskStepRequest{}, false
+	default:
+		audit(http.StatusBadRequest, httputil.MsgInvalidBody, err)
+		httputil.WriteDecodeError(w, r, err)
 		return completeTaskStepRequest{}, false
 	}
 
-	// Validate system metadata collision
 	if _, exists := req.Payload[orchestrator.CommandVar]; exists {
-		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request payload: '__command' is a reserved system key"))
+		audit(http.StatusBadRequest, httputil.MsgInvalidBody, errors.New("invalid request payload: '__command' is a reserved system key"))
+		httputil.Error(w, r, http.StatusBadRequest, httputil.MsgInvalidBody)
 		return completeTaskStepRequest{}, false
 	}
 	return req, true
 }
 
-// resolveFiles replaces the file references in a submission for step stepID
-// of task taskID with the stored values they stand for, so only those are
-// stored. auditAttrs is the slog-style list the denial and the completion
-// record both carry. On failure it writes the response and returns false.
-func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskID, stepID string, payload map[string]any, auditAttrs []any) bool {
+// errCanActUnset reports a handler built without CanAct, which cannot decide whether a
+// caller may act, so admitSubmitter refuses every submission.
+var errCanActUnset = errors.New("tasks: CanAct is not set")
+
+// admitSubmitter returns the task a submission or draft for step stepID of task taskID
+// is for, or answers and reports false when it can't be taken: the caller has no
+// identity, the task does not exist or can't be read, stepID is not its active step,
+// or the caller may not act on that step. The routes call it before reading the body,
+// so a request it refuses is never read. It decides only whether the caller may act on
+// the step at all, by the rules core enforces (CanAct); core still decides which command
+// they may run. auditAttrs is the slog-style list each refusal records.
+func (h *HTTPHandler) admitSubmitter(w http.ResponseWriter, r *http.Request, taskID, stepID string, auditAttrs ...any) (store.TaskRecord, bool) {
 	ctx := r.Context()
+	in, ok := taskauthz.InputFromContext(ctx)
+	if !ok {
+		h.reject(w, r, taskID, http.StatusUnauthorized, errAuthenticationReq, "unauthenticated", auditAttrs...)
+		return store.TaskRecord{}, false
+	}
 	record, err := h.Store.GetTask(ctx, taskID)
 	if errors.Is(err, store.ErrTaskNotFound) {
-		h.rejectFiles(w, r, taskID, http.StatusNotFound, errTaskNotFound, "task_not_found", auditAttrs...)
-		return false
+		h.reject(w, r, taskID, http.StatusNotFound, errTaskNotFound, "task_not_found", auditAttrs...)
+		return store.TaskRecord{}, false
 	}
 	if err != nil {
 		h.auditTaskUpdate(ctx, taskID, true, taskAuditMeta(http.StatusInternalServerError, "task_read_failed", auditAttrs...))
 		httputil.InternalServerError(w, r, "tasks: failed to read task", err, "taskId", taskID)
-		return false
+		return store.TaskRecord{}, false
 	}
-	// Which fields hold files depends on the step. Core rejects a submission
-	// for a step that is not active anyway; do it first, before resolving
-	// anything against the wrong step.
+	// Core refuses a submission for a step that is not active; refusing it here as well
+	// keeps the body of one from being read.
 	if record.ActiveStepID != stepID {
 		err := fmt.Errorf("%w: call was for step %q, active step is %q", orchestrator.ErrStaleStep, stepID, record.ActiveStepID)
 		h.writeCompletion(w, r, err, auditAttrs...)
-		return false
+		return store.TaskRecord{}, false
 	}
+	mayAct, err := false, errCanActUnset
+	if h.CanAct != nil {
+		mayAct, err = h.CanAct(ctx, record, in)
+	}
+	if err != nil {
+		h.auditTaskUpdate(ctx, taskID, true, taskAuditMeta(http.StatusInternalServerError, "act_check_failed", auditAttrs...))
+		httputil.InternalServerError(w, r, "tasks: failed to decide whether the caller may act", err, "taskId", taskID)
+		return store.TaskRecord{}, false
+	}
+	if !mayAct {
+		slog.WarnContext(ctx, "tasks: submission refused: the caller may not act on the step", auditAttrs...)
+		h.reject(w, r, taskID, http.StatusForbidden, errForbiddenTaskAction, "forbidden", auditAttrs...)
+		return store.TaskRecord{}, false
+	}
+	return record, true
+}
 
+// resolveFiles replaces the file references in a submission for record's active
+// step with the stored values they stand for, so only those are stored. record is
+// the task admitSubmitter admitted. auditAttrs is the slog-style list the denial and
+// the completion record both carry. On failure it writes the response and returns
+// false.
+func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, record store.TaskRecord, payload map[string]any, auditAttrs []any) bool {
+	ctx := r.Context()
+	taskID, stepID := record.TaskID, record.ActiveStepID
 	p, _ := authn.FromContext(ctx)
-	err = h.Files.FromCaller(ctx, record, payload, p)
+	err := h.Files.FromCaller(ctx, record, payload, p)
 	switch {
 	case err == nil:
 		return true
 	case errors.Is(err, fileaccess.ErrInvalid):
 		slog.WarnContext(ctx, "tasks: submission carries a file value that is not a file reference", "taskId", taskID, "stepId", stepID)
-		h.rejectFiles(w, r, taskID, http.StatusBadRequest, errFileNotReference, "file_not_reference", auditAttrs...)
+		h.reject(w, r, taskID, http.StatusBadRequest, errFileNotReference, "file_not_reference", auditAttrs...)
 	case errors.Is(err, fileaccess.ErrNotYours):
 		slog.WarnContext(ctx, "tasks: submission carries a file issued to someone else", "taskId", taskID, "stepId", stepID, "error", err)
-		h.rejectFiles(w, r, taskID, http.StatusForbidden, errFileNotYours, "file_not_yours", auditAttrs...)
+		h.reject(w, r, taskID, http.StatusForbidden, errFileNotYours, "file_not_yours", auditAttrs...)
 	case errors.Is(err, fileaccess.ErrScope):
 		slog.WarnContext(ctx, "tasks: submission carries a file that can't be submitted", "taskId", taskID, "stepId", stepID, "error", err)
-		h.rejectFiles(w, r, taskID, http.StatusForbidden, errFileScope, "file_scope", auditAttrs...)
+		h.reject(w, r, taskID, http.StatusForbidden, errFileScope, "file_scope", auditAttrs...)
 	case errors.Is(err, fileaccess.ErrExpired):
-		h.rejectFiles(w, r, taskID, http.StatusGone, errFileExpired, "file_expired", auditAttrs...)
+		h.reject(w, r, taskID, http.StatusGone, errFileExpired, "file_expired", auditAttrs...)
 	case errors.Is(err, filefields.ErrShape):
 		slog.WarnContext(ctx, "tasks: submission has a file field of the wrong shape", "taskId", taskID, "stepId", stepID, "error", err)
-		h.rejectFiles(w, r, taskID, http.StatusBadRequest, errFileShape, "file_shape", auditAttrs...)
+		h.reject(w, r, taskID, http.StatusBadRequest, errFileShape, "file_shape", auditAttrs...)
 	default:
 		h.auditTaskUpdate(ctx, taskID, true, taskAuditMeta(http.StatusInternalServerError, "file_resolve_failed", auditAttrs...))
 		httputil.InternalServerError(w, r, "tasks: failed to resolve file references", err, "taskId", taskID, "stepId", stepID)
@@ -465,7 +488,9 @@ func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskI
 	return false
 }
 
-func (h *HTTPHandler) rejectFiles(w http.ResponseWriter, r *http.Request, taskID string, status int, public, code string, auditAttrs ...any) {
+// reject audits a refused task update and answers it with status and the public
+// message. code is the failure the audit records.
+func (h *HTTPHandler) reject(w http.ResponseWriter, r *http.Request, taskID string, status int, public, code string, auditAttrs ...any) {
 	h.auditTaskUpdate(r.Context(), taskID, true, taskAuditMeta(status, code, auditAttrs...))
 	httputil.Error(w, r, status, public)
 }
