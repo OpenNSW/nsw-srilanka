@@ -103,7 +103,7 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
+                anyOf:
                   - description: The raw artifact. Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
                   - $ref: '#/components/schemas/StaticDataSearchPage'
         '400':
