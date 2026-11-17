@@ -9,9 +9,9 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"gorm.io/gorm"
 
+	"github.com/OpenNSW/core/platform/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/agency"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
