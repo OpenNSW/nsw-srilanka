@@ -86,8 +86,8 @@ authn:
   audience: https://api.npqs.nsw-agency.local
 
 # The catalog: the logical names the agency's workflow rules use, mapped to
-# this deployment's IdP token roles and OAuth2 client ids. A role owns an
-# injected case only where case_parties records it for the agency's OU;
+# this deployment's IdP token roles and OAuth2 client ids. Every role a
+# task's read.roles names must be here, or the server refuses to start;
 # tnsw names the client TNSW calls this agency as.
 catalog:
   roles:
@@ -97,8 +97,8 @@ catalog:
 
 # The workflows TNSW may start on a case here, one per officer task
 # (POST /api/v1/internal/cases/{caseId}/flows). Starting one creates the case
-# if it is new and records this agency's OU (ouHandle) as its owner in the
-# flow's owner role, which decides which officers see the case and its tasks.
+# if it is new and records this agency's OU (ouHandle) as its owner in each
+# role the flow's task names in read.roles, so officers in those roles see it.
 flows:
   clients:
     enabled: true
@@ -107,30 +107,30 @@ flows:
     # in the case's attributes.
     caseColumns: { name: /traderCompany/name }
     workflows:
-      - { id: npqs_application_review, clients: [tnsw], owner: officer }
-      - { id: npqs_sample_draw, clients: [tnsw], owner: officer }
-      - { id: npqs_visual_sample_draw, clients: [tnsw], owner: officer }
-      - { id: npqs_sample_receive, clients: [tnsw], owner: officer }
-      - { id: npqs_lab_testing, clients: [tnsw], owner: officer }
-      - { id: npqs_visual_sample_receive, clients: [tnsw], owner: officer }
-      - { id: npqs_visual_sample, clients: [tnsw], owner: officer }
-      - { id: npqs_consignment_inspection, clients: [tnsw], owner: officer }
-      - { id: npqs_visual_system, clients: [tnsw], owner: officer }
-      - { id: npqs_visual2_decision, clients: [tnsw], owner: officer }
-      - { id: npqs_visual2_inspection, clients: [tnsw], owner: officer }
-      - { id: npqs_treatment_request_review, clients: [tnsw], owner: officer }
-      - { id: npqs_treatment_final_review, clients: [tnsw], owner: officer }
-      - { id: npqs_treatment_issue, clients: [tnsw], owner: officer }
-      - { id: npqs_treatment_issue_supervised, clients: [tnsw], owner: officer }
-      - { id: npqs_docs_review, clients: [tnsw], owner: officer }
-      - { id: npqs_certificate_issue, clients: [tnsw], owner: officer }
-      - { id: npqs_certificate_issue_non_ephyto, clients: [tnsw], owner: officer }
-      - { id: npqs_certificate_signed_upload, clients: [tnsw], owner: officer }
-      - { id: npqs_ephyto_transmit, clients: [tnsw], owner: officer }
-      - { id: npqs_certificate_withdrawal, clients: [tnsw], owner: officer }
-      - { id: npqs_certificate_replacement, clients: [tnsw], owner: officer }
-      - { id: npqs_payment_review_receipt, clients: [tnsw], owner: officer }
-      - { id: npqs_payment_confirm, clients: [tnsw], owner: officer }
+      - { id: npqs_application_review, clients: [tnsw] }
+      - { id: npqs_sample_draw, clients: [tnsw] }
+      - { id: npqs_visual_sample_draw, clients: [tnsw] }
+      - { id: npqs_sample_receive, clients: [tnsw] }
+      - { id: npqs_lab_testing, clients: [tnsw] }
+      - { id: npqs_visual_sample_receive, clients: [tnsw] }
+      - { id: npqs_visual_sample, clients: [tnsw] }
+      - { id: npqs_consignment_inspection, clients: [tnsw] }
+      - { id: npqs_visual_system, clients: [tnsw] }
+      - { id: npqs_visual2_decision, clients: [tnsw] }
+      - { id: npqs_visual2_inspection, clients: [tnsw] }
+      - { id: npqs_treatment_request_review, clients: [tnsw] }
+      - { id: npqs_treatment_final_review, clients: [tnsw] }
+      - { id: npqs_treatment_issue, clients: [tnsw] }
+      - { id: npqs_treatment_issue_supervised, clients: [tnsw] }
+      - { id: npqs_docs_review, clients: [tnsw] }
+      - { id: npqs_certificate_issue, clients: [tnsw] }
+      - { id: npqs_certificate_issue_non_ephyto, clients: [tnsw] }
+      - { id: npqs_certificate_signed_upload, clients: [tnsw] }
+      - { id: npqs_ephyto_transmit, clients: [tnsw] }
+      - { id: npqs_certificate_withdrawal, clients: [tnsw] }
+      - { id: npqs_certificate_replacement, clients: [tnsw] }
+      - { id: npqs_payment_review_receipt, clients: [tnsw] }
+      - { id: npqs_payment_confirm, clients: [tnsw] }
 
 # The npqs folder of a one-trade-artifacts clone, which compose bind-mounts
 # at /app/artifacts: ../one-trade-artifacts/npqs by default, or set

@@ -58,19 +58,25 @@ type StartRequest struct {
 	// Vars seeds the workflow variables. They are recorded with the flow, so a retried
 	// start runs with the first request's variables.
 	Vars map[string]any
-	// Owner, if set, is recorded as a party of the case in the same transaction as the
-	// flow, so a recorded flow always has its owner.
-	Owner *Owner
+	// Owner, if set, names the owner a new flow records for its case, in the same
+	// transaction as the flow, so a recorded flow always has its owner. A retry of a
+	// recorded flow does not call it: its owner committed with it.
+	Owner OwnerOf
 	// Case, if set, is written to the case in the same transaction as the flow. A retry of
 	// a recorded flow writes nothing: its first write committed with it.
 	Case *CaseInfo
 }
 
-// Owner is an OU that holds a role on a flow's case (case_parties).
+// Owner is an OU that holds roles on a flow's case (case_parties).
 type Owner struct {
-	Role     string
 	OUHandle string
+	Roles    []string
 }
+
+// OwnerOf returns the owner of the case of a new flow that runs def. reg holds the
+// artifacts of the manifest version the flow runs on, so the owner's roles can follow the
+// templates the flow runs.
+type OwnerOf func(ctx context.Context, reg *artifact.Registry, def workflow.WorkflowDefinition) (*Owner, error)
 
 // CaseInfo is what a new flow writes to its case. Attributes are merged into
 // cases.attributes by top-level key, so a later flow replaces a key's whole value and keeps
@@ -140,7 +146,11 @@ func (s *Service) StartFlow(ctx context.Context, req StartRequest) (*Flow, error
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.Record(ctx, newFlow, req.Owner, req.Case); err != nil {
+	owner, err := s.owner(ctx, newFlow.ManifestVersion, def, req.Owner)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.Record(ctx, newFlow, owner, req.Case); err != nil {
 		return nil, fmt.Errorf("caseflow: failed to record flow: %w", err)
 	}
 	f, err := s.repo.Get(ctx, newFlow.WorkflowID)
@@ -226,6 +236,23 @@ func (s *Service) definition(ctx context.Context, version int, templateID string
 		return workflow.WorkflowDefinition{}, fmt.Errorf("caseflow: failed to load workflow %q: %w", templateID, err)
 	}
 	return def, nil
+}
+
+// owner returns the owner ownerOf names for a new flow that runs def on manifest version,
+// or nil when ownerOf is nil.
+func (s *Service) owner(ctx context.Context, version int, def workflow.WorkflowDefinition, ownerOf OwnerOf) (*Owner, error) {
+	if ownerOf == nil {
+		return nil, nil
+	}
+	reg, err := s.artifacts.Registry(ctx, version)
+	if err != nil {
+		return nil, fmt.Errorf("caseflow: %w", err)
+	}
+	owner, err := ownerOf(ctx, reg, def)
+	if err != nil {
+		return nil, fmt.Errorf("caseflow: %w", err)
+	}
+	return owner, nil
 }
 
 // start starts f's workflow. Variables are seeded from the recorded row, not the
