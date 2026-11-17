@@ -35,15 +35,19 @@ function staticDataParams(params: Record<string, unknown> | undefined): StaticDa
   return { id, version, searchKeys }
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
 // The artifact source isn't type-checked against this contract, so a malformed entry (a bare
-// string, a missing/non-string const or title) is dropped here rather than being offered as an
-// option.
+// string, a missing, non-string or empty const or title) is dropped here rather than being
+// offered as an option. The API rejects the same rows on a typed search.
 function isStaticDataRow(value: unknown): value is StaticDataRow {
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as StaticDataRow).const === 'string' &&
-    typeof (value as StaticDataRow).title === 'string'
+    isNonEmptyString((value as StaticDataRow).const) &&
+    isNonEmptyString((value as StaticDataRow).title)
   )
 }
 

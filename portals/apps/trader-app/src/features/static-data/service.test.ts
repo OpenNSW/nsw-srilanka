@@ -98,9 +98,19 @@ describe('staticDataSearchService', () => {
     expect(option).toEqual(ventilatedOption)
   })
 
-  it('drops list entries without a string const and title', async () => {
+  it('drops list entries without a non-empty string const and title', async () => {
     request.mockResolvedValue({
-      data: { data: [{ const: 'LK', title: 'Sri Lanka' }, { const: 'GB' }, { title: 'No const' }, 'LK', null] },
+      data: {
+        data: [
+          { const: 'LK', title: 'Sri Lanka' },
+          { const: 'GB' },
+          { title: 'No const' },
+          { const: '', title: 'Unnamed' },
+          { const: 'A', title: '' },
+          'LK',
+          null,
+        ],
+      },
     })
 
     const { options } = await staticDataSearchService.search({ query: '', signal, params: params('malformed') })
