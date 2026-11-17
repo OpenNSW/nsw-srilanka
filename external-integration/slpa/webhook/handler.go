@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/httputil"
-	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
+	"github.com/OpenNSW/core/platform/securitylog"
 )
 
 const (

@@ -16,7 +16,7 @@ require (
 	github.com/OpenNSW/core/notification v0.3.0
 	github.com/OpenNSW/core/pagination v0.1.0
 	github.com/OpenNSW/core/payment v0.5.0
-	github.com/OpenNSW/core/platform v0.0.0-20261117075144-7dac2fc8a125
+	github.com/OpenNSW/core/platform v0.0.0-20261117075225-f4522af4d5ac
 	github.com/OpenNSW/core/refid v0.5.0
 	github.com/OpenNSW/core/remote v0.9.0
 	github.com/OpenNSW/core/secret v0.2.0
@@ -25,7 +25,6 @@ require (
 	github.com/OpenNSW/core/temporal v0.1.0
 	github.com/OpenNSW/core/trace v0.2.0
 	github.com/OpenNSW/core/uiprojector v0.3.0
-	github.com/felixge/httpsnoop v1.1.0
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
@@ -76,6 +75,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/expr-lang/expr v1.17.8 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
+	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect

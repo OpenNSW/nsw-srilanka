@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	workflow "github.com/OpenNSW/core/workflow"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
 // fakeTaskCanceller records the tasks it is asked to cancel, in calls shared with the test's
