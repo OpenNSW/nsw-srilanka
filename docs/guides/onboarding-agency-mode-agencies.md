@@ -95,7 +95,7 @@ You need:
 - **Postgres admin** access to create a database, and the Temporal CLI pointed at the
   cluster's Temporal frontend.
 - **Write access to `one-trade-artifacts`**, and to the TNSW deployment's configuration.
-- For **each officer**: username, email, phone (E.164), first and last name.
+- For **each officer**: username, email, a Sri Lankan phone number, first and last name.
 
 ### Names used in this guide
 
@@ -288,6 +288,11 @@ ThunderID from the browser.
 In **Users**, create each officer in the agency's OU, with the officers' user type. Then
 open the officers' group in **Groups** and, under **Members**, use **Add Member** to add
 them. The role comes with the group.
+
+In the platform setup, the officers' user type is `Government_User`. Its `phone_number`
+takes a Sri Lankan number in one of these forms: `0771234567`, `+94771234567`,
+`94771234567` or `771234567`. The IdP refuses any other form, such as `+940771234567` or a
+foreign number.
 
 ## Step 3: Create the database and Temporal namespace
 
