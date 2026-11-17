@@ -1,18 +1,18 @@
 import { DashboardIcon } from '@radix-ui/react-icons'
 import type { ReactNode } from 'react'
-import type { ParseKeys } from 'i18next'
+import type { ParseKeysWithoutVariables } from 'i18next'
 import { isAgencyMode } from '@/features/case/mode'
 import type { Ability } from '@/hooks/useCan'
 import { APP_ROUTES, type AppRoute } from '@/navigation/routes'
 
 export interface NavItem {
-  labelKey: ParseKeys
+  labelKey: ParseKeysWithoutVariables
   route: AppRoute
   icon: ReactNode
 }
 
 export interface NavGroup {
-  labelKey: ParseKeys
+  labelKey: ParseKeysWithoutVariables
   icon: ReactNode
   items: NavItem[]
 }
