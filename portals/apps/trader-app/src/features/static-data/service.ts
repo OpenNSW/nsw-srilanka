@@ -13,8 +13,13 @@ interface StaticDataParams {
   searchKeys?: string[]
 }
 
-function isStringList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.length > 0)
+// A key name as the API accepts it (internal/staticdata handler.go): the characters a
+// displayTemplate placeholder can hold. A comma or a space would change what the API reads from
+// the comma-joined list sent on a typed search.
+const SEARCH_KEY_PATTERN = /^[A-Za-z0-9_]+$/
+
+function isSearchKeyList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string' && SEARCH_KEY_PATTERN.test(item))
 }
 
 function staticDataParams(params: Record<string, unknown> | undefined): StaticDataParams {
@@ -22,8 +27,10 @@ function staticDataParams(params: Record<string, unknown> | undefined): StaticDa
   if (typeof id !== 'string' || typeof version !== 'string') {
     throw new Error('static-data search service requires x-search.params.id and .params.version (both strings)')
   }
-  if (searchKeys !== undefined && !isStringList(searchKeys)) {
-    throw new Error('static-data search service requires x-search.params.searchKeys to be a list of key names')
+  if (searchKeys !== undefined && !isSearchKeyList(searchKeys)) {
+    throw new Error(
+      'static-data search service requires x-search.params.searchKeys to be a list of key names (letters, digits and underscores)',
+    )
   }
   return { id, version, searchKeys }
 }

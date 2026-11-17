@@ -131,6 +131,9 @@ describe('staticDataSearchService', () => {
   it.each([
     ['searchKeys that are not a list', { searchKeys: 'title,description' }],
     ['searchKeys with an empty name', { searchKeys: ['title', ''] }],
+    ['searchKeys with a whitespace-only name', { searchKeys: ['title', '  '] }],
+    ['searchKeys with a comma inside a name', { searchKeys: ['title,description'] }],
+    ['searchKeys with a name that has a space', { searchKeys: ['title', 'my key'] }],
   ])('rejects %s', async (_case, extra) => {
     await expect(
       staticDataSearchService.search({ query: '', signal, params: params('invalid', extra) }),
