@@ -169,7 +169,9 @@ backend:
       logLevel: info
       serviceURL: "https://nsw-api.example.com"
       # Request-body size cap and server timeouts (Slowloris/DoS hardening).
-      maxRequestBytes: 33554432   # 32 MiB
+      # The cap bounds a task submission or draft, an agency flow start's input
+      # and an admin resolve's patch. The server warns at startup above 1 MiB.
+      maxRequestBytes: 1048576   # 1 MiB
       readHeaderTimeout: 5s
       readTimeout: 15s
       writeTimeout: 30s
