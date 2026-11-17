@@ -14,7 +14,7 @@ import (
 	"github.com/OpenNSW/core/pagination"
 	"github.com/OpenNSW/core/taskflow/store"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 )
 
 // fakeCaseRepo holds cases and, per case, the OU that owns it and in which roles.

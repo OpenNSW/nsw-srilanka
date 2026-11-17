@@ -7,7 +7,7 @@ import (
 
 	"github.com/OpenNSW/core/taskflow/store"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"

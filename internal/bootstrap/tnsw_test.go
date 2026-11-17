@@ -10,7 +10,7 @@ import (
 
 	corestorage "github.com/OpenNSW/core/storage"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"

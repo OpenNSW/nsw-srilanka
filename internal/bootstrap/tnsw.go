@@ -10,9 +10,9 @@ import (
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/payment"
 
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"

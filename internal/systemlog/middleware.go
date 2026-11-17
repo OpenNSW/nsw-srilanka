@@ -22,7 +22,7 @@ import (
 
 	"github.com/felixge/httpsnoop"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
 

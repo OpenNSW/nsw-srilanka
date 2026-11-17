@@ -13,8 +13,8 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
+	"github.com/OpenNSW/core/platform/authn"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 const (

@@ -41,7 +41,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/filetoken"
 )
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/testutil"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderconfig"
@@ -19,7 +20,6 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"

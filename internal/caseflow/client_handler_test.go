@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 )
 
 // clientFlows lists notice for tnsw, owned by officer, in CDA's OU.

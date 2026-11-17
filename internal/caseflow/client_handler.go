@@ -12,7 +12,7 @@ import (
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/json/jsonpointer"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 )
 
 // ScopeFlowStart gates POST /api/v1/internal/cases/{caseId}/flows. Starting a client flow
