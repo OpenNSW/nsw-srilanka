@@ -392,6 +392,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		workflowadmin.NewService(parentRunner, task.Runner, tm, task.Store),
 		workflowadmin.NewCaseService(db, task.Store, flowService, artifacts),
 		auditor,
+		cfg.Server.MaxRequestBytes,
 	)
 
 	// -------------------------------------------------------------------
@@ -591,7 +592,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// Mode-specific routes: TNSW's consignment, company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
-		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, withAuth, withScope)
+		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, cfg.Server.MaxRequestBytes, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,

@@ -333,6 +333,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body is larger than the server's `server.maxRequestBytes`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal error.
           content:
@@ -434,6 +440,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body is larger than 16 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal error.
           content:
@@ -529,6 +541,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body is larger than the server's `server.maxRequestBytes`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal error.
           content:
@@ -613,6 +631,12 @@ paths:
           description: >-
             No step in this task workflow is waiting under `{stepId}`: the step
             never existed here or is over, or it is already parked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body is larger than 16 KiB.
           content:
             application/json:
               schema:

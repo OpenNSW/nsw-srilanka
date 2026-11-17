@@ -270,12 +270,29 @@ func TestProxyHandler_OwnerRefusingCredentialsIsBadGateway(t *testing.T) {
 
 func TestProxyHandler_RejectsIncompleteUpload(t *testing.T) {
 	h := NewProxyHandler(&ProxyService{})
-	for _, body := range []string{`not json`, `{"mime_type":"application/pdf","size":1}`, `{"filename":"a.pdf","size":1}`, `{"filename":"a.pdf","mime_type":"application/pdf"}`} {
+	for _, body := range []string{
+		`not json`,
+		`{"mime_type":"application/pdf","size":1}`,
+		`{"filename":"a.pdf","size":1}`,
+		`{"filename":"a.pdf","mime_type":"application/pdf"}`,
+		`{"filename":"a.pdf","mime_type":"application/pdf","size":1,"key":"k"}`,
+		`{"filename":"a.pdf","mime_type":"application/pdf","size":1}{}`,
+	} {
 		rec := httptest.NewRecorder()
 		h.Upload(rec, httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(body)))
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("Upload(%s) status = %d, want %d", body, rec.Code, http.StatusBadRequest)
 		}
+	}
+}
+
+func TestProxyHandler_RejectsUploadBodyOverTheLimit(t *testing.T) {
+	h := NewProxyHandler(&ProxyService{})
+	body := `{"filename":"` + strings.Repeat("a", maxUploadRequestBytes) + `.pdf"}`
+	rec := httptest.NewRecorder()
+	h.Upload(rec, httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(body)))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
 	}
 }
 

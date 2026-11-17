@@ -113,7 +113,9 @@ gives it. The list is for display only; the screens and buttons follow the scope
 
 1. TNSW calls `POST /api/v1/internal/cases/{caseId}/flows` with
    `{workflowId, flowId, input, callbackToken, attributes}`. `caseId` is the consignment's
-   id, and `attributes` the case's (see [Cases](#cases)), when it has any.
+   id, and `attributes` the case's (see [Cases](#cases)), when it has any. A body over
+   `server.maxRequestBytes` is a `413 request body too large`; one with any other field,
+   or anything after the JSON value, is a `400 invalid request body`.
 2. The caller must be a client the catalog maps, and `flows.clients` must list
    `workflowId` for it. Anything else is a `404 flow not found`, as for a flow that
    does not exist, and the reason is logged.

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OpenNSW/core/httputil"
 	workflow "github.com/OpenNSW/core/workflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -19,6 +20,8 @@ const (
 	resolveTestNodeID     = "officer_review"
 	// resolveTestStepID is the parked node's current step ID, which every request addresses.
 	resolveTestStepID = "step-1"
+	// testMaxRequestBytes is the resolve body limit the tests' handlers are built with.
+	testMaxRequestBytes = 1 << 20
 )
 
 // managerSlot registers a mock as one of the service's two workflow managers: the root one, for a
@@ -59,7 +62,7 @@ func newResolveRouter(t *testing.T, route resolveRoute, mockWM *MockWM) *Handler
 	t.Helper()
 	svc := newTestService(nil)
 	require.NoError(t, route.own(svc, mockWM))
-	return NewHandler(svc, nil, nil)
+	return NewHandler(svc, nil, nil, testMaxRequestBytes)
 }
 
 // parkedInstance is a workflow with one node of nodeType parked in AWAITING_ADMIN under
@@ -116,7 +119,7 @@ func TestHandler_HandleResolveAdminIntervention_UsesOnlyItsOwnManager(t *testing
 			svc := newTestService(nil)
 			require.NoError(t, route.own(svc, ownWM))
 			require.NoError(t, route.other(svc, otherWM))
-			r := NewHandler(svc, nil, nil)
+			r := NewHandler(svc, nil, nil, testMaxRequestBytes)
 			ownWM.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(parkedInstance(workflow.NodeTypeTask), nil)
 			ownWM.On("ResolveAdminIntervention", mock.Anything, resolveTestWorkflowID, "", mock.Anything).Return(nil)
 
@@ -140,7 +143,7 @@ func TestHandler_HandleResolveAdminIntervention_DoesNotFallBackToTheOtherManager
 			otherWM.Test(t) // an unexpected call fails this test cleanly instead of panicking
 			svc := newTestService(nil)
 			require.NoError(t, route.other(svc, otherWM))
-			r := NewHandler(svc, nil, nil)
+			r := NewHandler(svc, nil, nil, testMaxRequestBytes)
 
 			w := httptest.NewRecorder()
 			route.handler(r)(w, newResolveRequest(`{"action":"RETRY","reason":"retry"}`))
@@ -235,9 +238,9 @@ func TestHandler_HandleResolveAdminIntervention_RejectsInvalidRequest(t *testing
 		{"a lower-case action", `{"action":"retry","reason":"nope"}`, errInvalidAdminAction},
 		{"a missing reason", `{"action":"RETRY"}`, errReasonRequired},
 		{"a blank reason", `{"action":"RETRY","reason":"   "}`, errReasonRequired},
-		{"a body that is not JSON", `not json`, errInvalidRequestBody},
-		{"an empty body", ``, errInvalidRequestBody},
-		{"anything after the JSON value", `{"action":"RETRY","reason":"first"}{"action":"ABORT","reason":"second"}`, errInvalidRequestBody},
+		{"a body that is not JSON", `not json`, httputil.MsgInvalidBody},
+		{"an empty body", ``, httputil.MsgInvalidBody},
+		{"anything after the JSON value", `{"action":"RETRY","reason":"first"}{"action":"ABORT","reason":"second"}`, httputil.MsgInvalidBody},
 		// A patch sent under a field the endpoint doesn't define (here the pre-rename
 		// "overrides") must be rejected, not dropped while the action goes ahead with an empty patch.
 		{"an unknown field", `{"action":"COMPLETE","overrides":{"review.outcome":"APPROVED"},"reason":"stale client"}`, `unknown field \"overrides\"`},
@@ -245,7 +248,7 @@ func TestHandler_HandleResolveAdminIntervention_RejectsInvalidRequest(t *testing
 	for _, route := range resolveRoutes {
 		for _, tt := range tests {
 			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
-				r := NewHandler(newTestService(nil), nil, nil)
+				r := NewHandler(newTestService(nil), nil, nil, testMaxRequestBytes)
 
 				w := httptest.NewRecorder()
 				route.handler(r)(w, newResolveRequest(tt.body))
@@ -257,11 +260,39 @@ func TestHandler_HandleResolveAdminIntervention_RejectsInvalidRequest(t *testing
 	}
 }
 
+// A body over the handler's limit is refused before it reaches the workflow manager, so none is
+// registered; one at the limit is read.
+func TestHandler_HandleResolveAdminIntervention_LimitsBody(t *testing.T) {
+	// An action the handler refuses after reading the body, so reaching that refusal shows the
+	// body was read in full.
+	body := `{"action":"EXPLODE","reason":"nope"}`
+	for _, route := range resolveRoutes {
+		t.Run(route.name+"/over the limit", func(t *testing.T) {
+			r := NewHandler(newTestService(nil), nil, nil, int64(len(body))-1)
+
+			w := httptest.NewRecorder()
+			route.handler(r)(w, newResolveRequest(body))
+
+			assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+			assert.Contains(t, w.Body.String(), httputil.MsgBodyTooLarge)
+		})
+		t.Run(route.name+"/at the limit", func(t *testing.T) {
+			r := NewHandler(newTestService(nil), nil, nil, int64(len(body)))
+
+			w := httptest.NewRecorder()
+			route.handler(r)(w, newResolveRequest(body))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), errInvalidAdminAction)
+		})
+	}
+}
+
 // A request without a step never reaches the workflow manager, so none is registered.
 func TestHandler_HandleResolveAdminIntervention_RequiresStepID(t *testing.T) {
 	for _, route := range resolveRoutes {
 		t.Run(route.name, func(t *testing.T) {
-			r := NewHandler(newTestService(nil), nil, nil)
+			r := NewHandler(newTestService(nil), nil, nil, testMaxRequestBytes)
 			req := newResolveRequest(`{"action":"RETRY","reason":"retry"}`)
 			req.SetPathValue("stepId", "")
 

@@ -15,13 +15,16 @@ import (
 // clientFlows lists notice for tnsw, owned by officer, in CDA's OU.
 var clientFlows = ClientFlows{Enabled: true, OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}, Owner: "officer"}}}
 
+// testMaxRequestBytes is the start body limit the tests' handlers are built with.
+const testMaxRequestBytes = 1 << 20
+
 // catalogClients is the catalog's Clients map: tnsw calls as NSW_TO_CDA.
 var catalogClients = map[string]string{"tnsw": "NSW_TO_CDA", "fcau": "FCAU_TO_NSW"}
 
 func newClientHandler(t *testing.T, list ClientFlows) (*ClientHandler, *memRepo, *startCapture) {
 	t.Helper()
 	repo, wm := newMemRepo(), &startCapture{}
-	return NewClientHandler(newService(t, repo, wm), list, catalogClients), repo, wm
+	return NewClientHandler(newService(t, repo, wm), list, catalogClients, testMaxRequestBytes), repo, wm
 }
 
 // post sends body to the route for case C1, as p (unauthenticated when nil).
@@ -193,6 +196,9 @@ func TestClientHandlerBadRequests(t *testing.T) {
 		"no flowId":       `{"workflowId":"notice"}`,
 		"slash in flowId": `{"workflowId":"notice","flowId":"a/b"}`,
 		"bad attributes":  `{"workflowId":"notice","flowId":"task-1","attributes":["Adam PVT LTD"]}`,
+		"unknown field":   `{"workflowId":"notice","flowId":"task-1","template":"notice"}`,
+		"trailing data":   `{"workflowId":"notice","flowId":"task-1"}{"workflowId":"notice"}`,
+		"empty":           ``,
 	} {
 		t.Run(name, func(t *testing.T) {
 			h, _, wm := newClientHandler(t, clientFlows)
@@ -206,10 +212,33 @@ func TestClientHandlerBadRequests(t *testing.T) {
 	}
 }
 
+// A start body over the handler's limit is refused before any flow starts; one at the limit
+// starts it.
+func TestClientHandlerLimitsBody(t *testing.T) {
+	t.Run("over the limit", func(t *testing.T) {
+		repo, wm := newMemRepo(), &startCapture{}
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, int64(len(startBody))-1)
+		rec := post(h, tnsw, startBody)
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("status = %d, want 413", rec.Code)
+		}
+		if len(wm.starts) != 0 {
+			t.Errorf("starts = %v, want none", wm.starts)
+		}
+	})
+	t.Run("at the limit", func(t *testing.T) {
+		repo, wm := newMemRepo(), &startCapture{}
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, int64(len(startBody)))
+		if rec := post(h, tnsw, startBody); rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+		}
+	})
+}
+
 // A flow ID already started on another case is a conflict, and records no owner.
 func TestClientHandlerConflict(t *testing.T) {
 	repo, wm := newMemRepo(Flow{WorkflowID: "task-1", CaseID: "C2", TemplateID: "notice", Status: StatusStarted, ManifestVersion: 2}), &startCapture{}
-	h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
+	h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, testMaxRequestBytes)
 	if rec := post(h, tnsw, startBody); rec.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409", rec.Code)
 	}
@@ -223,7 +252,7 @@ func TestClientHandlerConflict(t *testing.T) {
 func TestClientHandlerFailures(t *testing.T) {
 	t.Run("start fails", func(t *testing.T) {
 		repo, wm := newMemRepo(), &startCapture{err: errors.New("temporal down")}
-		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, testMaxRequestBytes)
 		if rec := post(h, tnsw, startBody); rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d, want 500", rec.Code)
 		}
@@ -238,7 +267,7 @@ func TestClientHandlerFailures(t *testing.T) {
 	t.Run("record fails", func(t *testing.T) {
 		repo, wm := newMemRepo(), &startCapture{}
 		repo.recordErr = errors.New("db down")
-		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients)
+		h := NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, testMaxRequestBytes)
 		if rec := post(h, tnsw, startBody); rec.Code != http.StatusInternalServerError {
 			t.Errorf("status = %d, want 500", rec.Code)
 		}
