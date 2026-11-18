@@ -14,13 +14,16 @@ The harness starts the full app in-process with `bootstrap.Build` (no test-only 
 Per-step identity is chosen by the flow's `actor`, which must match an actor `id` in one of the config files:
 
 - `"trader"` → MEMBER user (`authorization_code` token), defined in `configs/members/trader.json`.
-- `"<agencyId>"` (e.g. `"fcau"`) → SERVICE/M2M client (`client_credentials` token), defined in `configs/agencies/fcau.json`.
+- `"cha"` → MEMBER user with the CHA role, defined in `configs/members/cha.json`.
+- `"<agencyId>"` (e.g. `"fcau"`, `"cda"`) → SERVICE/M2M client (`client_credentials` token), defined in `configs/agencies/<id>.json`.
 
 **External agency flows** are handled by a generic mock agency (`mockagency_test.go`) that receives injects from the app and, when a `callback` step fires, posts the configured callback payload back to complete the parked EXTERNAL_REVIEW task.
 
 **Payment flows** are handled by a generic mock gateway (`mockgateway_test.go`) that resolves the payment reference and posts a gateway webhook to confirm the payment.
 
-FCAU is the sample flow exercising both. Other agency or payment flows need only a new JSON flow file.
+**CusDec waits** (CDA before the application opens) are unblocked by a `signal` step that delivers `cusdec_assessed` to every child of the trade-export flow. That stands in for Customs completing CusDec assessment without driving the full CusDec path.
+
+FCAU and CDA are the sample flows exercising agency + payment. Other agency or payment flows need only a new JSON flow file (and an agency config if the actor is new).
 
 ## Directory layout
 
@@ -28,19 +31,25 @@ FCAU is the sample flow exercising both. Other agency or payment flows need only
 test/e2e/replay/
 ├── configs/
 │   ├── members/        # MEMBER actor configs (Trader, CHA, …) — identity for token minting
-│   │   └── trader.json
+│   │   ├── trader.json
+│   │   └── cha.json
 │   ├── agencies/       # SERVICE/M2M agency configs — identity + inbound/outbound wire protocol
-│   │   └── fcau.json
+│   │   ├── fcau.json
+│   │   └── cda.json
 │   └── payments/       # Payment gateway configs — webhook path + optional identity
 │       └── govpay.json
 ├── flows/              # Flow JSON files (one per business scenario)
+│   ├── trade_up_to_hscode.json
 │   ├── fcau_application_approve.json
-│   └── trade_up_to_hscode.json
+│   ├── cda_application_approve.json
+│   ├── cda_application_rework.json
+│   └── cda_application_value_added.json
 ├── config_test.go           # All config types (MemberConfig, AgencyConfig, PaymentConfig) and JSON loaders
 ├── harness_test.go          # Full in-process app setup
 ├── signedauth_test.go       # RS256 token minting + local JWKS server
 ├── mockagency_test.go       # Config-driven mock agency (inject receiver + callback poster)
 ├── mockgateway_test.go      # Config-driven mock payment gateway (DB poll + webhook poster)
+├── signaller_test.go        # Temporal signal delivery for CusDec WAIT stand-ins
 └── runner_e2e_test.go       # Test functions — one per flow file
 ```
 
@@ -121,7 +130,7 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
 { "name": "my_flow", "steps": [ ... ] }
 ```
 
-Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`, `upload`.
+Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`, `upload`, `signal`.
 
 ### Variables
 
@@ -288,6 +297,31 @@ The mock agency waits until the app sends the inject for that task id, then post
 | `into`     | Variable to store the file reference in; send it as the file field's value (`"{{analysisCert}}"`). |
 
 Uploads the way the portal does: reserves the file (`POST /api/v1/storage`), then `PUT`s `content` to the presigned URL that returns. A form's file field only takes a reference issued to the submitter, so a file field needs an `upload` step first.
+
+---
+
+### `signal` — deliver a Temporal signal to every child of a parent flow
+
+```json
+{
+  "name": "emit assessed CusDec (stands in for Customs)",
+  "signal": {
+    "fromWorkflowVar": "exportFlow",
+    "name": "cusdec_assessed",
+    "payload": { "cusdec_number": "CBEX1/2026/E/48428" },
+    "timeout": "60s"
+  }
+}
+```
+
+| Field             | Notes                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| `fromWorkflowVar` | Variable holding the parent workflow ID (usually `flows.0.workflowId` from an admin GET).      |
+| `name`            | Temporal signal name the sibling WAIT listens for (e.g. `cusdec_assessed`).                    |
+| `payload`         | Map delivered as the signal body; keys must match the WAIT node's `output_mapping` sources.    |
+| `timeout`         | How long to wait for the parent to expose child workflow IDs; default 60s.                     |
+
+Used when an agency branch waits on a Customs emit the flow does not otherwise drive.
 
 ---
 

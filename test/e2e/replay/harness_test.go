@@ -76,11 +76,12 @@ func findRepoRoot() string {
 // harness is an in-process app (real authn) exposed via an httptest.Server,
 // plus a client that attaches minted bearer tokens per replay actor.
 type harness struct {
-	server  *httptest.Server
-	client  *http.Client
-	signed  *signedAuth
-	agency  *mockAgency
-	gateway *mockGateway
+	server    *httptest.Server
+	client    *http.Client
+	signed    *signedAuth
+	agency    *mockAgency
+	gateway   *mockGateway
+	signaller *temporalSignaller
 }
 
 // newHarness loads config from the committed config.example.yaml, whose
@@ -110,6 +111,10 @@ func newHarness(t *testing.T) *harness {
 	// private keys.
 	setPaymentKeys(t, &cfg.Payment, payments, paymentKeys)
 	cfg.Storage.Local.BaseDir = t.TempDir() // keep blob storage out of the repo tree
+	// SLTB's blend-sheet form still requires a draft CusDec XML upload; production
+	// configs dropped XML from the public allow-list, so the harness re-admits it
+	// for replay only.
+	allowReplayUploadTypes(cfg)
 	// Every flow builds the app, which reads every artifact. GitHub's API allows 60
 	// requests an hour without a token, fewer than one run makes, so read the public
 	// artifacts from the raw-content host, which has no such limit.
@@ -187,12 +192,29 @@ func newHarness(t *testing.T) *harness {
 	}
 
 	return &harness{
-		server:  srv,
-		client:  &http.Client{Transport: signed.transport()},
-		signed:  signed,
-		agency:  agency,
-		gateway: gateway,
+		server:    srv,
+		client:    &http.Client{Transport: signed.transport()},
+		signed:    signed,
+		agency:    agency,
+		gateway:   gateway,
+		signaller: newTemporalSignaller(t, cfg),
 	}
+}
+
+// allowReplayUploadTypes admits the MIME types agency forms still upload in
+// replay (draft CusDec XML) even when production configs no longer list them.
+func allowReplayUploadTypes(cfg *config.Config) {
+	const xmlType = "text/xml"
+	for _, t := range cfg.Storage.AllowedUploadTypes {
+		if t == xmlType {
+			return
+		}
+	}
+	cfg.Storage.AllowedUploadTypes = append(cfg.Storage.AllowedUploadTypes, xmlType)
+	if cfg.Storage.UploadTypeExtensions == nil {
+		cfg.Storage.UploadTypeExtensions = map[string][]string{}
+	}
+	cfg.Storage.UploadTypeExtensions[xmlType] = []string{".xml"}
 }
 
 // seedUser inserts a user_records row (migrations seed companies but no users)
