@@ -696,6 +696,14 @@ frontend:
     type: ClusterIP
     port: 80
 
+  # Hold each new portal pod until the backend reports the version this
+  # release deploys, so an upgrade never serves a new screen against the old
+  # backend. Needs an exact backend image tag (1.2.3) or none. See the chart
+  # README, "Frontend waits for the backend".
+  waitForBackend:
+    enabled: false
+    timeoutSeconds: 300
+
   # Same keys as apps/trader-app/public/config.example.js (the local dev
   # equivalent of this config block). Rendered into a ConfigMap and mounted
   # as config.js (see templates/frontend/configmap.yaml) for the browser to

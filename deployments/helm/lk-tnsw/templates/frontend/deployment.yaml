@@ -24,6 +24,54 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.frontend.waitForBackend.enabled }}
+      {{- /*
+      Holds a new portal pod until the backend's /health reports the version
+      this release deploys, so a new screen never calls an endpoint the old
+      backend lacks. It runs the portal's own image, which has sh and busybox
+      wget. Past the timeout it gives up and starts the portal anyway: the
+      portal loads without the backend, and a pod that never starts would
+      serve nothing at all.
+      */}}
+      {{- $timeout := .Values.frontend.waitForBackend.timeoutSeconds | int }}
+      {{- if le $timeout 0 }}
+      {{- fail (printf "frontend.waitForBackend.timeoutSeconds must be a whole number of seconds above 0 (got %v)" .Values.frontend.waitForBackend.timeoutSeconds) }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-backend
+          {{- with .Values.frontend.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.frontend.image.repository }}:{{ include "lk-tnsw.imageTag" (dict "tag" .Values.frontend.image.tag "root" .) }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          env:
+            - name: HEALTH_URL
+              value: "http://{{ include "lk-tnsw.backend.fullname" . }}:{{ .Values.backend.service.port }}/health"
+            # The backend reports the version it was built as, which release
+            # builds set to the bare version its image is tagged with (1.2.3).
+            - name: WANT_VERSION
+              value: {{ include "lk-tnsw.imageTag" (dict "tag" .Values.backend.image.tag "root" .) | quote }}
+            - name: TIMEOUT_SECONDS
+              value: {{ $timeout | quote }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "waiting for $HEALTH_URL to report version $WANT_VERSION"
+              end=$(( $(date +%s) + TIMEOUT_SECONDS ))
+              until wget -qO- "$HEALTH_URL" 2>/dev/null | tr -d '[:space:]' | grep -qF "\"version\":\"$WANT_VERSION\""; do
+                if [ "$(date +%s)" -ge "$end" ]; then
+                  echo "backend not at $WANT_VERSION after ${TIMEOUT_SECONDS}s; starting anyway"
+                  exit 0
+                fi
+                sleep 3
+              done
+              echo "backend is at $WANT_VERSION"
+          {{- if .Values.frontend.resources }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          {{- end }}
+      {{- end }}
       containers:
         - name: frontend
           {{- with .Values.frontend.securityContext }}

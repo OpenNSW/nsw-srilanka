@@ -22,7 +22,7 @@ Templates are grouped by component under `templates/backend/`, `templates/migrat
 
 - **[backend/deployment.yaml](templates/backend/deployment.yaml)**: Deployment, container, ports, environment variables, mounts, and probes for the backend.
 - **[backend/configmap.yaml](templates/backend/configmap.yaml)**: Renders `backend.config` into the server's `config.yaml`, mounted into the backend container (see "Backend config file" below).
-- **[frontend/deployment.yaml](templates/frontend/deployment.yaml)**: Deployment, container, ports, mounts, and probes for the frontend — its runtime config comes from the mounted ConfigMap below, not container env vars.
+- **[frontend/deployment.yaml](templates/frontend/deployment.yaml)**: Deployment, container, ports, mounts, and probes for the frontend — its runtime config comes from the mounted ConfigMap below, not container env vars. With `frontend.waitForBackend.enabled`, also an init container that holds the pod until the backend runs the same release (see "Frontend waits for the backend" below).
 - **[frontend/configmap.yaml](templates/frontend/configmap.yaml)**: Renders `frontend.config` into `config.js`, mounted into the frontend container for the browser to read (see "Frontend runtime config, not secrets" below).
 - **[backend/service.yaml](templates/backend/service.yaml)** / **[frontend/service.yaml](templates/frontend/service.yaml)**: Exposes each component's container port as a cluster-internal Service.
 - **[migration/job.yaml](templates/migration/job.yaml)** / **[migration/configmap.yaml](templates/migration/configmap.yaml)**: Runs schema migrations as a pre-install/pre-upgrade hook (when `migration.enabled`), with the migrator's own `config.yaml` rendered from `migration.config` (see "Migration Job" below).
@@ -292,6 +292,34 @@ Both components default their `livenessProbe`/`readinessProbe` to `GET
 - Frontend: answered directly by
   [`nginx.conf`](../../../portals/apps/trader-app/nginx.conf) with `200 OK` —
   it does not depend on the backend being reachable.
+
+### Frontend waits for the backend
+
+An upgrade rolls out the backend and the portal together. The portal is ready
+in seconds, while the backend still has to start and pass its readiness probe.
+Until it does, anyone who opens the portal gets the new portal against the old
+backend, and a screen that calls an endpoint added in this release fails until
+they refresh.
+
+Set `frontend.waitForBackend.enabled: true` to avoid that. Each new portal pod
+then runs an init container, `wait-for-backend`, that polls the backend
+Service's `/health` until it reports the version this release deploys. The old
+portal pod keeps serving until then. Follow it with
+`kubectl logs <pod> -c wait-for-backend`.
+
+- It compares with `backend.image.tag`, or the chart's `appVersion` when that
+  is unset. Release images report the bare version they're tagged with
+  (`1.2.3`), so leave the tag unset or set an exact version. A tag such as
+  `1.2`, `latest` or a digest never matches.
+- It runs whenever a portal pod starts, not only on upgrades. If the backend
+  already runs that version, it passes at once. If the backend is down, the
+  pod waits `frontend.waitForBackend.timeoutSeconds` (default 300) and then
+  starts anyway.
+- It runs the portal's own image with the frontend's `securityContext` and
+  `resources`, so there's no other image to pull or scan.
+- The portal starts once one new backend pod is ready, so old backend pods
+  may still answer some requests until the backend rollout finishes. Tabs
+  opened before the upgrade keep running the old portal.
 
 ## Configuration Reference
 
