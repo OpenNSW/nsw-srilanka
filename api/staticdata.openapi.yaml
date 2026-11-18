@@ -63,7 +63,8 @@ paths:
           description: |
             Comma-separated row keys to search, in priority order; ties go to the
             shorter value of the first key, then to the other keys in order. Each key
-            uses letters, digits and underscores only. Defaults to `title,const`.
+            uses letters, digits and underscores only, and a key named twice counts
+            once. At most 10 different keys. Defaults to `title,const`.
             String, number and boolean values are searched; other values are not.
           schema:
             type: string
@@ -107,7 +108,7 @@ paths:
                   - description: The raw artifact. Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
                   - $ref: '#/components/schemas/StaticDataSearchPage'
         '400':
-          description: Missing `version`, invalid `offset` / `limit`, or a `searchKeys` entry that is not letters, digits and underscores.
+          description: Missing `version`, invalid `offset` / `limit`, a `searchKeys` entry that is not letters, digits and underscores, or more than 10 different `searchKeys`.
           content:
             application/json:
               schema:

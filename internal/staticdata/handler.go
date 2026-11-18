@@ -97,10 +97,17 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request, id, versi
 // separates searchKeys.
 var searchKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
+// maxSearchKeys bounds how many keys one search may name. A search reads every named key of
+// every row, so an unbounded list would let a short request cost far more than the search it
+// asks for. A field names a few keys.
+const maxSearchKeys = 10
+
 // parseSearchKeys reads the comma-separated searchKeys parameter. Empty entries are ignored,
-// and none at all means Search's default keys.
+// a key named again is kept once at its first position, and none at all means Search's default
+// keys. At most maxSearchKeys different keys are accepted.
 func parseSearchKeys(param string) ([]string, error) {
 	var keys []string
+	seen := make(map[string]struct{})
 	for _, key := range strings.Split(param, ",") {
 		key = strings.TrimSpace(key)
 		if key == "" {
@@ -109,6 +116,13 @@ func parseSearchKeys(param string) ([]string, error) {
 		if !searchKeyPattern.MatchString(key) {
 			return nil, fmt.Errorf("invalid searchKeys entry %q: use letters, digits and underscores", key)
 		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		if len(keys) == maxSearchKeys {
+			return nil, fmt.Errorf("too many searchKeys: at most %d", maxSearchKeys)
+		}
+		seen[key] = struct{}{}
 		keys = append(keys, key)
 	}
 	return keys, nil

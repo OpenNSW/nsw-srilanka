@@ -2,8 +2,10 @@ package staticdata
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -219,17 +221,64 @@ func TestHandler_HandleGet_SearchRowWithoutTitle(t *testing.T) {
 }
 
 func TestHandler_HandleGet_InvalidSearchKeys(t *testing.T) {
-	reg := newTestRegistry(t, "codes", "1", "refdata/codes/1.json", []byte(`{"data":[]}`))
-	h := NewHandler(reg)
+	tooMany := "k0,k1,k2,k3,k4,k5,k6,k7,k8,k9,k10" // one more than maxSearchKeys
+	for _, searchKeys := range []string{"boo,foo.bar", tooMany} {
+		t.Run(searchKeys, func(t *testing.T) {
+			reg := newTestRegistry(t, "codes", "1", "refdata/codes/1.json", []byte(`{"data":[]}`))
+			h := NewHandler(reg)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/static-data/codes?version=1&q=a&searchKeys=boo,foo.bar", nil)
-	req.SetPathValue("id", "codes")
-	w := httptest.NewRecorder()
-	h.HandleGet(w, req)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/static-data/codes?version=1&q=a&searchKeys="+searchKeys, nil)
+			req.SetPathValue("id", "codes")
+			w := httptest.NewRecorder()
+			h.HandleGet(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", w.Code)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d", w.Code)
+			}
+		})
 	}
+}
+
+func TestParseSearchKeys_Limits(t *testing.T) {
+	numbered := func(n int) string {
+		keys := make([]string, n)
+		for i := range keys {
+			keys[i] = fmt.Sprintf("key%d", i)
+		}
+		return strings.Join(keys, ",")
+	}
+
+	t.Run("a repeated key is kept once, at its first position", func(t *testing.T) {
+		got, err := parseSearchKeys("boo,foo,boo, foo ,boo")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expectValues(t, got, []string{"boo", "foo"})
+	})
+
+	t.Run("a long run of one key is one key", func(t *testing.T) {
+		got, err := parseSearchKeys(strings.Repeat("boo,", 100000))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expectValues(t, got, []string{"boo"})
+	})
+
+	t.Run("the limit is accepted", func(t *testing.T) {
+		got, err := parseSearchKeys(numbered(maxSearchKeys))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != maxSearchKeys {
+			t.Fatalf("got %d keys, want %d", len(got), maxSearchKeys)
+		}
+	})
+
+	t.Run("one more than the limit is rejected", func(t *testing.T) {
+		if got, err := parseSearchKeys(numbered(maxSearchKeys + 1)); err == nil {
+			t.Fatalf("expected an error, got %v", got)
+		}
+	})
 }
 
 func TestParseSearchKeys(t *testing.T) {
