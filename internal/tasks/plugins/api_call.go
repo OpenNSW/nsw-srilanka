@@ -250,6 +250,22 @@ type apiCallConfig struct {
 	// form under them and reseed it from what was last saved, losing whatever
 	// they had typed since.
 	RetainState bool `json:"retain_state,omitempty"`
+
+	// Retry fails the step when the call fails, so the engine's task retry
+	// policy sends it again, instead of recording the failure and moving on.
+	//
+	// The default suits a call whose refusal the flow itself handles: a
+	// submission whose error the trader sees and corrects, say. A call that
+	// has to reach the other side before the flow can go on — a callback
+	// telling an agency's parked step what happened — sets retry. A timeout,
+	// a connection failure, 408, 429 or 5xx is then retried with the engine's
+	// backoff, and any other 4xx, which sending again can't change, parks the
+	// step for an admin at once.
+	//
+	// Only a failed call is retried. A call the service answered with success
+	// but the interpreter does not accept is the service's answer, and is
+	// recorded as it is.
+	Retry bool `json:"retry,omitempty"`
 }
 
 func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
@@ -294,6 +310,12 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 			Headers: headersFor(p.interpreter, ctx.Inputs),
 		}
 		callErr = p.manager.Call(ctx.Context, cfg.ServiceID, req, &resp)
+	}
+
+	if cfg.Retry && callErr != nil {
+		slog.Warn("api_call: call failed; failing the step for retry",
+			"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "error", callErr)
+		return classifyRemote(fmt.Errorf("api_call: %s: %w", cfg.ServiceID, callErr))
 	}
 
 	accepted, out := p.interpreter.Interpret(callErr, resp)
