@@ -102,6 +102,10 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 		return err
 	}
 	waits := cfg.waits()
+	// A dispatch that skips waiting would need the step's activation ID
+	// (ctx.Record.ActiveStepID) as its flowId in place of the task's ID, so a second
+	// dispatch from the same task starts a new flow instead of being taken for a repeat.
+	// currently dispatch with waiting is not allowed.
 	if !waits && replyToken == "" {
 		return inputError(fmt.Errorf("external_review: wait is false, so the step needs a %s input: only a reply can be sent without waiting", replyTokenInput))
 	}

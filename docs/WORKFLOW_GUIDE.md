@@ -372,6 +372,16 @@ The step **replies** instead of dispatching when its inputs carry a `replyToken`
 "output_mapping": { "verification_outcome": "verificationform.verification_outcome", "callbackToken?": "agency_token" }
 ```
 
+A reply the other side does not answer, such as the last message of a round, sets `"wait": false` in `plugin_properties`. The step then sends the reply without `callbackToken`, is not marked `QUEUED_EXTERNALLY`, and completes once the other side accepts it. Its failures are handled as for a reply that waits: a `409`, or any other `4xx` except `408` and `429`, fails the step without retries, which parks it for an admin, and other failures are retried. `wait` is `true` when left out. A dispatch with `"wait": false` (no `replyToken`, or an empty one) is refused: the step fails without retries before calling out.
+
+```json
+{
+  "id": "acme-notify-accepted",
+  "task_type": "EXTERNAL_REVIEW",
+  "plugin_properties": { "service_id": "agency", "reply_command": "accepted", "wait": false }
+}
+```
+
 ### Reference IDs (`REFID_GENERATOR`)
 
 Fills fields of a copy of the step's inputs with reference IDs, and writes the filled copy to `<output_namespace>`. The formats are defined in the `refid` section of `configs/config.yaml` (see `configs/config.example.yaml`). The step is synchronous. It reads only its inputs, which come through `input_mapping`, and writes only its own namespace.

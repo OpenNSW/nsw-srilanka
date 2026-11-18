@@ -164,7 +164,10 @@ over:
 
 A token names one waiting step, so a reply cannot complete a stale or different one:
 core answers `409`. The step that sent the reply then fails without retrying and parks
-for an admin, since no retry can succeed. Artifacts that are not wired for replies
+for an admin, since no retry can succeed. A reply that expects no answer, such as a
+final decision, can be an `EXTERNAL_REVIEW` step with `"wait": false`: it sends no token
+of its own, completes once the reply is accepted, and a failed reply is retried or
+parks for an admin as any other reply does. Artifacts that are not wired for replies
 start the flow again: their resubmission is a repeat start, which the agency takes for a
 retry and does not deliver. How a step replies is in
 [`docs/WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md#task-types-configuration-traderinputjson--officerinputjson).
