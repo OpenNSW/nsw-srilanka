@@ -20,6 +20,14 @@ import (
 func handlerOver(t *testing.T, parked bool) (*Handler, *orderCompleter) {
 	t.Helper()
 
+	tasks := &orderCompleter{}
+	return handlerWith(t, parked, tasks), tasks
+}
+
+// handlerWith is handlerOver completing steps through tasks.
+func handlerWith(t *testing.T, parked bool, tasks TaskCompleter) *Handler {
+	t.Helper()
+
 	conn, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
@@ -42,10 +50,9 @@ func handlerOver(t *testing.T, parked bool) (*Handler, *orderCompleter) {
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	}
 
-	tasks := &orderCompleter{}
 	h, err := NewHandler(NewOrderEvents(db, tasks), NewInvoiceEvents(db, tasks), Config{Secret: secret})
 	require.NoError(t, err)
-	return h, tasks
+	return h
 }
 
 func post(t *testing.T, h *Handler, body string, signature string) *httptest.ResponseRecorder {

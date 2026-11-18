@@ -86,6 +86,36 @@ func TestClient_Audit_SystemAnonymous(t *testing.T) {
 	}
 }
 
+// A named actor is recorded as given, with or without a principal in the context;
+// one with no ActorType leaves the actor to the context.
+func TestClient_Audit_NamedActor(t *testing.T) {
+	principal := authn.ContextWithPrincipal(context.Background(), &authn.Principal{
+		Kind:     authn.KindClient,
+		ClientID: "service-1",
+	})
+	for _, tc := range []struct {
+		name      string
+		ctx       context.Context
+		event     Event
+		actorType ActorType
+		actorID   string
+	}{
+		{"no principal", context.Background(), Event{ActorType: ActorService, ActorID: "slpa"}, ActorService, "slpa"},
+		{"principal present", principal, Event{ActorType: ActorService, ActorID: "slpa"}, ActorService, "slpa"},
+		{"ActorID without ActorType", context.Background(), Event{ActorID: "slpa"}, ActorSystem, "anonymous"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, sink := NewWithCapture()
+			tc.event.EventType, tc.event.Action, tc.event.TargetType = EventSLPA, ActionUpdate, TargetServiceOrder
+			client.Audit(tc.ctx, tc.event)
+			r := sink.Records()[0]
+			if r.ActorType != tc.actorType || r.ActorID != tc.actorID {
+				t.Fatalf("actor = %s/%s, want %s/%s", r.ActorType, r.ActorID, tc.actorType, tc.actorID)
+			}
+		})
+	}
+}
+
 func TestClient_NilAndNoSinks(t *testing.T) {
 	var c *Client
 	c.Audit(context.Background(), Event{EventType: EventConsignment})

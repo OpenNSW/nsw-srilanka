@@ -17,6 +17,7 @@ const (
 	EventPayment     EventType = "PAYMENT_EVENT"
 	EventUserMgmt    EventType = "USER_MANAGEMENT"
 	EventCustoms     EventType = "CUSTOMS_EVENT"
+	EventSLPA        EventType = "SLPA_EVENT"
 
 	ActionCreate        Action = "CREATE"
 	ActionRead          Action = "READ"
@@ -31,6 +32,8 @@ const (
 	TargetDeclaration     TargetType = "CUSTOMS_DECLARATION"
 	TargetDispatchNote    TargetType = "CARGO_DISPATCH_NOTE"
 	TargetCustomsCallback TargetType = "CUSTOMS_CALLBACK"
+	TargetServiceOrder    TargetType = "SLPA_SERVICE_ORDER"
+	TargetSLPACallback    TargetType = "SLPA_CALLBACK"
 
 	ActorAdmin   ActorType = "ADMIN"
 	ActorMember  ActorType = "MEMBER"

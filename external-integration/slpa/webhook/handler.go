@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/httputil"
+
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
 
@@ -36,6 +38,8 @@ type Handler struct {
 	orders   *OrderEvents
 	invoices *InvoiceEvents
 	secret   string
+	auditor  nswaudit.Auditor
+	recorded orderRecords
 }
 
 // NewHandler binds the handler to the services that apply an event. A
@@ -76,6 +80,14 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		)
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
+	}
+
+	// Only a delivery that passed the signature check is audited. The security log
+	// records one that failed, and nothing vouches for what its body names.
+	if h.auditor != nil {
+		var status int
+		w = recordStatus(w, &status)
+		defer func() { h.auditDelivery(r.Context(), body, status) }()
 	}
 
 	// One signed route carries both lifecycles, as the CMS sends them: the

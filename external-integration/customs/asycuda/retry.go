@@ -51,6 +51,10 @@ type callbackScheduler interface {
 type callbackRetries struct {
 	apply  func(context.Context, string, []byte) error
 	timing callbackRetryTiming
+	// outcome, when set, is told how each held callback ended: after how many
+	// attempts, and with nil once applied or the error it was given up on. A
+	// redelivery that joined a pending retry shares its one outcome.
+	outcome func(ctx context.Context, cb Callback, attempts int, err error)
 	// pending holds the key of each callback being retried, so a redelivery
 	// while one is pending does not start a second retry.
 	pending sync.Map
@@ -82,34 +86,51 @@ func (c *callbackRetries) schedule(ctx context.Context, cb Callback) {
 				slog.ErrorContext(ctx, "slce: retry of held callback panicked", "callback", key, "panic", p)
 			}
 		}()
-		c.retry(ctx, key, cb)
+		attempts, err := c.retry(ctx, key, cb)
+		if c.outcome != nil {
+			c.outcome(ctx, cb, attempts, err)
+		}
 	}()
 }
 
-func (c *callbackRetries) retry(ctx context.Context, key string, cb Callback) {
+// retry applies cb until it lands, a retry cannot fix it, or the window closes,
+// and returns the attempts it took with the error it ended on, nil once applied.
+func (c *callbackRetries) retry(ctx context.Context, key string, cb Callback) (int, error) {
 	giveUpAt := time.Now().Add(c.timing.Window)
 	wait := c.timing.Initial
 	for attempt := 1; ; attempt++ {
 		time.Sleep(wait)
-		err := c.apply(ctx, cb.EventType, cb.Body)
+		err := c.applyOnce(ctx, key, cb)
 		switch {
 		case err == nil:
 			slog.InfoContext(ctx, "slce: held callback applied", "callback", key, "attempt", attempt)
-			return
+			return attempt, nil
 		case isPermanent(err):
 			slog.ErrorContext(ctx, "slce: held callback cannot be applied; giving up",
 				"callback", key, "attempt", attempt, "error", err)
-			return
+			return attempt, err
 		}
 		wait = min(2*wait, c.timing.Max)
 		if time.Now().Add(wait).After(giveUpAt) {
 			slog.ErrorContext(ctx, "slce: held callback still not applied; giving up",
 				"callback", key, "attempts", attempt, "error", err)
-			return
+			return attempt, err
 		}
 		slog.DebugContext(ctx, "slce: held callback not applied yet; will retry",
 			"callback", key, "attempt", attempt, "retryIn", wait, "error", err)
 	}
+}
+
+// applyOnce makes one attempt at cb. A panic fails it with errRetryPanicked, which
+// ends the retry as any error a retry cannot fix does.
+func (c *callbackRetries) applyOnce(ctx context.Context, key string, cb Callback) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			slog.ErrorContext(ctx, "slce: retry of held callback panicked", "callback", key, "panic", p)
+			err = fmt.Errorf("%w: %v", errRetryPanicked, p)
+		}
+	}()
+	return c.apply(ctx, cb.EventType, cb.Body)
 }
 
 // wait blocks until every held callback has been applied or given up.
@@ -118,11 +139,14 @@ func (c *callbackRetries) wait() { c.wg.Wait() }
 // errInvalidCallback is a held callback that no longer decodes or validates.
 var errInvalidCallback = errors.New("invalid callback")
 
+// errRetryPanicked is an attempt at a held callback that panicked.
+var errRetryPanicked = errors.New("retry of held callback panicked")
+
 // isPermanent reports whether err is one a retry cannot fix. Anything else,
 // whether the callback is still early or a read failed, is retried.
 func isPermanent(err error) bool {
 	for _, target := range []error{
-		errInvalidCallback,
+		errInvalidCallback, errRetryPanicked,
 		cusdec.ErrWorkflowNotFoundByEdgeID, cusdec.ErrCaseNotRecorded,
 		cdn.ErrDispatchNoteNotFoundByEdgeID, cdn.ErrCaseNotRecorded,
 	} {

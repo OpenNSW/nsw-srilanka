@@ -28,6 +28,13 @@ type Event struct {
 	Failure    bool
 	Message    any // Marshaled to JSON; select fields deliberately
 	Metadata   map[string]any
+
+	// ActorType and ActorID name the actor for a caller the request carries no
+	// principal for, such as a partner that authenticates by signing its calls
+	// instead of with an IdP token. When ActorType is empty, the actor comes from
+	// the context.
+	ActorType ActorType
+	ActorID   string
 }
 
 // ConsignmentEvent is a consignment audit event. Handlers pass the action,
@@ -148,6 +155,9 @@ func (c *Client) Audit(ctx context.Context, e Event) {
 	}
 
 	actorType, actorID := actorFrom(ctx)
+	if e.ActorType != "" {
+		actorType, actorID = e.ActorType, e.ActorID
+	}
 
 	status := StatusSuccess
 	if e.Failure {
