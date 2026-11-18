@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
+	"github.com/OpenNSW/core/platform/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 
 	"gopkg.in/yaml.v3"

@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"fmt"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
+	"github.com/OpenNSW/core/platform/catalog"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
 

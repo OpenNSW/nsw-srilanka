@@ -12,7 +12,7 @@ import (
 	"github.com/OpenNSW/core/json/jsonpointer"
 	workflow "github.com/OpenNSW/core/workflow"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
+	"github.com/OpenNSW/core/platform/catalog"
 )
 
 // Config is the flows section of config.yaml: the workflows a caller outside this

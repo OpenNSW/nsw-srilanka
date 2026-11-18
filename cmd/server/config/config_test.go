@@ -21,9 +21,9 @@ import (
 	"github.com/OpenNSW/core/storage/drivers"
 
 	"github.com/OpenNSW/core/platform/authn"
+	"github.com/OpenNSW/core/platform/catalog"
 	"github.com/OpenNSW/core/temporal"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"gopkg.in/yaml.v3"
 )

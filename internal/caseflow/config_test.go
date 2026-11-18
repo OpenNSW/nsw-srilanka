@@ -8,9 +8,8 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
+	"github.com/OpenNSW/core/platform/catalog"
 	workflow "github.com/OpenNSW/core/workflow"
-
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 )
 
 var testCatalog = &catalog.Catalog{
