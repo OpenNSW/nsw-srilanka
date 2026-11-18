@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	nswaudit "github.com/OpenNSW/core/platform/audit"
 	workflow "github.com/OpenNSW/core/workflow"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

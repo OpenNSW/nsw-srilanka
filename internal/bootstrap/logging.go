@@ -7,10 +7,10 @@ import (
 	"os"
 
 	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/core/platform/systemlog"
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/core/trace/logging"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
-	"github.com/OpenNSW/nsw-srilanka/internal/systemlog"
 )
 
 // ConfigureLogging installs the trace-aware slog handler as the process

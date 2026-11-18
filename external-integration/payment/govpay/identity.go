@@ -9,7 +9,7 @@ import (
 	corepayment "github.com/OpenNSW/core/payment"
 
 	"github.com/OpenNSW/core/platform/authn"
-	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
+	"github.com/OpenNSW/core/platform/securitylog"
 )
 
 // identity is the GovPay+ sub-institution and service a payee is mapped to:
