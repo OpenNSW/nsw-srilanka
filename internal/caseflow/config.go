@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/artifact"
+	"github.com/OpenNSW/core/artifact/adapter/tasktemplate"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/json/jsonpointer"
+	workflow "github.com/OpenNSW/core/workflow"
 
 	"github.com/OpenNSW/core/platform/catalog"
 )
@@ -51,8 +53,9 @@ type ClientFlows struct {
 	// Enabled turns the list on. Off, which is the default, nothing in it can be started.
 	Enabled bool `yaml:"enabled"`
 	// OUHandle is this deployment's own OU, by the handle its users' tokens carry. Starting
-	// a client flow records it as an owner of the case, in the flow's Owner role: the
-	// caller is a system with no OU, and the case belongs to this deployment.
+	// a client flow records it as an owner of the case, in each role the flow's task reads
+	// (see Owner): the caller is a system with no OU, and the case belongs to this
+	// deployment. A user sees the case once a flow on it has a task they may read.
 	OUHandle string `yaml:"ouHandle"`
 	// CaseColumns fills cases columns from the attributes a client sends with a flow: each
 	// key is a column (CaseColumnName is the only one), each value the JSON Pointer
@@ -71,16 +74,12 @@ type ClientFlow struct {
 	ID string `yaml:"id"`
 	// Clients are the catalog clients that may start it.
 	Clients []string `yaml:"clients"`
-	// Owner is the catalog role this deployment's OU (ClientFlows.OUHandle) owns the case
-	// in once the flow starts: a broad one every officer holds, or a narrower one.
-	Owner string `yaml:"owner"`
 }
 
 // Validate checks every listed flow, enabled or not, against the catalog: it names a
 // workflow once, and who may start it by names the catalog defines. A user flow also
-// needs the label its button shows; a client flow, the catalog role its case is owned in,
-// and the list the deployment's OU that owns it. Messages are unprefixed so the config
-// can qualify them with the section.
+// needs the label its button shows; a client flow, the list the deployment's OU that owns
+// its case. Messages are unprefixed so the config can qualify them with the section.
 func (c Config) Validate(cat *catalog.Catalog) error {
 	seen := map[string]bool{}
 	for i, f := range c.Users.Workflows {
@@ -115,12 +114,6 @@ func (c Config) Validate(cat *catalog.Catalog) error {
 		if err := checkNames(where, f.ID, "clients", f.Clients, cat.Clients); err != nil {
 			return err
 		}
-		if strings.TrimSpace(f.Owner) == "" {
-			return fmt.Errorf("%s (%s): owner is required", where, f.ID)
-		}
-		if _, ok := cat.Roles[f.Owner]; !ok {
-			return fmt.Errorf("%s (%s): owner names %q, which is not in the catalog's roles", where, f.ID, f.Owner)
-		}
 	}
 	return nil
 }
@@ -153,24 +146,37 @@ func checkNames(where, id, field string, names []string, defined map[string]stri
 }
 
 // CheckWorkflows reports a listed workflow, enabled or not, that the current artifact
-// manifest does not hold. The server checks at startup, so a typo fails there and not at
-// the first start.
-func (c Config) CheckWorkflows(ctx context.Context, artifacts *artifact.Set) error {
+// manifest does not hold. A client flow's workflow must also have one task, whose
+// read.roles name only catalog roles, and at least one: its case is owned in them. The
+// server checks at startup, so a typo, or a role the artifacts name before the catalog
+// maps it, fails there and not at the first start.
+func (c Config) CheckWorkflows(ctx context.Context, artifacts *artifact.Set, cat *catalog.Catalog) error {
 	reg := artifacts.CurrentRegistry()
-	check := func(list, id string) error {
-		if _, err := workflowdef.Load(ctx, reg, id); err != nil {
-			return fmt.Errorf("flows.%s lists workflow %q, which manifest version %d does not hold: %w", list, id, artifacts.Current(), err)
+	load := func(list, id string) (workflow.WorkflowDefinition, error) {
+		def, err := workflowdef.Load(ctx, reg, id)
+		if err != nil {
+			return def, fmt.Errorf("flows.%s lists workflow %q, which manifest version %d does not hold: %w", list, id, artifacts.Current(), err)
 		}
-		return nil
+		return def, nil
 	}
 	for _, f := range c.Users.Workflows {
-		if err := check("users", f.ID); err != nil {
+		if _, err := load("users", f.ID); err != nil {
 			return err
 		}
 	}
 	for _, f := range c.Clients.Workflows {
-		if err := check("clients", f.ID); err != nil {
+		def, err := load("clients", f.ID)
+		if err != nil {
 			return err
+		}
+		owner, err := c.Clients.Owner(ctx, reg, def)
+		if err != nil {
+			return fmt.Errorf("flows.clients lists workflow %q, in manifest version %d: %w", f.ID, artifacts.Current(), err)
+		}
+		for _, role := range owner.Roles {
+			if _, ok := cat.Roles[role]; !ok {
+				return fmt.Errorf("flows.clients lists workflow %q, whose task reads role %q in manifest version %d, which is not in the catalog's roles", f.ID, role, artifacts.Current())
+			}
 		}
 	}
 	return nil
@@ -219,4 +225,31 @@ func (f ClientFlows) Find(id, client string) (flow ClientFlow, ok bool) {
 		}
 	}
 	return ClientFlow{}, false
+}
+
+// Owner returns this deployment's OU (OUHandle) as the owner of the case of a client flow
+// that runs def, in each role the flow's task reads: the read.roles of the task template
+// of def's one TASK node, as reg holds it. Each role that may read the task then sees the
+// case. It fails when def has no TASK node or more than one, or when the task template
+// names no role, which would leave the case owned in none.
+func (f ClientFlows) Owner(ctx context.Context, reg *artifact.Registry, def workflow.WorkflowDefinition) (*Owner, error) {
+	var templateID string
+	tasks := 0
+	for _, n := range def.Nodes {
+		if n.Type == workflow.NodeTypeTask {
+			tasks++
+			templateID = n.TaskTemplateID
+		}
+	}
+	if tasks != 1 {
+		return nil, fmt.Errorf("workflow %q has %d tasks, want one: its case is owned in the roles that task reads", def.ID, tasks)
+	}
+	t, err := tasktemplate.Load(ctx, reg, templateID)
+	if err != nil {
+		return nil, fmt.Errorf("workflow %q: failed to load task template %q: %w", def.ID, templateID, err)
+	}
+	if len(t.Read.Roles) == 0 {
+		return nil, fmt.Errorf("task template %q of workflow %q has no read.roles, so its case would be owned in no role", templateID, def.ID)
+	}
+	return &Owner{OUHandle: f.OUHandle, Roles: t.Read.Roles}, nil
 }
