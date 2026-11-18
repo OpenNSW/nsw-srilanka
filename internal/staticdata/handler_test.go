@@ -239,7 +239,7 @@ func TestHandler_HandleGet_InvalidSearchKeys(t *testing.T) {
 	}
 }
 
-func TestParseSearchKeys_Limits(t *testing.T) {
+func TestParseSearchKeys_DedupesAndCapsTheCount(t *testing.T) {
 	numbered := func(n int) string {
 		keys := make([]string, n)
 		for i := range keys {
