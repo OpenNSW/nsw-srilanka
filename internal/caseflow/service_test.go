@@ -4,29 +4,50 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/OpenNSW/core/artifact"
+	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/testutil"
 	workflow "github.com/OpenNSW/core/workflow"
 )
 
-// newArtifacts has two manifests; v2, the current one, points export at a new file and
-// drops legacy.
+// newArtifacts has two manifests; v2, the current one, points export at a new file, drops
+// legacy, and has notice's task read by reviewer before officer, where v1 has it read by
+// officer alone. Notice has one task. In v2, pair has two, unread one whose template has
+// no read.roles, stranger one read by a role the catalog lacks, and orphan one whose
+// template the manifest lacks.
 func newArtifacts() *artifact.Set {
 	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
-		"export.json":    []byte(`{"id":"export","name":"Export v1","nodes":[],"edges":[]}`),
-		"export_v2.json": []byte(`{"id":"export","name":"Export v2","nodes":[],"edges":[]}`),
-		"notice.json":    []byte(`{"id":"notice","nodes":[],"edges":[]}`),
-		"legacy.json":    []byte(`{"id":"legacy","nodes":[],"edges":[]}`),
+		"export.json":         []byte(`{"id":"export","name":"Export v1","nodes":[],"edges":[]}`),
+		"export_v2.json":      []byte(`{"id":"export","name":"Export v2","nodes":[],"edges":[]}`),
+		"notice.json":         []byte(`{"id":"notice","nodes":[` + taskNode("review", "notice-review") + `],"edges":[]}`),
+		"notice-review.json":  []byte(`{"id":"notice-review","read":{"roles":["officer"]}}`),
+		"notice-review2.json": []byte(`{"id":"notice-review","read":{"roles":["reviewer","officer"]}}`),
+		"legacy.json":         []byte(`{"id":"legacy","nodes":[],"edges":[]}`),
+		"pair.json":           []byte(`{"id":"pair","nodes":[` + taskNode("a", "notice-review") + `,` + taskNode("b", "notice-review") + `],"edges":[]}`),
+		"unread.json":         []byte(`{"id":"unread","nodes":[` + taskNode("look", "unread-look") + `],"edges":[]}`),
+		"unread-look.json":    []byte(`{"id":"unread-look"}`),
+		"stranger.json":       []byte(`{"id":"stranger","nodes":[` + taskNode("look", "stranger-look") + `],"edges":[]}`),
+		"stranger-look.json":  []byte(`{"id":"stranger-look","read":{"roles":["officer","auditor"]}}`),
+		"orphan.json":         []byte(`{"id":"orphan","nodes":[` + taskNode("look", "missing") + `],"edges":[]}`),
 		"manifest_v1.json": []byte(`{"artifacts":[
 			{"id":"export","kind":"workflow","path":"export.json"},
 			{"id":"notice","kind":"workflow","path":"notice.json"},
+			{"id":"notice-review","kind":"task_template","path":"notice-review.json"},
 			{"id":"legacy","kind":"workflow","path":"legacy.json"}]}`),
 		"manifest_v2.json": []byte(`{"artifacts":[
 			{"id":"export","kind":"workflow","path":"export_v2.json"},
-			{"id":"notice","kind":"workflow","path":"notice.json"}]}`),
+			{"id":"notice","kind":"workflow","path":"notice.json"},
+			{"id":"notice-review","kind":"task_template","path":"notice-review2.json"},
+			{"id":"pair","kind":"workflow","path":"pair.json"},
+			{"id":"unread","kind":"workflow","path":"unread.json"},
+			{"id":"unread-look","kind":"task_template","path":"unread-look.json"},
+			{"id":"stranger","kind":"workflow","path":"stranger.json"},
+			{"id":"stranger-look","kind":"task_template","path":"stranger-look.json"},
+			{"id":"orphan","kind":"workflow","path":"orphan.json"}]}`),
 	})
 	if err != nil {
 		panic(err)
@@ -34,10 +55,15 @@ func newArtifacts() *artifact.Set {
 	return set
 }
 
+// taskNode is a TASK node running templateID, as workflow JSON.
+func taskNode(id, templateID string) string {
+	return `{"id":"` + id + `","type":"TASK","task_template_id":"` + templateID + `"}`
+}
+
 // memRepo is an in-memory Repository with Record's first-sight semantics.
 type memRepo struct {
 	flows     map[string]*Flow
-	owners    []string    // "case/role/ou", recorded with a new flow
+	owners    []string    // "case/role/ou" for each role, recorded with a new flow
 	cases     []*CaseInfo // recorded with a new flow
 	recordErr error
 	completed []string
@@ -62,7 +88,9 @@ func (r *memRepo) Record(_ context.Context, f Flow, owner *Owner, info *CaseInfo
 		f.Status = StatusStarting
 		r.flows[f.WorkflowID] = &f
 		if owner != nil {
-			r.owners = append(r.owners, f.CaseID+"/"+owner.Role+"/"+owner.OUHandle)
+			for _, role := range owner.Roles {
+				r.owners = append(r.owners, f.CaseID+"/"+role+"/"+owner.OUHandle)
+			}
 		}
 		if info != nil {
 			r.cases = append(r.cases, info)
@@ -331,5 +359,74 @@ func TestStartFlowRetryOfATemplateTheCurrentManifestDropped(t *testing.T) {
 	// A new flow on that template is refused: the current manifest does not hold it.
 	if _, err := newService(t, newMemRepo(), &startCapture{}).StartFlow(context.Background(), StartRequest{CaseID: "C1", TemplateID: "legacy"}); !errors.Is(err, ErrUnknownTemplate) {
 		t.Fatalf("new flow on a dropped template: err = %v, want ErrUnknownTemplate", err)
+	}
+}
+
+// A new flow records the owner its OwnerOf names. OwnerOf is given the flow's definition and
+// the artifacts of the version the flow runs on: v2, the current one.
+func TestStartFlowRecordsItsOwner(t *testing.T) {
+	repo := newMemRepo()
+	ownerOf := func(ctx context.Context, reg *artifact.Registry, def workflow.WorkflowDefinition) (*Owner, error) {
+		export, err := workflowdef.Load(ctx, reg, "export")
+		if err != nil {
+			return nil, err
+		}
+		if def.ID != "notice" || export.Name != "Export v2" {
+			t.Errorf("owner asked for %q with %q, want notice with Export v2", def.ID, export.Name)
+		}
+		return &Owner{OUHandle: "cda", Roles: []string{"reviewer", "officer"}}, nil
+	}
+	if _, err := newService(t, repo, &startCapture{}).StartFlow(context.Background(),
+		StartRequest{CaseID: "C1", TemplateID: "notice", Owner: ownerOf}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"C1/reviewer/cda", "C1/officer/cda"}; !reflect.DeepEqual(repo.owners, want) {
+		t.Errorf("owners = %v, want %v", repo.owners, want)
+	}
+}
+
+// Without an owner nothing is owned.
+func TestStartFlowWithoutAnOwner(t *testing.T) {
+	repo := newMemRepo()
+	if _, err := newService(t, repo, &startCapture{}).StartFlow(context.Background(),
+		StartRequest{CaseID: "C1", TemplateID: "export"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.owners) != 0 {
+		t.Errorf("owners = %v, want none", repo.owners)
+	}
+}
+
+// A retry of a recorded flow neither asks for nor records an owner: it was recorded with
+// the flow.
+func TestStartFlowRetryRecordsNoOwner(t *testing.T) {
+	repo := newMemRepo(Flow{WorkflowID: "C1:notice:ev1", CaseID: "C1", TemplateID: "notice", ManifestVersion: 1, Status: StatusStarting})
+	asked := false
+	ownerOf := func(context.Context, *artifact.Registry, workflow.WorkflowDefinition) (*Owner, error) {
+		asked = true
+		return &Owner{OUHandle: "cda", Roles: []string{"officer"}}, nil
+	}
+	if _, err := newService(t, repo, &startCapture{}).StartFlow(context.Background(),
+		StartRequest{CaseID: "C1", TemplateID: "notice", WorkflowID: "C1:notice:ev1", Owner: ownerOf}); err != nil {
+		t.Fatal(err)
+	}
+	if asked || len(repo.owners) != 0 {
+		t.Errorf("asked = %v, owners = %v, want neither", asked, repo.owners)
+	}
+}
+
+// A flow whose owner can't be named is refused before anything is recorded or started.
+func TestStartFlowRefusedWhenItsOwnerFails(t *testing.T) {
+	repo, wm := newMemRepo(), &startCapture{}
+	errNoOwner := errors.New("no owner")
+	ownerOf := func(context.Context, *artifact.Registry, workflow.WorkflowDefinition) (*Owner, error) {
+		return nil, errNoOwner
+	}
+	_, err := newService(t, repo, wm).StartFlow(context.Background(), StartRequest{CaseID: "C1", TemplateID: "notice", Owner: ownerOf})
+	if !errors.Is(err, errNoOwner) {
+		t.Errorf("err = %v, want %v", err, errNoOwner)
+	}
+	if len(repo.flows) != 0 || len(wm.starts) != 0 {
+		t.Errorf("recorded %d flows and started %d, want none", len(repo.flows), len(wm.starts))
 	}
 }

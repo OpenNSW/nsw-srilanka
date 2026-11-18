@@ -16,7 +16,7 @@ require (
 	github.com/OpenNSW/core/notification v0.3.0
 	github.com/OpenNSW/core/pagination v0.1.0
 	github.com/OpenNSW/core/payment v0.5.0
-	github.com/OpenNSW/core/platform v0.0.0-20261117080648-e97b68b19dbe
+	github.com/OpenNSW/core/platform v0.0.0-20261118093007-363703ad4f19
 	github.com/OpenNSW/core/refid v0.5.0
 	github.com/OpenNSW/core/remote v0.9.0
 	github.com/OpenNSW/core/secret v0.2.0

@@ -60,8 +60,9 @@ type Repository interface {
 	// Record inserts the row for f.WorkflowID, and its case if new, on first sight and is
 	// a no-op afterwards, so the first payload and manifest version are the ones the
 	// workflow is started with.
-	// A new flow reopens a case that had finished, makes owner, if set, the holder of its
-	// role on the case, and writes info, if set, to the case, in the same transaction.
+	// A new flow reopens a case that had finished, makes owner, if set, the holder of each
+	// of its roles on the case, and writes info, if set, to the case, in the same
+	// transaction.
 	Record(ctx context.Context, f Flow, owner *Owner, info *CaseInfo) error
 	// CaseAttributes returns the case's attributes (cases.attributes), empty when it has
 	// none or there is no such case.
@@ -174,12 +175,21 @@ func (r *repository) Record(ctx context.Context, f Flow, owner *Owner, info *Cas
 				return err
 			}
 		}
-		if owner == nil {
-			return nil
-		}
-		_, err = tx.ExecContext(ctx, upsertOwner, f.CaseID, owner.Role, caseparty.TypeOU, owner.OUHandle)
-		return err
+		return recordOwner(ctx, tx, f.CaseID, owner)
 	})
+}
+
+// recordOwner makes owner, if set, the holder of each of its roles on case caseID.
+func recordOwner(ctx context.Context, tx *sql.Tx, caseID string, owner *Owner) error {
+	if owner == nil {
+		return nil
+	}
+	for _, role := range owner.Roles {
+		if _, err := tx.ExecContext(ctx, upsertOwner, caseID, role, caseparty.TypeOU, owner.OUHandle); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // mergeCaseInfo writes a CaseInfo to its case: the attributes merged by top-level key, and
