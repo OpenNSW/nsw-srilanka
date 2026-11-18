@@ -16,6 +16,8 @@ const signal = new AbortController().signal
 const params = (id: string, extra: Record<string, unknown> = {}) => ({ id, version: '1', ...extra })
 
 const sriLanka = { const: 'LK', title: 'Sri Lanka', id: 'LK', name: 'Sri Lanka' }
+// The same row in a file that names the value id.
+const sriLankaById = { id: 'LK', title: 'Sri Lanka', name: 'Sri Lanka' }
 
 // A container type with keys beyond const and title.
 const ventilated = {
@@ -66,12 +68,45 @@ describe('staticDataSearchService', () => {
     expect(option).toEqual(sriLanka)
   })
 
-  it('keeps id and name meaning the value and title when a row has keys of those names', async () => {
-    request.mockResolvedValue({ data: { data: [{ const: 'LK', title: 'Sri Lanka', id: 'x', name: 'y' }] } })
+  it('keeps name meaning the title when a row has a key of that name', async () => {
+    request.mockResolvedValue({ data: { data: [{ const: 'LK', title: 'Sri Lanka', name: 'y' }] } })
 
     const { options } = await staticDataSearchService.search({ query: '', signal, params: params('reserved') })
 
     expect(options[0]).toMatchObject({ id: 'LK', name: 'Sri Lanka' })
+  })
+
+  it('reads a row that names its value id when listing', async () => {
+    request.mockResolvedValue({ data: { data: [{ id: 'LK', title: 'Sri Lanka' }] } })
+
+    const { options } = await staticDataSearchService.search({ query: '', signal, params: params('id-list') })
+
+    expect(options).toEqual([sriLankaById])
+  })
+
+  it('reads a row that names its value id on a typed-search page', async () => {
+    request.mockResolvedValue({ data: { items: [{ id: 'LK', title: 'Sri Lanka' }], total: 1 } })
+
+    const { options } = await staticDataSearchService.search({ query: 'sri', signal, params: params('id-page') })
+
+    expect(options).toEqual([sriLankaById])
+  })
+
+  it('resolves a stored value against rows that name it id, or const, in one artifact', async () => {
+    request.mockResolvedValue({
+      data: {
+        data: [
+          { id: 'LK', title: 'Sri Lanka' },
+          { const: 'GB', title: 'United Kingdom' },
+        ],
+      },
+    })
+
+    const byId = await staticDataSearchService.resolve?.('LK', params('id-resolve'))
+    const byConst = await staticDataSearchService.resolve?.('GB', params('id-resolve'))
+
+    expect(byId).toEqual(sriLankaById)
+    expect(byConst).toEqual({ const: 'GB', title: 'United Kingdom', id: 'GB', name: 'United Kingdom' })
   })
 
   it('keeps extra row keys when listing', async () => {
@@ -98,15 +133,19 @@ describe('staticDataSearchService', () => {
     expect(option).toEqual(ventilatedOption)
   })
 
-  it('drops list entries without a non-empty string const and title', async () => {
+  it('drops list entries without a non-empty string title and exactly one non-empty string id or const', async () => {
     request.mockResolvedValue({
       data: {
         data: [
           { const: 'LK', title: 'Sri Lanka' },
           { const: 'GB' },
-          { title: 'No const' },
+          { title: 'No value' },
           { const: '', title: 'Unnamed' },
           { const: 'A', title: '' },
+          { id: '', title: 'Empty id' },
+          { id: 5, title: 'Number id' },
+          { id: 'LK', const: 'LK', title: 'Both' },
+          { id: null, const: 'LK', title: 'Null id beside a const' },
           'LK',
           null,
         ],

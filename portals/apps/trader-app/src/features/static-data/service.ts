@@ -39,16 +39,24 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
+// A row names its value once: exactly one of id and const, the older name for it.
+const VALUE_KEYS = ['id', 'const']
+
 // The artifact source isn't type-checked against this contract, so a malformed entry (a bare
-// string, a missing, non-string or empty const or title) is dropped here rather than being
-// offered as an option. The API rejects the same rows on a typed search.
+// string, a missing, non-string or empty title, or a value that is missing, non-string, empty
+// or named twice) is dropped here rather than being offered as an option. The API rejects the
+// same rows on a typed search.
 function isStaticDataRow(value: unknown): value is StaticDataRow {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    isNonEmptyString((value as StaticDataRow).const) &&
-    isNonEmptyString((value as StaticDataRow).title)
-  )
+  if (typeof value !== 'object' || value === null) return false
+  const row = value as Record<string, unknown>
+  const named = VALUE_KEYS.filter((key) => Object.hasOwn(row, key))
+  return named.length === 1 && isNonEmptyString(row[named[0]]) && isNonEmptyString(row.title)
+}
+
+// The value a field stores for a row. isStaticDataRow has checked that the row names exactly
+// one of id and const.
+function rowValue(row: StaticDataRow): string {
+  return (row.id ?? row.const) as string
 }
 
 // (id, version) identifies immutable content (see internal/staticdata's Cache-Control), so a
@@ -80,11 +88,12 @@ function fetchRows(id: string, version: string): Promise<StaticDataRow[]> {
   return promise
 }
 
-// A row as a search option: the row's own keys, so a displayTemplate can use {const}, {title}
-// and any other key, plus the id and name every SearchOption carries. id and name are set last,
-// so they always mean const and title; {id} and {name} are the legacy placeholders.
+// A row as a search option: the row's own keys, so a displayTemplate can use {title} and any
+// other key, plus the id and name every SearchOption carries. id is the row's value, whether
+// the row names it id or const, and name is its title. Both are set last, so they always mean
+// that; {name} is the older placeholder for the title.
 function toSearchOption(row: StaticDataRow): SearchOption {
-  return { ...row, id: row.const, name: row.title }
+  return { ...row, id: rowValue(row), name: row.title }
 }
 
 function toSearchOptions(rows: StaticDataRow[]): SearchOption[] {
@@ -135,7 +144,7 @@ export const staticDataSearchService: SearchService = {
   async resolve(value, params) {
     const { id, version } = staticDataParams(params)
     const rows = await fetchRows(id, version)
-    const match = rows.find((row) => row.const === value)
+    const match = rows.find((row) => rowValue(row) === value)
     return match ? toSearchOption(match) : undefined
   },
 }
