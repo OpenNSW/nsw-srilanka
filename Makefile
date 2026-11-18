@@ -63,7 +63,7 @@ deps: ## Start everything EXCEPT the apps (api, trader-portal, cda-api, cda-port
 	$(COMPOSE) up -d $(DEPS_SERVICES)
 
 .PHONY: otel
-otel: ## Start local OpenObserve (Compose profile otel); point tnsw-api otel at it — see README
+otel: ## Start local OpenObserve (Compose profile otel); point tnsw-api otel at it — see the otel block in configs/config.docker.example.yaml
 	$(COMPOSE) --profile otel up -d openobserve
 
 .PHONY: test-e2e
