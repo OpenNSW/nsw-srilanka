@@ -386,6 +386,113 @@ func TestExternalReview_RefusedDispatchIsNotRetried(t *testing.T) {
 	assert.Equal(t, plugins.ErrorTypeRejected, errType)
 }
 
+const noticeConfig = `{"service_id": "agency", "reply_command": "submitted", "wait": false}`
+
+func TestExternalReview_ReplyWithoutWaitingCompletes(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
+	ctx := reviewContext(map[string]any{
+		"replyToken": "tok_x",
+		"submission": map[string]any{"field": "v2"},
+	})
+
+	err := p.Execute(ctx, json.RawMessage(noticeConfig))
+
+	require.NoError(t, err)
+	assert.Empty(t, ctx.Record.State, "a step that waits for nothing is not queued externally")
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "/api/v1/callbacks/tok_x", calls[0].path)
+	// No callbackToken: nothing answers a notice.
+	assert.Equal(t, map[string]any{
+		"command": "submitted",
+		"payload": map[string]any{"submission": map[string]any{"field": "v2"}},
+	}, calls[0].body)
+}
+
+func TestExternalReview_ReplyWithoutWaitingSendsOnlyPayloadInput(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
+	ctx := reviewContext(map[string]any{
+		"replyToken": "tok_x",
+		"payload":    map[string]any{"tracking_number": "T-1"},
+		"submission": map[string]any{"field": "v1"},
+	})
+
+	err := p.Execute(ctx, json.RawMessage(noticeConfig))
+
+	require.NoError(t, err)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]any{"tracking_number": "T-1"}, calls[0].body["payload"])
+}
+
+// wait set to true is the default: the reply carries the step's own token and the
+// step waits for the answer.
+func TestExternalReview_ReplyWaitingExplicitly(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
+	ctx := reviewContext(map[string]any{"replyToken": "tok_x"})
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "reply_command": "submit", "wait": true}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	assert.Equal(t, "QUEUED_EXTERNALLY", ctx.Record.State)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]any{"callbackToken": ownToken(t)}, calls[0].body["payload"])
+}
+
+// A notice fails as a waiting reply does: what may clear is retried, a refusal parks
+// the step at once, and a 409 parks it as a stale reply token.
+func TestExternalReview_FailedReplyWithoutWaiting(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status    int
+		permanent bool
+		errType   string
+	}{
+		"unavailable": {http.StatusServiceUnavailable, false, ""},
+		"refused":     {http.StatusBadRequest, true, plugins.ErrorTypeRejected},
+		"stale token": {http.StatusConflict, true, "StaleReplyToken"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mgr, _ := newReviewService(t, tc.status)
+			p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
+
+			err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x"}), json.RawMessage(noticeConfig))
+
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, ErrSuspended)
+			errType, permanent := plugins.PermanentType(fmt.Errorf("plugin execution failed: %w", err))
+			assert.Equal(t, tc.permanent, permanent, "err = %v", err)
+			assert.Equal(t, tc.errType, errType)
+		})
+	}
+}
+
+// Without a reply token the step would dispatch, which can't be sent without
+// waiting, so it parks before calling out.
+func TestExternalReview_DispatchWithoutWaitingIsRefused(t *testing.T) {
+	for name, inputs := range map[string]map[string]any{
+		"no reply token":    {"submission": map[string]any{}},
+		"empty reply token": {"replyToken": "", "submission": map[string]any{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mgr, svc := newReviewService(t, http.StatusOK)
+			p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
+
+			err := p.Execute(reviewContext(inputs),
+				json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review", "reply_command": "submitted", "wait": false}`))
+
+			require.ErrorContains(t, err, "only a reply can be sent without waiting")
+			errType, permanent := plugins.PermanentType(err)
+			assert.True(t, permanent)
+			assert.Equal(t, plugins.ErrorTypeInput, errType)
+			assert.Empty(t, svc.calls())
+		})
+	}
+}
+
 func TestExternalReview_ConfigErrors(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -397,6 +504,8 @@ func TestExternalReview_ConfigErrors(t *testing.T) {
 		{"reply without command", map[string]any{"replyToken": "tok_x"}, `{"service_id": "agency"}`, "reply_command is required"},
 		{"reply token not a string", map[string]any{"replyToken": 42}, `{"service_id": "agency", "reply_command": "submit"}`, "replyToken must be a string"},
 		{"reply payload not an object", map[string]any{"replyToken": "tok_x", "payload": "x"}, `{"service_id": "agency", "reply_command": "submit"}`, "payload must be an object"},
+		{"wait not a boolean", map[string]any{"replyToken": "tok_x"}, `{"service_id": "agency", "reply_command": "submit", "wait": "no"}`, "invalid config"},
+		{"reply without waiting without command", map[string]any{"replyToken": "tok_x"}, `{"service_id": "agency", "wait": false}`, "reply_command is required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
