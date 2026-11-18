@@ -110,7 +110,7 @@ function parentParam(params: Record<string, unknown> | undefined): string | unde
 // Generic search service for `x-search.service: "static-data"` fields. One field's artifact
 // (id + version) is selected entirely via x-search.params, so this single registration backs
 // every static-data field in every form. params.searchKeys names the row keys a typed search
-// matches, in priority order (default: the API's, title then const).
+// matches, in priority order (default: the API's, title then the row's value).
 //
 // An empty query with no cursor still downloads the artifact, which is what small lists do on
 // open. A typed query, or "load more", sends q, offset, limit, and searchKeys so the API ranks
