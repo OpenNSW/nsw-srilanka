@@ -34,7 +34,7 @@ func NewHandler(artifacts *artifact.Set) *Handler {
 // HandleGet handles GET /api/v1/static-data/{id}?version=.
 // Without q, offset, or limit it returns the raw artifact. With any of those
 // it loads the artifact, applies parent when present, ranks matches on the
-// searchKeys row keys (comma-separated; default title,const), and returns one
+// searchKeys row keys (comma-separated; default title,id), and returns one
 // page of the original rows.
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

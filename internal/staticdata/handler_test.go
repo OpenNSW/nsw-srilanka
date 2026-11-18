@@ -220,6 +220,47 @@ func TestHandler_HandleGet_SearchRowWithoutTitle(t *testing.T) {
 	}
 }
 
+func TestHandler_HandleGet_SearchIDRows(t *testing.T) {
+	body := []byte(`{"data":[
+		{"id":"CBEX1","title":"Colombo Exports","description":"Sea cargo"},
+		{"const":"KTBE2","title":"Katunayake Exports"}
+	]}`)
+	reg := newTestRegistry(t, "offices", "1", "refdata/offices/1.json", body)
+	h := NewHandler(reg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/static-data/offices?version=1&q=cbex1", nil)
+	req.SetPathValue("id", "offices")
+	w := httptest.NewRecorder()
+	h.HandleGet(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got SearchResult
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if got.Total != 1 || len(got.Items) != 1 {
+		t.Fatalf("expected one match, got %+v", got)
+	}
+	expectValues(t, values(t, got.Items, "id"), []string{"CBEX1"})
+	expectValues(t, values(t, got.Items, "description"), []string{"Sea cargo"})
+}
+
+func TestHandler_HandleGet_SearchRowWithIDAndConst(t *testing.T) {
+	reg := newTestRegistry(t, "codes", "1", "refdata/codes/1.json", []byte(`{"data":[{"id":"LK","const":"LK","title":"Sri Lanka"}]}`))
+	h := NewHandler(reg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/static-data/codes?version=1&q=lk", nil)
+	req.SetPathValue("id", "codes")
+	w := httptest.NewRecorder()
+	h.HandleGet(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+}
+
 func TestHandler_HandleGet_InvalidSearchKeys(t *testing.T) {
 	tooMany := "k0,k1,k2,k3,k4,k5,k6,k7,k8,k9,k10" // one more than maxSearchKeys
 	for _, searchKeys := range []string{"boo,foo.bar", tooMany} {
