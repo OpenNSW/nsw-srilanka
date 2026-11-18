@@ -27,10 +27,11 @@ func mountAgency(
 	clientFlows caseflow.ClientFlows,
 	tasks agency.TaskLister,
 	cat *catalog.Catalog,
+	maxRequestBytes int64,
 	withAuth func(http.Handler) http.Handler,
 	withScope func(string) func(http.Handler) http.Handler,
 ) {
-	start := caseflow.NewClientHandler(flows, clientFlows, cat.Clients)
+	start := caseflow.NewClientHandler(flows, clientFlows, cat.Clients, maxRequestBytes)
 	mux.Handle("POST /api/v1/internal/cases/{caseId}/flows", withAuth(withScope(caseflow.ScopeFlowStart)(http.HandlerFunc(start.HandleStart))))
 
 	// ConsignmentRead is the read scope the portal's token already carries; the
