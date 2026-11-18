@@ -64,11 +64,12 @@ paths:
             Comma-separated row keys to search, in priority order; ties go to the
             shorter value of the first key, then to the other keys in order. Each key
             uses letters, digits and underscores only, and a key named twice counts
-            once. At most 10 different keys. Defaults to `title,const`.
+            once. At most 10 different keys. Defaults to `title,id`. `id` and `const` both
+            name a row's value, whichever of them the row uses.
             String, number and boolean values are searched; other values are not.
           schema:
             type: string
-          example: "title,const"
+          example: "title,id"
         - name: parent
           in: query
           required: false
@@ -132,7 +133,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: Internal error loading the artifact, or, on a search, a row without a non-empty string `const` and `title`.
+          description: Internal error loading the artifact, or, on a search, a row without a non-empty string `title` and exactly one non-empty string `id` or `const`.
           content:
             application/json:
               schema:
@@ -157,17 +158,24 @@ components:
         items:
           type: array
           description: |
-            The matching rows, each exactly as the artifact has it: `const` and
-            `title`, `parents` when the row has it, and any other keys.
+            The matching rows, each exactly as the artifact has it: its value (`id`, or
+            `const`, the older name for it) and `title`, `parents` when the row has it, and
+            any other keys.
           items:
             type: object
             required:
-              - const
               - title
+            oneOf:
+              - required: [id]
+              - required: [const]
             properties:
-              const:
+              id:
                 type: string
                 description: The value a field stores.
+              const:
+                type: string
+                deprecated: true
+                description: The older name for `id`. A row has one of them, never both.
               title:
                 type: string
                 description: The row's label.
@@ -178,7 +186,7 @@ components:
                 description: Values of the sibling field this row belongs to.
             additionalProperties: true
           example:
-            - const: "22V4"
+            - id: "22V4"
               title: "20x8 6, Mechanical"
               description: "20x8 6, Mechanical ventilation system"
         total:

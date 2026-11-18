@@ -148,13 +148,18 @@ func TestSearch_ErrorsWhenNotAnArtifact(t *testing.T) {
 	}
 }
 
-func TestSearch_ErrorsOnRowWithoutConstOrTitle(t *testing.T) {
+func TestSearch_ErrorsOnRowWithoutAValueOrTitle(t *testing.T) {
 	cases := map[string]string{
-		"no const":       `{"title":"Sri Lanka"}`,
-		"no title":       `{"const":"LK"}`,
-		"an empty title": `{"const":"LK","title":""}`,
-		"a null title":   `{"const":"LK","title":null}`,
-		"a number const": `{"const":42,"title":"Answer"}`,
+		"no value":                  `{"title":"Sri Lanka"}`,
+		"no title":                  `{"const":"LK"}`,
+		"an empty title":            `{"const":"LK","title":""}`,
+		"a null title":              `{"const":"LK","title":null}`,
+		"a number const":            `{"const":42,"title":"Answer"}`,
+		"a number id":               `{"id":42,"title":"Answer"}`,
+		"an empty id":               `{"id":"","title":"Answer"}`,
+		"both id and const":         `{"id":"LK","const":"LK","title":"Sri Lanka"}`,
+		"a null id beside a const":  `{"id":null,"const":"LK","title":"Sri Lanka"}`,
+		"an id row without a title": `{"id":"LK"}`,
 	}
 	for name, bad := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -162,6 +167,58 @@ func TestSearch_ErrorsOnRowWithoutConstOrTitle(t *testing.T) {
 			if _, err := Search(raw, "", "", nil, 0, 20); err == nil {
 				t.Fatal("expected an error")
 			}
+		})
+	}
+}
+
+func TestSearch_RowValueIsIDOrConst(t *testing.T) {
+	data := `[
+		{"id":"CBEX1","title":"Colombo Exports"},
+		{"const":"KTBE2","title":"Katunayake Exports"}
+	]`
+	cases := map[string]struct {
+		query string
+		want  []string
+	}{
+		"the value of an id row":   {"cbex1", []string{"Colombo Exports"}},
+		"the value of a const row": {"ktbe2", []string{"Katunayake Exports"}},
+		"the title of either":      {"exports", []string{"Colombo Exports", "Katunayake Exports"}},
+		"a value that no row has":  {"zzz", []string{}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			expectValues(t, searchValues(t, data, tc.query, nil, "title"), tc.want)
+		})
+	}
+}
+
+func TestSearch_IDPrefixBeforeTitleContains(t *testing.T) {
+	data := `[
+		{"id":"X","title":"The Colombo Harbor"},
+		{"id":"COL","title":"Harbor"}
+	]`
+	expectValues(t, searchValues(t, data, "col", nil, "id"), []string{"COL", "X"})
+}
+
+func TestSearch_IDAndConstBothNameTheRowValueInSearchKeys(t *testing.T) {
+	data := `[
+		{"id":"CBEX1","title":"Colombo Exports"},
+		{"const":"KTBE2","title":"Katunayake Exports"}
+	]`
+	cases := map[string]struct {
+		searchKeys []string
+		query      string
+		want       []string
+	}{
+		"const finds the value of an id row":   {[]string{"const"}, "cbex1", []string{"Colombo Exports"}},
+		"id finds the value of a const row":    {[]string{"id"}, "ktbe2", []string{"Katunayake Exports"}},
+		"id finds the value of an id row":      {[]string{"id"}, "cbex1", []string{"Colombo Exports"}},
+		"const finds the value of a const row": {[]string{"const"}, "ktbe2", []string{"Katunayake Exports"}},
+		"title does not match a value":         {[]string{"title"}, "cbex1", []string{}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			expectValues(t, searchValues(t, data, tc.query, tc.searchKeys, "title"), tc.want)
 		})
 	}
 }
@@ -278,12 +335,16 @@ func TestFind(t *testing.T) {
 		wantFound bool
 		wantErr   bool
 	}{
-		"found":                         {ports, "NLRTM", Option{Const: "NLRTM", Title: "ROTTERDAM"}, true, false},
+		"found":                         {ports, "NLRTM", Option{ID: "NLRTM", Title: "ROTTERDAM"}, true, false},
 		"not found":                     {ports, "XXABC", Option{}, false, false},
-		"the const, never the title":    {ports, "ROTTERDAM", Option{}, false, false},
-		"the const's case must match":   {ports, "lkcmb", Option{}, false, false},
-		"a duplicate const: first wins": {ports, "LKCMB", Option{Const: "LKCMB", Title: "COLOMBO"}, true, false},
+		"the value, never the title":    {ports, "ROTTERDAM", Option{}, false, false},
+		"the value's case must match":   {ports, "lkcmb", Option{}, false, false},
+		"a duplicate value: first wins": {ports, "LKCMB", Option{ID: "LKCMB", Title: "COLOMBO"}, true, false},
 		"a row without a title":         {json.RawMessage(`{"data":[{"const":"LKCMB"}]}`), "LKCMB", Option{}, false, true},
+		"an id row":                     {json.RawMessage(`{"data":[{"id":"LKCMB","title":"COLOMBO"}]}`), "LKCMB", Option{ID: "LKCMB", Title: "COLOMBO"}, true, false},
+		"an id row beside a const row":  {json.RawMessage(`{"data":[{"id":"A","title":"Alpha"},{"const":"B","title":"Beta"}]}`), "B", Option{ID: "B", Title: "Beta"}, true, false},
+		"a row with both id and const":  {json.RawMessage(`{"data":[{"id":"LKCMB","const":"LKCMB","title":"COLOMBO"}]}`), "LKCMB", Option{}, false, true},
+		"a row without a value":         {json.RawMessage(`{"data":[{"title":"COLOMBO"}]}`), "LKCMB", Option{}, false, true},
 		"not a static data body":        {json.RawMessage(`[]`), "LKCMB", Option{}, false, true},
 	}
 	for name, tc := range cases {
@@ -292,7 +353,7 @@ func TestFind(t *testing.T) {
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error: got %v, want error %v", err, tc.wantErr)
 			}
-			if found != tc.wantFound || got.Const != tc.want.Const || got.Title != tc.want.Title {
+			if found != tc.wantFound || got.ID != tc.want.ID || got.Title != tc.want.Title {
 				t.Fatalf("got %+v, %v; want %+v, %v", got, found, tc.want, tc.wantFound)
 			}
 		})

@@ -11,15 +11,17 @@ import (
 	"github.com/OpenNSW/core/pagination"
 )
 
-// The keys every row has: const is the value a field stores, title its label.
+// The keys every row has: its value, which a field stores, and title, its label. A row names
+// its value id, or const, the older name for it.
 const (
+	idKey    = "id"
 	constKey = "const"
 	titleKey = "title"
 )
 
 // defaultSearchKeys are the row keys a search matches when the request names none: the
 // label, then the stored value.
-var defaultSearchKeys = []string{titleKey, constKey}
+var defaultSearchKeys = []string{titleKey, idKey}
 
 // parentsKey is the row key x-search.dependsOn filters on: the values of the sibling field
 // a row belongs to.
@@ -30,16 +32,17 @@ const parentsKey = "parents"
 // the client.
 type SearchResult = pagination.Page[json.RawMessage]
 
-// Option is the const and title of one static_data row, as Find returns them.
+// Option is the id and title of one static_data row, as Find returns them. ID is the row's
+// value, whether the row names it id or const.
 type Option struct {
-	Const string `json:"const"`
+	ID    string `json:"id"`
 	Title string `json:"title"`
 }
 
 // row is one object of a static_data artifact, with what Search and Find read from it.
 type row struct {
 	raw   json.RawMessage
-	value string // the row's const
+	value string // the row's id, or its const
 	title string
 	// texts holds the lowercased text of each search key, in search-key order; "" when the
 	// row has no searchable value for that key.
@@ -48,12 +51,13 @@ type row struct {
 }
 
 // Search loads nothing itself: raw is one static_data artifact body. Rows are the objects in
-// its "data" array; other entries are skipped. Every row must have a non-empty string const
-// and title, else it is an error; any other keys are kept. Search drops rows whose parents
-// list does not include parent (an empty parent keeps every row), ranks the remainder
-// against query on searchKeys (empty means title, then const), and returns one page of the
-// original rows. A row with no searchable value for a key just cannot match on that key.
-// query is matched case-insensitively. An empty query keeps artifact order.
+// its "data" array; other entries are skipped. Every row must have a non-empty string title
+// and a value, its id or its const but not both, else it is an error; any other keys are
+// kept. Search drops rows whose parents list does not include parent (an empty parent keeps
+// every row), ranks the remainder against query on searchKeys (empty means title, then id),
+// and returns one page of the original rows. The keys id and const both name a row's value,
+// whichever of them the row uses. A row with no searchable value for a key just cannot match
+// on that key. query is matched case-insensitively. An empty query keeps artifact order.
 func Search(raw json.RawMessage, query, parent string, searchKeys []string, offset, limit int) (SearchResult, error) {
 	if len(searchKeys) == 0 {
 		searchKeys = defaultSearchKeys
@@ -72,10 +76,10 @@ func Search(raw json.RawMessage, query, parent string, searchKeys []string, offs
 	return pagination.NewPageResult(items, int64(len(matched)), offset, limit), nil
 }
 
-// Find returns the const and title of the first row of raw whose const is value, and
-// whether there is one. raw is one static_data artifact body, as Load returns it, and its
-// rows are read as Search reads them, so a row without a const or a title is an error.
-// Unlike Search, Find matches the const exactly and never the title.
+// Find returns the id and title of the first row of raw whose value is value, and whether
+// there is one. raw is one static_data artifact body, as Load returns it, and its rows are
+// read as Search reads them, so a row without a value or a title is an error. Unlike Search,
+// Find matches the value exactly and never the title.
 func Find(raw json.RawMessage, value string) (Option, bool, error) {
 	rows, err := parseRows(raw, nil)
 	if err != nil {
@@ -83,7 +87,7 @@ func Find(raw json.RawMessage, value string) (Option, bool, error) {
 	}
 	for _, r := range rows {
 		if r.value == value {
-			return Option{Const: r.value, Title: r.title}, true, nil
+			return Option{ID: r.value, Title: r.title}, true, nil
 		}
 	}
 	return Option{}, false, nil
@@ -117,17 +121,39 @@ func parseRows(raw json.RawMessage, searchKeys []string) ([]row, error) {
 		if err := json.Unmarshal(item, &fields); err != nil || fields == nil {
 			continue
 		}
-		value, title := stringField(fields, constKey), stringField(fields, titleKey)
-		if value == "" || title == "" {
-			return nil, fmt.Errorf("static data row at index %d must have a non-empty string const and title", i)
+		value, hasValue := rowValue(fields)
+		title := stringField(fields, titleKey)
+		if !hasValue || title == "" {
+			return nil, fmt.Errorf("static data row at index %d must have a non-empty string title and exactly one non-empty string id or const", i)
 		}
 		texts := make([]string, len(searchKeys))
 		for k, key := range searchKeys {
+			if key == idKey || key == constKey {
+				texts[k] = strings.ToLower(value)
+				continue
+			}
 			texts[k] = searchText(fields[key])
 		}
 		rows = append(rows, row{raw: item, value: value, title: title, texts: texts, parents: rowParents(fields)})
 	}
 	return rows, nil
+}
+
+// rowValue reads a row's value: its id, or its const, the older name for it. A row names its
+// value once, as a non-empty string, so a row with both keys, with neither, or with a value
+// that is not a non-empty string has none.
+func rowValue(fields map[string]json.RawMessage) (string, bool) {
+	_, hasID := fields[idKey]
+	_, hasConst := fields[constKey]
+	if hasID == hasConst {
+		return "", false
+	}
+	key := idKey
+	if hasConst {
+		key = constKey
+	}
+	value := stringField(fields, key)
+	return value, value != ""
 }
 
 // stringField reads a string value. A missing key, null, or a value of another type is "".
