@@ -53,10 +53,10 @@ function isStaticDataRow(value: unknown): value is StaticDataRow {
   return named.length === 1 && isNonEmptyString(row[named[0]]) && isNonEmptyString(row.title)
 }
 
-// The value a field stores for a row. isStaticDataRow has checked that the row names exactly
-// one of id and const.
+// The value a field stores for a row: its id, or its const. A row from the list path has passed
+// isStaticDataRow and one from a typed search the API's check, so it names exactly one of them.
 function rowValue(row: StaticDataRow): string {
-  return (row.id ?? row.const) as string
+  return row.id ?? row.const ?? ''
 }
 
 // (id, version) identifies immutable content (see internal/staticdata's Cache-Control), so a

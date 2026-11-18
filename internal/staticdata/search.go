@@ -128,7 +128,7 @@ func parseRows(raw json.RawMessage, searchKeys []string) ([]row, error) {
 		}
 		texts := make([]string, len(searchKeys))
 		for k, key := range searchKeys {
-			if key == idKey || key == constKey {
+			if isValueKey(key) {
 				texts[k] = strings.ToLower(value)
 				continue
 			}
@@ -154,6 +154,11 @@ func rowValue(fields map[string]json.RawMessage) (string, bool) {
 	}
 	value := stringField(fields, key)
 	return value, value != ""
+}
+
+// isValueKey reports whether a search key names a row's value, whichever key the row uses.
+func isValueKey(key string) bool {
+	return key == idKey || key == constKey
 }
 
 // stringField reads a string value. A missing key, null, or a value of another type is "".
