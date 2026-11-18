@@ -8,7 +8,7 @@ import (
 
 	corestorage "github.com/OpenNSW/core/storage"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 )
 
 // Uploader reserves a key for a file and returns the URL to upload it to.

@@ -13,8 +13,8 @@ import (
 
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
+	"github.com/OpenNSW/core/platform/authn"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"

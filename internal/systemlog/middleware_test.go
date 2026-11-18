@@ -14,7 +14,7 @@ import (
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/core/trace/logging"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
 

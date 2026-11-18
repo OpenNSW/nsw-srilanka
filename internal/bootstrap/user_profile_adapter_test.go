@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
+	nswauthn "github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 )
 

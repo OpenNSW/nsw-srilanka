@@ -11,7 +11,7 @@ import (
 	"github.com/OpenNSW/core/httputil"
 	corestorage "github.com/OpenNSW/core/storage"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 )
 
