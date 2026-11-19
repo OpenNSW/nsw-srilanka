@@ -12,7 +12,7 @@ package systemcaller
 import (
 	"context"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+	"github.com/OpenNSW/core/platform/taskauthz"
 )
 
 // StepCompleter is the part of the task manager that completes a parked step, by its

@@ -22,9 +22,9 @@ import (
 
 	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/core/platform/catalog"
+	nswstorage "github.com/OpenNSW/core/platform/storage"
 	"github.com/OpenNSW/core/temporal"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
-	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"gopkg.in/yaml.v3"
 )
 

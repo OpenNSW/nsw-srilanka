@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/OpenNSW/core/platform/catalog"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+	"github.com/OpenNSW/core/platform/taskauthz"
 
 	"gopkg.in/yaml.v3"
 )

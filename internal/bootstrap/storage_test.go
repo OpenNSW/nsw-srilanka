@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/OpenNSW/core/platform/catalog"
-	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
+	nswstorage "github.com/OpenNSW/core/platform/storage"
 )
 
 func TestInternalUploadTypesByClient(t *testing.T) {

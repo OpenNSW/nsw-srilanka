@@ -21,8 +21,8 @@ import (
 	"fmt"
 
 	"github.com/OpenNSW/core/artifact/adapter/types"
+	"github.com/OpenNSW/core/platform/taskauthz"
 	"github.com/OpenNSW/core/taskflow/store"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // Sentinel errors mapped to HTTP status by the task handler. errors.Is still

@@ -18,10 +18,10 @@ import (
 
 	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/core/platform/catalog"
+	nswstorage "github.com/OpenNSW/core/platform/storage"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
-	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 )
 
