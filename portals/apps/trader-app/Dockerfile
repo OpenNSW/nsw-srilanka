@@ -63,6 +63,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/health || exit 1
 
+# Graceful shutdown: nginx finishes in-flight requests on SIGQUIT, whereas
+# SIGTERM stops workers immediately.
+STOPSIGNAL SIGQUIT
+
 # Pass -e /dev/stderr so nginx doesn't try to open its compiled-in default
 # error log path before parsing nginx.conf (which fails under non-root / read-only rootfs).
 CMD ["nginx", "-e", "/dev/stderr", "-g", "daemon off;"]

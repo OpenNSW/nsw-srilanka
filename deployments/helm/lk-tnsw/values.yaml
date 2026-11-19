@@ -185,7 +185,7 @@ frontend:
   # runs under any cluster-assigned UID, so leave this unset unless you control
   # the UID yourself, in which case you may set, e.g.
   #   runAsNonRoot: true
-  #   runAsUser: 101   # the image's nginx-unprivileged user
+  #   runAsUser: 101   # the image's nginx user
   #   fsGroup: 101
   podSecurityContext: {}
 
@@ -196,7 +196,7 @@ frontend:
   #     drop: ["ALL"]
   securityContext: {}
 
-  # Port nginx listens on inside the image (nginx-unprivileged, not 80).
+  # Port nginx listens on inside the image (non-root, not 80).
   containerPort: 8080
 
   service:
