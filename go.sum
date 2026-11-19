@@ -30,6 +30,8 @@ github.com/OpenNSW/core/refid v0.5.0 h1:dEOimyV5tHrlmF+9RFMwH/MwPd9aKT0AkDm3JUc0
 github.com/OpenNSW/core/refid v0.5.0/go.mod h1:XAsH8UTKJU4Zu6d9WcqBUP21xqmi8afqxAOH9T2pph4=
 github.com/OpenNSW/core/remote v0.9.0 h1:vwmzRZTvYqDkHW4hDX641TD6nNvLjykpWe6v5Xe0coU=
 github.com/OpenNSW/core/remote v0.9.0/go.mod h1:ldtY4TRSPVX5L9BGEB7c4cIgpyJSSEVDit7fiTh4Qzs=
+github.com/OpenNSW/core/replay v0.0.0-20261119020812-13d4b8b3d294 h1:alX0IZK9jvkmBaHV35uUCi+ZkzoHUcW30euK7JApxpQ=
+github.com/OpenNSW/core/replay v0.0.0-20261119020812-13d4b8b3d294/go.mod h1:pEi/sg1crSiveeeKqPvltJbeZ9IB30lkHduQs9a1R38=
 github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrxBChQ=
 github.com/OpenNSW/core/secret v0.2.0/go.mod h1:MEkX9vnlPRVTn+JQQsb192PoY6p3hbFSOIV+FxIMrc0=
 github.com/OpenNSW/core/shared v0.4.0 h1:jk+nuMkp6EVk/mKPwpNZJZyMcbT8wzxhi4leQHlUuKk=
