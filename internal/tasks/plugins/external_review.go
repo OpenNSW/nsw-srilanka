@@ -52,6 +52,19 @@ type externalReviewConfig struct {
 	// resubmission or "needs_more_info" for an officer asking for one. Required
 	// only to reply.
 	ReplyCommand string `json:"reply_command,omitempty"`
+	// Wait, when false, makes a reply a notice: the step calls back on the other
+	// side's parked step and completes, instead of waiting to be answered. The reply
+	// carries no callbackToken, as nothing answers it. Absent means true. Only a
+	// reply can be sent without waiting: a dispatch's flowId is the task's ID, so a
+	// task can start the other side's flow only once, and a flow started without
+	// waiting would have nothing to send its answer to.
+	Wait *bool `json:"wait,omitempty"`
+}
+
+// waits reports whether the step waits for the other side's answer once its call is
+// accepted.
+func (c externalReviewConfig) waits() bool {
+	return c.Wait == nil || *c.Wait
 }
 
 // replyTokenInput is the reserved input that makes the step reply instead of
@@ -70,6 +83,9 @@ const casePathParam = "{caseId}"
 // Given a replyToken input, it replies instead: the other side parked a step
 // and handed over that token, so the step calls back on it (see replyRequest)
 // rather than dispatching a new review the other side would take for a retry.
+// With wait set to false, the reply is a notice: the step is not marked
+// QUEUED_EXTERNALLY, and it completes once the reply is accepted (see
+// externalReviewConfig.Wait).
 //
 // A failed call fails the step and the engine retries it. A 409 on a reply is the
 // exception (see isConflict).
@@ -85,9 +101,19 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	if err != nil {
 		return err
 	}
-	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
-	if err != nil {
-		return inputError(fmt.Errorf("external_review: %w", err))
+	waits := cfg.waits()
+	// A dispatch that skips waiting would need the step's activation ID
+	// (ctx.Record.ActiveStepID) as its flowId in place of the task's ID, so a second
+	// dispatch from the same task starts a new flow instead of being taken for a repeat.
+	if !waits && replyToken == "" {
+		return inputError(fmt.Errorf("external_review: wait is false, so the step needs a %s input: only a reply can be sent without waiting", replyTokenInput))
+	}
+	var callbackToken string
+	if waits {
+		callbackToken, err = coreplugins.CallbackToken(ctx.Record)
+		if err != nil {
+			return inputError(fmt.Errorf("external_review: %w", err))
+		}
 	}
 
 	var (
@@ -103,9 +129,11 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 		return err
 	}
 
-	ctx.Record.State = "QUEUED_EXTERNALLY"
+	if waits {
+		ctx.Record.State = "QUEUED_EXTERNALLY"
+	}
 	slog.Info("taskv2 external_review: calling out",
-		"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "reply", replyToken != "")
+		"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "reply", replyToken != "", "wait", waits)
 
 	err = p.client.post(ctx.Context, cfg.ServiceID, path, body)
 	if replyToken != "" && isConflict(err) {
@@ -114,6 +142,9 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	}
 	if err != nil {
 		return classifyRemote(err)
+	}
+	if !waits {
+		return nil
 	}
 	return ErrSuspended
 }
@@ -191,7 +222,8 @@ func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig
 
 // replyRequest is a callback on the other side's parked step: {command, payload} on
 // replyToken, the envelope every callback takes, with this step's own token added to
-// payload as callbackToken for the other side to answer on. The payload is the
+// payload as callbackToken for the other side to answer on. A reply that waits for
+// no answer passes no callbackToken, and the payload carries none. The payload is the
 // step's "payload" input when it has one, so that its other inputs are only for its
 // own page to show, and all of its inputs but replyToken otherwise. The receiving
 // step's output_mapping reads them by the names this node gave them.
@@ -199,7 +231,9 @@ func replyRequest(cfg externalReviewConfig, payload map[string]any, replyToken, 
 	if cfg.ReplyCommand == "" {
 		return "", nil, configError(fmt.Errorf("external_review: reply_command is required to reply"))
 	}
-	payload["callbackToken"] = callbackToken
+	if callbackToken != "" {
+		payload["callbackToken"] = callbackToken
+	}
 	return callbacksPath + "/" + url.PathEscape(replyToken),
 		map[string]any{"command": cfg.ReplyCommand, "payload": payload}, nil
 }
