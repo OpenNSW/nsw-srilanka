@@ -98,8 +98,8 @@ You need:
   | SLPA CMS client key                    | `agztNvLSUA`             | Only if registered with SLPA; else omit                     |
   | Agency registration numbers (e.g. CDA) | `CDA-EXP-000123`         | Only for agencies the company is registered with            |
 
-- For **each user**: username, email, phone (E.164, e.g. `+94771234567`), first and last
-  name, and whether they are a trader, a CHA, or both.
+- For **each user**: username, email, a Sri Lankan phone number, first and last name, and
+  whether they are a trader, a CHA, or both.
 
 Use the company ID as the OU handle. The two can differ, but keeping them equal removes a
 whole class of mismatch.
@@ -151,6 +151,10 @@ The **handle** is what ends up in the token. Write it down exactly; Step 4 needs
 Create each user in the new OU with user type **`Private_User`**. That type requires
 `username`, `password` and `email`, all unique, and accepts `phone_number`,
 `given_name` and `family_name`.
+
+`phone_number` takes a Sri Lankan number in one of these forms: `0771234567`,
+`+94771234567`, `94771234567` or `771234567`. The IdP refuses any other form, such as
+`+940771234567` or a foreign number.
 
 **Console:** Users → add user → type `Private_User`, OU `ACME EXPORTS (PVT) LTD`.
 

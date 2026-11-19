@@ -18,8 +18,8 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
 
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	nswaudit "github.com/OpenNSW/core/platform/audit"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"

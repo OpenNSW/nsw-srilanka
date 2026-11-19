@@ -91,6 +91,9 @@ creates NPQS for this deployment, on the `NPQS API` resource server
 | Caller                             | Client                | Grant                                                                                                                            |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                             |
+| NPPO assistant `nppo_assistant`    | `OGA_PORTAL_APP_NPQS` | `NPPO Assistant` role (via `NPPO Assistants`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                         |
+| NPPO inspector `nppo_inspector`    | `OGA_PORTAL_APP_NPQS` | `NPPO Inspector` role (via `NPPO Inspectors`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                         |
+| NPPO officer `nppo_officer`        | `OGA_PORTAL_APP_NPQS` | `NPPO Officer` role (via `NPPO Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                             |
 | Admin `npqs_admin`                 | `OGA_PORTAL_APP_NPQS` | `NPQS Admin` role (via `NPQS Admins`): `consignment:adminread`/`adminwrite`, `profile:read`                                      |
 | TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `workflow:inject`, and `task:write` to reply on NPQS's parked steps, which its catalog maps `tnsw` to       |
 | NPQS decision callback and storage | `NPQS_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` and `storage:read`/`write` on TNSW, and `AGENCY_TO_TNSW_PRIVILEGED`: `storage:internalwrite` |

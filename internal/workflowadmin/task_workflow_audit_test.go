@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

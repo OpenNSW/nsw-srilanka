@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 )
 
 // The shared bodies in govpay_test.go post subinstId "002" and serviceid "001".

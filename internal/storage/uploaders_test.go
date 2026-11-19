@@ -12,7 +12,7 @@ import (
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 )
 

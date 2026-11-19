@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 )

@@ -18,7 +18,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )

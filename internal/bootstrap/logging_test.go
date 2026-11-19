@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	"github.com/OpenNSW/core/httputil"
+	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
 func TestErrorResponseCorrelationIDMatchesTraceID(t *testing.T) {

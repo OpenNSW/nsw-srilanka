@@ -13,7 +13,7 @@ import (
 	"github.com/OpenNSW/core/pagination"
 	"github.com/OpenNSW/core/taskflow/store"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 )
 

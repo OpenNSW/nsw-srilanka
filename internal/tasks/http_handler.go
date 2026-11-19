@@ -12,13 +12,13 @@ import (
 	"net/http"
 
 	"github.com/OpenNSW/core/httputil"
+	nswaudit "github.com/OpenNSW/core/platform/audit"
+	"github.com/OpenNSW/core/platform/authn"
+	"github.com/OpenNSW/core/platform/securitylog"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
-	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
@@ -181,7 +181,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
 	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, false, nil))
-	resp := taskResponse{ZoneView: zv, Title: Title(ctx, h.RenderConfigOf, record)}
+	resp := taskResponse{ZoneView: zv, Title: Title(ctx, h.RenderConfigOf, record), ManifestVersion: record.ManifestVersion}
 	if taskTemplate.Claimable {
 		// From the stored record, not the view: the view only swaps file values.
 		claim := h.claimOf(ctx, in, record)

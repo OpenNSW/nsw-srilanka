@@ -12,7 +12,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/filetoken"
 )

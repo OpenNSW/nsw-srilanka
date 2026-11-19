@@ -8,7 +8,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 )
 
 // MockTaskStore implements workflowadmin.TaskStore for testing.

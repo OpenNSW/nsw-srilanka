@@ -13,7 +13,7 @@ Sri Lanka’s National Single Window uses `OpenNSW/core`.
 - `migrations/`: PostgreSQL migrations; `test/e2e/replay/`: replay tests and JSON fixtures.
 - `configs/`, `idp/`, `deployments/helm/`, and `docs/`: runtime configuration, identity setup, deployment charts, and documentation.
 
-Workflow and form artifacts live separately in `OpenNSW/one-trade-artifacts` under `tnsw/` and load at startup.
+Workflow and form artifacts live separately in `OpenNSW/one-trade-artifacts` under `tnsw/`, load at startup, and are released separately. Keep TNSW backward compatible with the artifacts already released: a deployment upgrades TNSW without changing its artifacts. Add what artifacts need as something they opt in to, and never change how TNSW reads what released artifacts already use. Each artifacts release names the oldest TNSW release it works with, so a PR's Deployment Notes never ask for an artifacts release or pin.
 
 ## Build, Test, and Development Commands
 

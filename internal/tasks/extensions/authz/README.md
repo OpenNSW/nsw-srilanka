@@ -51,7 +51,7 @@ catalog:
     npqs: NPQS_TO_NSW
 ```
 
-The composition root decodes it with the rest of the config (`internal/catalog`) and
+The composition root decodes it with the rest of the config (`core/platform/catalog`) and
 injects the `roles`/`clients` slice of it here, so this package reads no configuration
 file.
 

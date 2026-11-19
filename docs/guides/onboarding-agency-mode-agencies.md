@@ -38,7 +38,7 @@ flowchart LR
 
     subgraph agency["DEA deployment (mode: agency)"]
         start["POST /api/v1/internal/cases/{caseId}/flows"]
-        fc["flows.clients<br/>dea_permit_review, owner: officer"]
+        fc["flows.clients<br/>dea_permit_review"]
         wf["Agency workflow<br/>officer review → notify_decision"]
         db[("dea_db")]
         ns["Temporal namespace: dea"]
@@ -68,10 +68,11 @@ flowchart LR
 - **TNSW names the workflow.** TNSW's artifact names a `service_workflow_id`, which the
   agency's `flows.clients` must list for TNSW's client. Anything else is a `404`, starts
   nothing, and is logged.
-- **The task decides who may act.** Starting a flow makes the agency's own OU an owner
-  of the case, in the role the flow's `owner` names, so every officer holding that role
-  sees the case. Each task then names the roles that may open it and run its commands.
-  The catalog maps those names to IdP roles, such as `officer` to the officer role.
+- **The task decides who may act.** Each task names the roles that may open it
+  (`read.roles`) and run its commands (`authz`). Starting a flow makes the agency's own
+  OU an owner of the case in each role its task reads, so every officer holding one of
+  those roles sees the case. The catalog maps those names to IdP roles, such as `officer`
+  to the officer role.
 - **TNSW can reply on a parked step.** Where the artifacts are wired for it, a request for
   more information goes back and forth by reply tokens instead of a new flow, which is
   why the TNSW-to-agency client also needs `task:write`. See
@@ -95,7 +96,7 @@ You need:
 - **Postgres admin** access to create a database, and the Temporal CLI pointed at the
   cluster's Temporal frontend.
 - **Write access to `one-trade-artifacts`**, and to the TNSW deployment's configuration.
-- For **each officer**: username, email, phone (E.164), first and last name.
+- For **each officer**: username, email, a Sri Lankan phone number, first and last name.
 
 ### Names used in this guide
 
@@ -150,8 +151,10 @@ In the agency's folder (for example `dea-v2/`), for each kind of review:
 
 - On every officer step, the roles that may act: the step's `authz` extension (for example
   `"PENDING_USER": { "submit": ["officer"] }`) and the task template's `read.roles` (for
-  example `["officer"]`). A task without them is open to every role in the agency's
-  catalog. See [docs/agency.md, Roles per task](../agency.md#roles-per-task).
+  example `["officer"]`). A step without `authz` refuses every write, and the backend
+  refuses to start if the task of a workflow in `flows.clients` has no `read.roles`: the
+  case is owned in those roles, so they decide which officers see it. See
+  [docs/agency.md, Roles per task](../agency.md#roles-per-task).
 
 The TNSW-side step is covered in Step 6. Agree the workflow ids and commands for both sides
 before starting.
@@ -289,6 +292,11 @@ In **Users**, create each officer in the agency's OU, with the officers' user ty
 open the officers' group in **Groups** and, under **Members**, use **Add Member** to add
 them. The role comes with the group.
 
+In the platform setup, the officers' user type is `Government_User`. Its `phone_number`
+takes a Sri Lankan number in one of these forms: `0771234567`, `+94771234567`,
+`94771234567` or `771234567`. The IdP refuses any other form, such as `+940771234567` or a
+foreign number.
+
 ## Step 3: Create the database and Temporal namespace
 
 The agency shares the Postgres server and Temporal cluster with TNSW, but nothing else:
@@ -379,13 +387,14 @@ backend:
         tnsw: NSW_TO_DEA_M2M
     # The workflows TNSW may start, one per kind of review (Step 1). Starting one
     # makes the agency's OU (ouHandle, as created in Step 2a) an owner of the case
-    # in the owner role, so the officers holding it see the case.
+    # in each role its task names in read.roles, so the officers holding one see
+    # the case.
     flows:
       clients:
         enabled: true
         ouHandle: dea
         workflows:
-          - { id: dea_permit_review, clients: [tnsw], owner: officer }
+          - { id: dea_permit_review, clients: [tnsw] }
     services:
       - id: tnsw
         url: https://nsw-api.example.com
@@ -495,10 +504,11 @@ These values must agree, or officers and TNSW get `401`:
 | `backend.config.authn.audience`                         | the API identifier (Step 2b) |
 | `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier          |
 
-`IDP_ROLE_LABELS` is optional. The portal's user menu lists the roles in the officer's token
-(the `roles` claim, or the claim `IDP_ROLE_CLAIM_NAME` names), and this sets the title and
-description it shows for each. Key it by the role name exactly as the token carries it. A role
-with no entry shows its own name.
+`IDP_ROLE_LABELS` names the roles the portal's user menu lists, and the title and description
+it shows for each. The menu reads the roles from the officer's token (the `roles` claim, or the
+claim `IDP_ROLE_CLAIM_NAME` names). Key each entry by the role name exactly as the token carries
+it. The IdP may also put the officer's roles for other applications in the claim, so the menu
+leaves out every role with no entry, and without `IDP_ROLE_LABELS` it lists no roles.
 
 And this, or officers are signed in but their calls get `403`:
 
@@ -676,22 +686,22 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 
 ## Troubleshooting
 
-| Symptom                                                 | Likely cause                                                                                                                                                                                                                      |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An M2M token request fails with `invalid_scope`         | The application lacks the scope (Step 2e), or no role grants it the permission (Step 2f)                                                                                                                                          |
-| Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                               |
-| Backend exits at startup naming `flows`                 | `flows.clients` is off or empty, a listed workflow isn't in the manifest at `artifactLoader`'s `ref`, an `owner` or client isn't in the catalog, or `ouHandle` is missing                                                         |
-| Officer sees no cases, or gets `403` on every task      | `flows.clients.ouHandle` isn't the OU handle in the officer's token, or the officer doesn't hold the flow's `owner` role                                                                                                          |
-| Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                      |
-| Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                               |
-| Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                         |
-| Flow start `401`                                        | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                              |
-| Reply `403` `client … is not permitted`                 | The agency's catalog doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                    |
-| Flow start or reply `403` `insufficient scope`          | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `workflow:inject` and `task:write`                                                                                        |
-| Flow start `404` `flow not found`                       | The agency's `flows.clients` doesn't list the `service_workflow_id` for TNSW's client, or is off. The agency's log says which                                                                                                     |
-| Flow start `409`                                        | The same TNSW task started a flow before on another case or workflow                                                                                                                                                              |
-| Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                           |
-| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `task:write` or isn't the agency's client in TNSW's catalog (6b) |
+| Symptom                                                 | Likely cause                                                                                                                                                                                                                                                |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An M2M token request fails with `invalid_scope`         | The application lacks the scope (Step 2e), or no role grants it the permission (Step 2f)                                                                                                                                                                    |
+| Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                                                         |
+| Backend exits at startup naming `flows`                 | `flows.clients` is off or empty, a listed workflow isn't in the manifest at `artifactLoader`'s `ref` or has more than one task, its task's `read.roles` is empty or names a role the catalog lacks, a client isn't in the catalog, or `ouHandle` is missing |
+| Officer sees no cases, or gets `403` on every task      | `flows.clients.ouHandle` isn't the OU handle in the officer's token, or the officer holds none of the roles the task names in `read.roles`                                                                                                                  |
+| Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                                                |
+| Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                                                         |
+| Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                                                   |
+| Flow start `401`                                        | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                                        |
+| Reply `403` `client … is not permitted`                 | The agency's catalog doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                                              |
+| Flow start or reply `403` `insufficient scope`          | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `workflow:inject` and `task:write`                                                                                                                  |
+| Flow start `404` `flow not found`                       | The agency's `flows.clients` doesn't list the `service_workflow_id` for TNSW's client, or is off. The agency's log says which                                                                                                                               |
+| Flow start `409`                                        | The same TNSW task started a flow before on another case or workflow                                                                                                                                                                                        |
+| Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                                                     |
+| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `task:write` or isn't the agency's client in TNSW's catalog (6b)                           |
 
 ## Local development
 

@@ -20,6 +20,10 @@ import (
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/payment"
+	nswaudit "github.com/OpenNSW/core/platform/audit"
+	nswauthn "github.com/OpenNSW/core/platform/authn"
+	"github.com/OpenNSW/core/platform/catalog"
+	"github.com/OpenNSW/core/platform/systemlog"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
 	sharedaudit "github.com/OpenNSW/core/shared/audit"
@@ -40,11 +44,8 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
 	"github.com/OpenNSW/nsw-srilanka/internal/htmltemplate"
@@ -58,7 +59,6 @@ import (
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/filetoken"
-	"github.com/OpenNSW/nsw-srilanka/internal/systemlog"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
@@ -217,8 +217,10 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
-	// A listed flow that is not a workflow could never start, so it stops the server here.
-	if err := cfg.Flows.CheckWorkflows(ctx, artifacts); err != nil {
+	// A listed flow that is not a workflow could never start, and a client flow whose task
+	// reads a role the catalog lacks would be owned in a role no one holds, so either stops
+	// the server here.
+	if err := cfg.Flows.CheckWorkflows(ctx, artifacts, globalCatalog); err != nil {
 		_ = database.Close(db)
 		return nil, err
 	}

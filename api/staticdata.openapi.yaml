@@ -4,7 +4,7 @@ info:
   description: |
     OpenAPI 3.0 specification for the static reference-data lookup endpoint.
     Serves immutable JSON artifacts (HS code lists, lookup tables, etc.) out
-    of the artifact registry, keyed by (id, version).
+    of the artifact registry, keyed by (id, manifestVersion).
 
     Requires a JWT bearer token (see `securitySchemes.BearerAuth`) carrying
     scope `task:read` — reused from the task domain since static data is
@@ -19,11 +19,21 @@ paths:
     get:
       summary: Get a static reference-data artifact
       description: |
-        Returns the raw JSON artifact registered under `id` at the given
-        `version`. The response is cacheable by the caller's own browser for
-        up to one year (see the `Cache-Control` response header) —
-        `(id, version)` identifies immutable content — but marked `private`
-        since this endpoint is scope-protected.
+        Without `q`, `offset` or `limit`, returns the raw JSON artifact
+        registered under `id` as artifact manifest `manifestVersion` lists it:
+        its row for `id` without a version, else its highest explicit version.
+        A task's forms send the task's `manifest_version`, so they show the
+        data the task's own manifest lists.
+
+        With any of them, searches the artifact's `data` rows instead and
+        returns one page of them (`StaticDataSearchPage`): rows are kept when
+        `parent` is empty or in their `parents` list, ranked against `q` on the
+        `searchKeys` row keys, and returned exactly as the artifact has them.
+
+        Either response is cacheable by the caller's own browser for up to one
+        year (see the `Cache-Control` response header) — `(id, manifestVersion)`
+        identifies immutable content — but marked `private` since this
+        endpoint is scope-protected.
 
         Requires scope `task:read`.
       operationId: getStaticData
@@ -34,15 +44,63 @@ paths:
           schema:
             type: string
           example: "hscode-list"
-        - name: version
+        - name: manifestVersion
           in: query
           required: true
+          description: The artifact manifest version to resolve `id` through.
+          schema:
+            type: integer
+            minimum: 1
+          example: 3
+        - name: q
+          in: query
+          required: false
+          description: |
+            Search text, matched case-insensitively on the `searchKeys` values. Rows
+            rank by the best match on any key: exact value, then prefix, then a
+            later word, then substring. Empty keeps artifact order.
           schema:
             type: string
-          example: "2026.1"
+          example: "colombo"
+        - name: searchKeys
+          in: query
+          required: false
+          description: |
+            Comma-separated row keys to search, in priority order; ties go to the
+            shorter value of the first key, then to the other keys in order. Each key
+            uses letters, digits and underscores only, and a key named twice counts
+            once. At most 10 different keys. Defaults to `title,const`.
+            String, number and boolean values are searched; other values are not.
+          schema:
+            type: string
+          example: "title,const"
+        - name: parent
+          in: query
+          required: false
+          description: Keeps only rows whose `parents` list contains this value. Empty keeps every row.
+          schema:
+            type: string
+          example: "Tea"
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: Page size, capped at 100.
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
       responses:
         '200':
-          description: OK. The raw JSON artifact; its shape is defined by the artifact itself, not by this endpoint.
+          description: |
+            OK. Without `q`, `offset` or `limit`: the raw JSON artifact, its shape
+            defined by the artifact itself. With any of them: one page of rows.
           headers:
             Cache-Control:
               schema:
@@ -51,9 +109,11 @@ paths:
           content:
             application/json:
               schema:
-                description: Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
+                anyOf:
+                  - description: The raw artifact. Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
+                  - $ref: '#/components/schemas/StaticDataSearchPage'
         '400':
-          description: Missing `version` query parameter.
+          description: Missing `manifestVersion` or it is not a positive integer, invalid `offset` / `limit`, a `searchKeys` entry that is not letters, digits and underscores, or more than 10 different `searchKeys`.
           content:
             application/json:
               schema:
@@ -71,13 +131,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: No artifact registered for this `(id, version)`.
+          description: No artifact registered for this `(id, manifestVersion)`, or the manifest version is not published.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: Internal error loading the artifact.
+          description: Internal error loading the artifact, or, on a search, a row without a non-empty string `const` and `title`.
           content:
             application/json:
               schema:
@@ -91,6 +151,53 @@ components:
       bearerFormat: JWT
 
   schemas:
+    StaticDataSearchPage:
+      type: object
+      required:
+        - items
+        - total
+        - offset
+        - limit
+      properties:
+        items:
+          type: array
+          description: |
+            The matching rows, each exactly as the artifact has it: `const` and
+            `title`, `parents` when the row has it, and any other keys.
+          items:
+            type: object
+            required:
+              - const
+              - title
+            properties:
+              const:
+                type: string
+                description: The value a field stores.
+              title:
+                type: string
+                description: The row's label.
+              parents:
+                type: array
+                items:
+                  type: string
+                description: Values of the sibling field this row belongs to.
+            additionalProperties: true
+          example:
+            - const: "22V4"
+              title: "20x8 6, Mechanical"
+              description: "20x8 6, Mechanical ventilation system"
+        total:
+          type: integer
+          format: int64
+          description: Number of rows that match, across all pages.
+          example: 1
+        offset:
+          type: integer
+          example: 0
+        limit:
+          type: integer
+          example: 20
+
     ErrorResponse:
       type: object
       required:

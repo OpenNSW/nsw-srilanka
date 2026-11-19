@@ -12,14 +12,14 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/testutil"
+	nswaudit "github.com/OpenNSW/core/platform/audit"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
@@ -511,6 +511,23 @@ func TestHandleGetTask_SuccessAudited(t *testing.T) {
 	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
 	assert.Equal(t, testTaskID, recs[0].TargetID)
 	assert.Equal(t, "user-trader-1", recs[0].ActorID)
+}
+
+// The view reports the manifest version the task resolves its templates through, which
+// its forms load their static data at.
+func TestHandleGetTask_ReportsManifestVersion(t *testing.T) {
+	handler := getTaskHandler(t, pendingHSCodeTask(), &stubTemplates{})
+	in := ownerInput("Trader", "trader")
+
+	recorder := getTask(t, handler, &in)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var body struct {
+		ManifestVersion *int `json:"manifest_version"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	require.NotNil(t, body.ManifestVersion, "manifest_version is missing from the view")
+	assert.Equal(t, 1, *body.ManifestVersion)
 }
 
 // When handler.Audit is nil, a denied task read must not panic and still return 404.

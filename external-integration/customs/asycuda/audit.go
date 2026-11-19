@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strings"
 
+	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
 // maxAuditIDLen bounds callback-controlled correlation metadata in bytes. Oversized

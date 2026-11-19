@@ -19,8 +19,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	nswaudit "github.com/OpenNSW/core/platform/audit"
+	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 )
 

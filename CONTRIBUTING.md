@@ -207,6 +207,8 @@ While on 0.x, a breaking change or a new feature bumps the minor version (0.2.0 
 
 The Helm chart is released with the app, in lockstep: `release.yml` publishes `lk-tnsw` at the same version, with `appVersion` set to it, so chart X.Y.Z deploys the X.Y.Z images by default. [`Chart.yaml`](deployments/helm/lk-tnsw/Chart.yaml) holds only placeholders — don't bump it. A chart-only change ships in the next release.
 
+A TNSW release doesn't ship workflow artifacts. TNSW stays backward compatible with the artifacts already released from [`OpenNSW/one-trade-artifacts`](https://github.com/OpenNSW/one-trade-artifacts/releases), so its release notes don't pin them or list their changes. Each artifacts release names the oldest TNSW release it works with.
+
 ## Code style
 
 **Go:** Standard `gofmt` formatting. Linter rules are in [`.golangci.yml`](.golangci.yml). Run `make lint` to check locally.

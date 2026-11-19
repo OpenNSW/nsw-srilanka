@@ -1,8 +1,8 @@
 // Package staticdata exposes large, versioned JSON reference data by id,
 // sourced through the artifact registry instead of being bundled into the SPA
 // build or embedded in this binary: to the frontend through Handler, and to
-// server-side callers, such as a document naming a stored code, through Load
-// and Find.
+// server-side callers, such as a document naming a stored code, through
+// LoadAt and Find.
 package staticdata
 
 import (
@@ -51,15 +51,6 @@ func (l *loadable) Parse(raw []byte) error {
 	}
 	l.RawMessage = raw
 	return nil
-}
-
-// Load fetches one version of a static data artifact by id, from whichever manifest
-// lists it. version is required: callers pin the exact version they want, since (id,
-// version) identifies immutable content that can be cached indefinitely, and every
-// manifest that lists it points it at the same file (see artifact.GetExplicit).
-func Load(ctx context.Context, set *artifact.Set, id, version string) (json.RawMessage, error) {
-	w, err := artifact.GetExplicit[loadable](ctx, set, id, version)
-	return w.RawMessage, err
 }
 
 // LoadAt fetches the static data artifact id as manifest version manifestVersion lists it: the

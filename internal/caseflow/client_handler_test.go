@@ -9,11 +9,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/core/platform/authn"
 )
 
-// clientFlows lists notice for tnsw, owned by officer, in CDA's OU.
-var clientFlows = ClientFlows{Enabled: true, OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}, Owner: "officer"}}}
+// clientFlows lists notice for tnsw, in CDA's OU. Its task reads reviewer, then officer.
+var clientFlows = ClientFlows{Enabled: true, OUHandle: "cda", Workflows: []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}}}}
+
+// noticeOwners are the case_parties rows a notice flow on C1 records: CDA's OU in each
+// role its task reads.
+var noticeOwners = []string{"C1/reviewer/cda", "C1/officer/cda"}
 
 // catalogClients is the catalog's Clients map: tnsw calls as NSW_TO_CDA.
 var catalogClients = map[string]string{"tnsw": "NSW_TO_CDA", "fcau": "FCAU_TO_NSW"}
@@ -66,8 +70,8 @@ func TestClientHandlerStartsTheFlow(t *testing.T) {
 	if n, ok := vars["notification"].(map[string]any); !ok || n["hs"] != "0801" {
 		t.Errorf("notification = %v, want the input", vars["notification"])
 	}
-	if len(repo.owners) != 1 || repo.owners[0] != "C1/officer/cda" {
-		t.Errorf("owners = %v, want C1 owned by cda as officer", repo.owners)
+	if !reflect.DeepEqual(repo.owners, noticeOwners) {
+		t.Errorf("owners = %v, want %v", repo.owners, noticeOwners)
 	}
 }
 
@@ -153,8 +157,8 @@ func TestClientHandlerRepeat(t *testing.T) {
 	if len(wm.starts) != 1 {
 		t.Errorf("starts = %d, want 1", len(wm.starts))
 	}
-	if len(repo.owners) != 1 {
-		t.Errorf("owners = %v, want the one recorded with the flow", repo.owners)
+	if !reflect.DeepEqual(repo.owners, noticeOwners) {
+		t.Errorf("owners = %v, want the %v recorded with the flow", repo.owners, noticeOwners)
 	}
 }
 
@@ -231,8 +235,8 @@ func TestClientHandlerFailures(t *testing.T) {
 		if rec := post(h, tnsw, startBody); rec.Code != http.StatusOK {
 			t.Fatalf("retry status = %d, body %s", rec.Code, rec.Body)
 		}
-		if repo.flows["task-1"].Status != StatusStarted || len(repo.owners) != 1 || repo.owners[0] != "C1/officer/cda" {
-			t.Errorf("flow = %+v, owners = %v, want started and owned by cda as officer", repo.flows["task-1"], repo.owners)
+		if repo.flows["task-1"].Status != StatusStarted || !reflect.DeepEqual(repo.owners, noticeOwners) {
+			t.Errorf("flow = %+v, owners = %v, want started and owned as %v", repo.flows["task-1"], repo.owners, noticeOwners)
 		}
 	})
 	t.Run("record fails", func(t *testing.T) {

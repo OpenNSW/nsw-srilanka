@@ -227,6 +227,9 @@ documents as the reference. For an agency-mode agency,
 [the agency onboarding guide](../docs/guides/onboarding-agency-mode-agencies.md#step-2-set-up-the-agency-in-thunderid)
 walks through creating its resources in the console.
 
+A change to these documents doesn't reach a live IdP. When one changes, such as a user
+type's `phone_number` pattern, make the same change on each UAT and production IdP.
+
 ## Applications created
 
 | App           | Client ID             | Local URL               |
@@ -315,6 +318,7 @@ scopes via a role:
 | EFC admin users        | `EFC Admin` role (via `EFC Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                |
 | `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `workflow:inject`, `task:write` on the EFC API                                                                          |
 | NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                                                                                            |
+| NPQS staff users       | `NPPO Assistant`, `NPPO Inspector` and `NPPO Officer` roles (via the `NPPO Assistants`, `NPPO Inspectors` and `NPPO Officers` groups) → the `NPQS Officer` scopes            |
 | NPQS admin users       | `NPQS Admin` role (via `NPQS Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                              |
 | SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                                                                                            |
 | SLTB admin users       | `SLTB Admin` role (via `SLTB Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                              |

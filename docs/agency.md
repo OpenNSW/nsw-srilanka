@@ -61,7 +61,7 @@ flows:
     ouHandle: cda
     caseColumns: { name: /traderCompany/name }
     workflows:
-      - { id: cda_officer_verification, clients: [tnsw], owner: officer }
+      - { id: cda_officer_verification, clients: [tnsw] }
 artifactLoader:
   type: local
   local:
@@ -106,8 +106,9 @@ than another (a supervisor, say), grant the two IdP roles different scopes on th
 API. The backend still checks the token's catalog roles on each call.
 
 The user menu lists the roles in the token's `roles` claim (`IDP_ROLE_CLAIM_NAME` names
-another claim), each by its own name, or by the title and description `IDP_ROLE_LABELS`
-gives it. The list is for display only; the screens and buttons follow the scopes.
+another claim) that `IDP_ROLE_LABELS` names, each by the title and description it gives.
+The IdP may also put the user's roles for other applications in the claim, and the menu
+leaves those out. The list is for display only; the screens and buttons follow the scopes.
 
 ## Flow
 
@@ -119,8 +120,9 @@ gives it. The list is for display only; the screens and buttons follow the scope
    does not exist, and the reason is logged.
 3. `caseflow.StartFlow` records the flow in `case_flows` (creating the case if it is
    new, and reopening it if it had finished) and, in the same transaction, the agency's
-   own OU (`flows.clients.ouHandle`) as an owner of the case in the flow's `owner` role
-   (`case_parties`), so a recorded flow always has its owner. The same transaction
+   own OU (`flows.clients.ouHandle`) as an owner of the case in each role the flow's task
+   names in `read.roles` (`case_parties`), so a recorded flow always has its owner. The
+   same transaction
    merges `attributes` into the case's and fills the columns `flows.clients.caseColumns`
    maps from them. It then starts `workflowId`
    with `flowId` as the workflow instance ID, on the manifest version current when the
@@ -136,8 +138,8 @@ gives it. The list is for display only; the screens and buttons follow the scope
 5. Every task the workflow spawns is filed under the case ID. The task authz gate
    (`authzgate`, the same as TNSW's) reports ownership in every role the officer's OU
    (their token's `ouHandle`) holds on the case: for an officer, the agency's own OU in
-   the flow's `owner` role. `readauthz` and the write extension then treat officers like
-   any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
+   each role the tasks of the case's flows read. `readauthz` and the write extension then
+   treat officers like any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
 
 ## Asking for more information
 
@@ -190,11 +192,17 @@ contract is in `api/tasks.openapi.yaml`.
 ## Client flows
 
 `flows.clients` in the agency's `config.yaml` lists the workflows another system may
-start, who may start each (catalog `clients`), and the catalog role the agency's OU owns
-the case in once it starts (`owner`). `ouHandle` is the agency's own OU, the `ouHandle`
-its officers' tokens carry. The server refuses to start if a listed workflow is missing
-from the current manifest, an `owner` or client is not in the catalog, or the list has
-no `ouHandle`. An agency also refuses to start with the list off or empty: TNSW could
+start and who may start each (catalog `clients`). `ouHandle` is the agency's own OU, the
+`ouHandle` its officers' tokens carry. Starting a flow makes that OU an owner of the case
+in each role the flow's task names in `read.roles`, as the manifest version the flow runs
+on has them, so the officers in those roles see the case (see
+[Roles per task](#roles-per-task)). A client flow's workflow therefore has exactly one
+task.
+
+The server refuses to start if a listed workflow is missing from the current manifest, a
+client flow's workflow does not have exactly one task, that task's `read.roles` is empty
+or names a role the catalog does not define, a client is not in the catalog, or the list
+has no `ouHandle`. An agency also refuses to start with the list off or empty: TNSW could
 start no flow on it, so no officer task would ever be created.
 
 ```yaml
@@ -203,8 +211,8 @@ flows:
     enabled: true
     ouHandle: cda
     workflows:
-      - { id: cda_officer_verification, clients: [tnsw], owner: officer }
-      - { id: cda_payment_review_receipt, clients: [tnsw], owner: accountant }
+      - { id: cda_officer_verification, clients: [tnsw] }
+      - { id: cda_payment_review_receipt, clients: [tnsw] }
 ```
 
 `caseColumns` fills `cases` columns from the attributes a flow is started with. Each key
@@ -215,43 +223,54 @@ value that is missing, blank, or longer than the 255 characters `cases.name` hol
 the name as it is. The server refuses to start if a column is not `name` or a value is not
 a JSON Pointer. The attributes are stored whether or not anything maps them.
 
-`owner` decides who sees the case and its tasks: a role every officer holds for an
-open case, or a narrower one (an accounts division's `accountant`) for a closed one.
-The case detail titles each task by its render config. TNSW has no client flows: it
+Who sees a case follows its tasks. A payment review whose task reads only `accountant`
+shows its case to accountants alone, and a case with flows whose tasks read different
+roles shows to each of them. A case stays owned in a role after the task that named it
+completes, so its officers keep seeing it. The case detail titles each task by its render
+config. TNSW has no client flows: it
 starts its own flows in code, at consignment creation.
 
 ## Roles per task
 
-A client flow's case is owned in **the roles the agency's own OU holds on it**
-(`case_parties`), like a TNSW consignment by its trader and CHA. What each role may do
-is decided by the task's own rules, which the agency's artifacts therefore declare for
-every task:
+An officer may open a task, or run a command on it, only in a role that their token holds
+**and** that their OU owns the task's case in (`case_parties`), as in TNSW. An agency's own
+OU owns a case in each role that the task of a flow on it names in `read.roles` (see
+[Client flows](#client-flows)), so naming a role there is what shows that role the case
+and lets it open the task. The agency's artifacts declare, for every task:
 
-- the step's `authz` extension says which roles may run each command, e.g.
-  `"PENDING_USER": { "submit": ["officer"] }`;
-- the task template's `read.roles` says which roles may open the task, e.g.
-  `["officer"]`.
+- the task template's `read.roles`: the roles that may open the task and see its case,
+  e.g. `["reviewer", "officer"]`. The order is precedence, so put the role that acts on
+  the task first;
+- the step's `authz` extension: which of those roles may run each command, e.g.
+  `"PENDING_USER": { "submit": ["reviewer"] }`. A role that `authz` names but
+  `read.roles` does not owns no case, so it can never act;
+- where some of the roles only read, `visibleWhen.requireClaim` on the sections that hold
+  the form and its buttons, e.g. `"requireClaim": "role:reviewer"`, so the others do not
+  see buttons that would answer `403`.
 
-A step without an `authz` block is refused on writes, so every step must declare one.
-A task template without a `read` block is readable by every role that owns the case, so a task
-that should be open to one role only must say so. The case detail, though, lists a task
-only when its `read.roles` name a role the officer holds, so a task without them can be
-opened but never appears in a case: give every task `read.roles`. The roles are copied
-to the task when it starts, so changing a template's `read.roles` only affects tasks
-started after the change. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
-(read authorization) and the
+A step without an `authz` block is refused on writes, so every step must declare one. The
+case detail lists a task only when its `read.roles` name a role the officer holds. For the
+syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md) (read authorization) and the
 [authz extension](../internal/tasks/extensions/authz/README.md).
+
+A flow keeps the templates of the manifest version it started on, and its case the roles
+recorded then. A change to a task's `read.roles` or `authz` therefore applies to flows
+started after the change: officers working on flows started earlier keep the role those
+flows name until the flows finish.
 
 No role is required of the catalog; it maps the roles the agency's tasks name. To add one:
 
-1. Create the role in the IdP (`idp/resources/government/<agency>.json`).
+1. Create the role in the IdP, in the agency's OU, with the scopes its officers need, and
+   a group that grants it (`idp/bootstrap/20-agency-<agency>.yaml` locally).
 2. Map its logical name to that token role under `catalog.roles` in the agency's
-   `config.yaml`, e.g. `reviewer: CDA Reviewer`.
-3. Name it in the `authz` and `read.roles` of the tasks it may act on.
+   `config.yaml`, e.g. `reviewer: CDA Reviewer`. The server refuses to start with
+   artifacts that name a role in `read.roles` before the catalog maps it.
+3. In one-trade-artifacts, name it in the `read.roles` of the tasks it may open, the
+   `authz` of the steps it may act on, and the agency's roles in
+   `.github/scripts/check_agency_authz.py`.
 
-The case list and detail admit an officer holding the token role of any catalog role.
-A role a task names that the catalog does not define matches nobody, so the task is
-closed to everyone.
+The case list and detail admit an officer holding the token role of any catalog role. A
+role an `authz` rule names that the catalog does not define matches nobody.
 
 A step that waits for TNSW's reply, such as a review's `*--request-info` step parked
 until the trader resubmits, is completed by TNSW's machine client rather than an
@@ -259,12 +278,6 @@ officer. The catalog maps that client under `clients` as `tnsw` (for example
 `"tnsw": "NSW_TO_CDA"`, the client TNSW starts flows and replies as), and such a step's
 `authz` names it: `"QUEUED_EXTERNALLY": { "resubmit": ["tnsw"] }`. Without the
 mapping, TNSW's reply is refused with `403`.
-
-A catalog that maps no role (for example one with only `clients`) still starts, but no
-officer can open cases or act on tasks: the server logs a warning at start. Ownership
-only admits an officer to a case; the task decides the rest. A step without `authz`
-refuses every write, and a task template without `read.roles` can be opened by every
-role the officer's OU holds on the case.
 
 ## Cases
 
@@ -278,7 +291,7 @@ handle, or a user) per role. The role is a catalog role name, so a new role need
 column. In TNSW the OU of a consignment's trader company holds `trader` and the OU of the
 CHA company it selected holds `cha`. A user owns a task in every role their OU (their
 token's `ouHandle`) holds on the task's case. An agency's own OU owns the cases its client
-flows start, in each flow's `owner` role, and the case list and detail show an officer
+flows start, in each role their tasks read, and the case list and detail show an officer
 only those (see [Roles per task](#roles-per-task)). Code: `internal/caseparty`.
 
 `state` is `IN_PROGRESS` on creation and becomes `FINISHED` once **every** workflow of
