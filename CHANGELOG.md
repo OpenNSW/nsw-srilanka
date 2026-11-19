@@ -49,14 +49,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - A plain dropdown has a × button that clears it. ([#1268](https://github.com/OpenNSW/nsw-srilanka/pull/1268))
-- The confirmation before a form action, such as a payment, no longer asks the user to check their answers. ([#1212](https://github.com/OpenNSW/nsw-srilanka/pull/1212))
+- The confirmation before a form action shows one generic message that fits every action, payments included: "Once confirmed, this action cannot be changed or undone. Please review before you continue." ([#1212](https://github.com/OpenNSW/nsw-srilanka/pull/1212))
 
 ### Fixed
 
 - Forms and generated documents read static data at the version the task's workflow uses, not always version 1. ([#1195](https://github.com/OpenNSW/nsw-srilanka/pull/1195), [#1197](https://github.com/OpenNSW/nsw-srilanka/pull/1197))
-- The user menu doesn't list the user's roles in other applications. ([#1151](https://github.com/OpenNSW/nsw-srilanka/pull/1151))
-- A user without `consignment:flow:write` isn't offered flows they can't start. ([#1117](https://github.com/OpenNSW/nsw-srilanka/pull/1117))
-- A form's action bar stays above a nested stepper's footer. ([#1221](https://github.com/OpenNSW/nsw-srilanka/pull/1221))
+- The user menu lists only the roles named in `IDP_ROLE_LABELS`. ThunderID puts every role the user holds into the token, so the menu was also showing roles that belong to the other portals on the same IdP. ([#1151](https://github.com/OpenNSW/nsw-srilanka/pull/1151))
+- The consignment API lists the flows a user can start (`startableFlows`) only when their token has `consignment:flow:write`, the scope that starting a flow needs. It used to list them by role alone. ([#1117](https://github.com/OpenNSW/nsw-srilanka/pull/1117))
+- On forms with a stepper inside, such as the SLTB blend sheet and CusDec, the stepper's Back and Continue footer no longer covers the Save, Verify and Submit buttons while the user scrolls. ([#1221](https://github.com/OpenNSW/nsw-srilanka/pull/1221))
 
 ### Security
 
