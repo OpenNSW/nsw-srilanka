@@ -26,43 +26,35 @@ ENV VITE_APP_VERSION=$BUILD_VERSION
 
 RUN pnpm --filter trader-app build
 
-# Non-perl variant: nginx.conf declares no perl directives, so shipping
-# ngx_http_perl_module and a perl interpreter would only widen the CVE surface.
-# envsubst templating and /docker-entrypoint.d — which default.conf.template
-# relies on — live in the base layer, not this variant.
-FROM nginxinc/nginx-unprivileged:stable-alpine3.24 AS runtime
+# Alpine's own nginx package keeps nginx on the same security feed as the rest
+# of the base image, so `apk upgrade` picks up fixes without waiting for an
+# upstream nginx image rebuild. It also installs only core nginx (no perl, njs,
+# xslt, geoip, or image-filter modules), keeping the CVE surface small.
+FROM alpine:3.24 AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
 LABEL org.opencontainers.image.description="NSW Trader Portal Frontend"
 
-COPY apps/trader-app/nginx.conf /etc/nginx/templates/default.conf.template
+# Create the nginx user with UID/GID 101 before installing nginx so the package
+# reuses it, matching the non-root UID documented in deployments/helm/lk-tnsw/values.yaml.
+# Upgrade Alpine packages so security fixes published after the base image was
+# built are included; CI scans this image and fails on a fixable CRITICAL CVE.
+RUN addgroup -g 101 -S nginx \
+  && adduser -u 101 -S -D -H -h /var/cache/nginx -s /sbin/nologin -G nginx nginx \
+  && apk upgrade --no-cache \
+  && apk add --no-cache nginx \
+  && rm -f /etc/nginx/http.d/default.conf \
+  && mkdir -p /usr/share/nginx/html /var/cache/nginx /var/log/nginx /run/nginx \
+  && chgrp -R 0 /var/cache/nginx /var/log/nginx /run/nginx /etc/nginx /usr/share/nginx/html \
+  && chmod -R g+w /var/cache/nginx /var/log/nginx /run/nginx /etc/nginx /usr/share/nginx/html
+
+COPY apps/trader-app/nginx.conf /etc/nginx/nginx.conf
 COPY --chown=101:0 --from=builder /workspace/apps/trader-app/dist /usr/share/nginx/html
 
 # config.js is not generated here — it's supplied externally: bind-mounted by
 # docker-compose, or mounted from a ConfigMap by Helm (see
 # deployments/helm/lk-tnsw/templates/frontend/configmap.yaml).
 
-# Security fixes published after the base image was built; CI scans this image
-# and fails on a fixable CRITICAL CVE. nginx and its modules come from nginx.org's
-# repository, not Alpine's, and the base image pins each to its exact version, so
-# they are added again by name from that repository, which installs its newest
-# release. nginx.org's signing key is trusted only when its SHA-512 matches the
-# one nginx's own image pins, and is removed again afterwards.
-USER root
-RUN set -eu; \
-  signing_sha512=e09fa32f0a0eab2b879ccbbc4d0e4fb9751486eedda75e35fac65802cc9faa266425edf83e261137a2f4d16281ce2c1a5f4502930fe75154723da014214f0655; \
-  wget -qO /tmp/nginx_signing.rsa.pub https://nginx.org/keys/nginx_signing.rsa.pub; \
-  echo "$signing_sha512 */tmp/nginx_signing.rsa.pub" | sha512sum -c -; \
-  mv /tmp/nginx_signing.rsa.pub /etc/apk/keys/; \
-  nginx_pkgs=$(tr ' ' '\n' < /etc/apk/world | grep '^nginx' | cut -d= -f1); \
-  apk add --no-cache --upgrade \
-    -X "https://nginx.org/packages/alpine/v$(grep -oE '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" \
-    $nginx_pkgs; \
-  apk upgrade --no-cache; \
-  rm /etc/apk/keys/nginx_signing.rsa.pub
-
-# OpenShift Compliance: Fix permissions for random UID (Group 0)
-RUN chmod -R g+w /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html
 USER 101
 EXPOSE 8080
 
@@ -71,5 +63,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/health || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+# Pass -e /dev/stderr so nginx doesn't try to open its compiled-in default
+# error log path before parsing nginx.conf (which fails under non-root / read-only rootfs).
+CMD ["nginx", "-e", "/dev/stderr", "-g", "daemon off;"]
 
