@@ -42,10 +42,24 @@ COPY --chown=101:0 --from=builder /workspace/apps/trader-app/dist /usr/share/ngi
 # docker-compose, or mounted from a ConfigMap by Helm (see
 # deployments/helm/lk-tnsw/templates/frontend/configmap.yaml).
 
-# Alpine security fixes published after the base image was built; CI scans this
-# image and fails on a fixable CRITICAL CVE.
+# Security fixes published after the base image was built; CI scans this image
+# and fails on a fixable CRITICAL CVE. nginx and its modules come from nginx.org's
+# repository, not Alpine's, and the base image pins each to its exact version, so
+# they are added again by name from that repository, which installs its newest
+# release. nginx.org's signing key is trusted only when its SHA-512 matches the
+# one nginx's own image pins, and is removed again afterwards.
 USER root
-RUN apk upgrade --no-cache
+RUN set -eu; \
+  signing_sha512=e09fa32f0a0eab2b879ccbbc4d0e4fb9751486eedda75e35fac65802cc9faa266425edf83e261137a2f4d16281ce2c1a5f4502930fe75154723da014214f0655; \
+  wget -qO /tmp/nginx_signing.rsa.pub https://nginx.org/keys/nginx_signing.rsa.pub; \
+  echo "$signing_sha512 */tmp/nginx_signing.rsa.pub" | sha512sum -c -; \
+  mv /tmp/nginx_signing.rsa.pub /etc/apk/keys/; \
+  nginx_pkgs=$(tr ' ' '\n' < /etc/apk/world | grep '^nginx' | cut -d= -f1); \
+  apk add --no-cache --upgrade \
+    -X "https://nginx.org/packages/alpine/v$(grep -oE '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" \
+    $nginx_pkgs; \
+  apk upgrade --no-cache; \
+  rm /etc/apk/keys/nginx_signing.rsa.pub
 
 # OpenShift Compliance: Fix permissions for random UID (Group 0)
 RUN chmod -R g+w /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html
