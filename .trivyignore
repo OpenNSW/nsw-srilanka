@@ -8,3 +8,14 @@
 #
 #   # Reachable only through <component>, which this image does not run.
 #   CVE-2026-12345 exp:2026-12-31
+
+# nginx 1.30.6 in nginxinc/nginx-unprivileged:stable-alpine3.24, the tnsw-web
+# base; the fix is 1.30.7, which no image of it ships.
+# TODO(#1275): remove these three when tnsw-web runs a fixed nginx.
+#
+# HTTP/3 only; tnsw-web's nginx.conf serves plain HTTP/1.1 on 8080, with no quic.
+CVE-2026-121810 exp:2026-12-03
+# HTTP/2 only; tnsw-web's nginx.conf does not enable http2.
+CVE-2026-123007 exp:2026-12-03
+# HTTP/2 to clients only; tnsw-web's nginx.conf does not enable http2.
+CVE-2026-123633 exp:2026-12-03
