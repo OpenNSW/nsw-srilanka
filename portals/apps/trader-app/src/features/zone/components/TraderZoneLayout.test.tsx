@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SearchServiceRegistry } from '@opennsw/jsonforms-renderers'
 import '@/i18n'
 import { http } from '@/services/http'
-import { searchServices } from '@/services/searchService'
 import type { ZoneView } from '@/features/zone/types'
 import { TraderZoneLayout } from './TraderZoneLayout'
 
@@ -32,7 +31,7 @@ vi.mock('@opennsw/jsonforms-renderers', async (importOriginal) => {
 
 const mockRequest = vi.mocked(http.request)
 
-function task(manifestVersion?: number): ZoneView {
+function task(manifestVersion: number): ZoneView {
   return {
     task_id: 't-1',
     task_type: 'APPLICATION',
@@ -66,15 +65,5 @@ describe('TraderZoneLayout', () => {
       params: { id: 'layout-ports', version: '1' },
     })
     expect(mockRequest).toHaveBeenCalledWith(expect.objectContaining({ params: { manifestVersion: 6 } }))
-  })
-
-  it('gives the app-wide services to a task without a manifest version', () => {
-    render(
-      <Theme>
-        <TraderZoneLayout task={task()} />
-      </Theme>,
-    )
-
-    expect(provided.at(-1)).toBe(searchServices)
   })
 })

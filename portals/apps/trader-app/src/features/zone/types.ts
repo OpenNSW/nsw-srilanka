@@ -159,7 +159,7 @@ export type ZoneView = {
   step_id?: string
   // manifest_version is the artifact manifest version the task resolves its templates
   // through. Its forms load static data at this version.
-  manifest_version?: number
+  manifest_version: number
   alert?: Alert
   audit?: AuditEntry[]
   // claim is absent where the deployment does not use task claims.

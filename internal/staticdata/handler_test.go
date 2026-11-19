@@ -44,7 +44,7 @@ func TestHandler_HandleGet_Success(t *testing.T) {
 	}
 }
 
-func TestHandler_HandleGet_MissingVersion(t *testing.T) {
+func TestHandler_HandleGet_MissingManifestVersion(t *testing.T) {
 	reg := newTestRegistry(t, "hs-codes", "1.0.0", "refdata/hs-codes/1.0.0.json", []byte(`{"data":[]}`))
 	h := NewHandler(reg)
 
@@ -155,7 +155,7 @@ func TestHandler_HandleGet_SearchNotFound(t *testing.T) {
 	}
 }
 
-func TestHandler_HandleGet_SearchMissingVersion(t *testing.T) {
+func TestHandler_HandleGet_SearchMissingManifestVersion(t *testing.T) {
 	reg := newTestRegistry(t, "ports", "1.0.0", "refdata/ports/1.0.0.json", []byte(`{"data":[]}`))
 	h := NewHandler(reg)
 

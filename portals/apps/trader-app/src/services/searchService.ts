@@ -8,9 +8,7 @@ export const searchServices: SearchServiceRegistry = {
 }
 
 // taskSearchServices is searchServices for a task's forms: their static data loads as the
-// task's manifest version lists it. Without a manifest version it is searchServices itself,
-// whose static-data fields fail to load.
-export function taskSearchServices(manifestVersion: number | undefined): SearchServiceRegistry {
-  if (manifestVersion === undefined) return searchServices
+// task's manifest version lists it.
+export function taskSearchServices(manifestVersion: number): SearchServiceRegistry {
   return { ...searchServices, 'static-data': withManifestVersion(staticDataSearchService, manifestVersion) }
 }

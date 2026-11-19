@@ -4,6 +4,7 @@ export const SAMPLE_TASK: ZoneView = {
   task_id: 'fcau_1_apply:9c2c6862-ccb5-4921-a324-15c49a11aba7',
   task_type: 'APPLICATION',
   state: 'PENDING_USER',
+  manifest_version: 1,
   created_at: '2026-05-24T11:05:52.212844+05:30',
   updated_at: '2026-05-24T11:05:52.228813+05:30',
   alert: {

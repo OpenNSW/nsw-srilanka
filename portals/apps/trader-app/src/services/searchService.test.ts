@@ -13,10 +13,6 @@ beforeEach(() => {
 })
 
 describe('taskSearchServices', () => {
-  it('is searchServices without a manifest version', () => {
-    expect(taskSearchServices(undefined)).toBe(searchServices)
-  })
-
   it('keeps every other service', () => {
     const services = taskSearchServices(4)
 

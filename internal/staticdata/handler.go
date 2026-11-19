@@ -16,10 +16,12 @@ import (
 
 // cacheControlImmutable tells the caller's own browser it never needs to
 // re-fetch a given (id, manifestVersion) response, since a published manifest
-// never changes what it lists. "private" (not "public") because this endpoint
-// is scope-protected — a shared/CDN cache must never serve one caller's
-// response to another. Search responses are cached the same way: the query
-// string is part of the URL, and the artifact behind it does not change.
+// never changes what it lists. A manifest.json source (a checkout of the
+// artifacts repository) loads as manifest version 1 and can change, so after
+// a static-data change there a browser needs a hard reload. "private" (not
+// "public") because this endpoint is scope-protected — a shared/CDN cache must
+// never serve one caller's response to another. Search responses are cached
+// the same way: the query string is part of the URL.
 const cacheControlImmutable = "private, max-age=31536000, immutable"
 
 // Handler serves static JSON reference-data artifacts looked up by id, as an
