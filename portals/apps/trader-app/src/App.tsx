@@ -13,9 +13,8 @@ import { AdminConsignmentDetailScreen } from '@/features/admin/screens/AdminCons
 import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './screens/LoginScreen.tsx'
 import { ProfileProvider } from './services/ProfileContext'
-import { SearchServiceProvider, UploadProvider } from '@opennsw/jsonforms-renderers'
+import { UploadProvider } from '@opennsw/jsonforms-renderers'
 import { uploadFile, getDownloadUrl } from './services/storage'
-import { searchServices } from './services/searchService'
 import { useAuthContext } from './hooks/useAuthContext'
 import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
 import { AccessRestrictedScreen } from '@/screens/AccessRestrictedScreen'
@@ -28,11 +27,9 @@ import { useEffect } from 'react'
 
 function UploadWrapper({ children }: { children: ReactNode }) {
   return (
-    <SearchServiceProvider services={searchServices}>
-      <UploadProvider onUpload={(file) => uploadFile(file)} getDownloadUrl={(key) => getDownloadUrl(key)}>
-        {children}
-      </UploadProvider>
-    </SearchServiceProvider>
+    <UploadProvider onUpload={(file) => uploadFile(file)} getDownloadUrl={(key) => getDownloadUrl(key)}>
+      {children}
+    </UploadProvider>
   )
 }
 

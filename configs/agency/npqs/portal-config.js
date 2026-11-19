@@ -1,6 +1,6 @@
 // Runtime config for the NPQS officer portal: the trader-app in agency mode, served by
 // the npqs-portal service in compose.yml. See configs/agency/npqs/README.md.
-// The IdP side (resource server, NPQS Officer role, this client) is idp/bootstrap/20-agency-npqs.yaml.
+// The IdP side (resource server, NPQS roles, this client) is idp/bootstrap/20-agency-npqs.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8081',
   IDP_BASE_URL: 'http://localhost:8090',
@@ -9,11 +9,25 @@ window.__APP_CONFIG__ = {
   APP_URL: 'http://localhost:5174',
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,consignment:read,task:read,task:write,storage:read,storage:write,profile:read,consignment:adminread,consignment:adminwrite',
-  // The ID-token claim holding the officer's roles, which the user menu lists.
+  // The ID-token claim holding the officer's roles, which the user menu reads.
   IDP_ROLE_CLAIM_NAME: 'roles',
+  // The roles the user menu lists, with a title and description for each. Any other role
+  // in the claim, such as one for another portal on the same IdP, is left out.
   IDP_ROLE_LABELS: JSON.stringify({
     'NPQS Officer': {
       title: 'NPQS Officer',
+      description: 'Reviews and completes the tasks the NPQS receives from the National Single Window.',
+    },
+    'NPPO Assistant': {
+      title: 'NPPO Assistant',
+      description: 'Assists NPPO officers with the tasks the NPQS receives from the National Single Window.',
+    },
+    'NPPO Inspector': {
+      title: 'NPPO Inspector',
+      description: 'Inspects consignments for the tasks the NPQS receives from the National Single Window.',
+    },
+    'NPPO Officer': {
+      title: 'NPPO Officer',
       description: 'Reviews and completes the tasks the NPQS receives from the National Single Window.',
     },
     'NPQS Admin': {

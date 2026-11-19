@@ -37,8 +37,12 @@ type UserService interface {
 type taskResponse struct {
 	zoneview.ZoneView
 	// Title names the task: its render config's title, else its task template.
-	Title string     `json:"title,omitempty"`
-	Claim *taskClaim `json:"claim,omitempty"`
+	Title string `json:"title,omitempty"`
+	// ManifestVersion is the artifact manifest version the task resolves its templates
+	// through. Its forms load their static data at this version, so they show the data the
+	// task's own manifest lists.
+	ManifestVersion int        `json:"manifest_version"`
+	Claim           *taskClaim `json:"claim,omitempty"`
 }
 
 // taskClaim is the task's claim as the caller sees it. The task view carries it only

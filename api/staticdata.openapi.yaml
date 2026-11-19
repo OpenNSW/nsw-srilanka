@@ -4,7 +4,7 @@ info:
   description: |
     OpenAPI 3.0 specification for the static reference-data lookup endpoint.
     Serves immutable JSON artifacts (HS code lists, lookup tables, etc.) out
-    of the artifact registry, keyed by (id, version).
+    of the artifact registry, keyed by (id, manifestVersion).
 
     Requires a JWT bearer token (see `securitySchemes.BearerAuth`) carrying
     scope `task:read` — reused from the task domain since static data is
@@ -20,7 +20,10 @@ paths:
       summary: Get a static reference-data artifact
       description: |
         Without `q`, `offset` or `limit`, returns the raw JSON artifact
-        registered under `id` at the given `version`.
+        registered under `id` as artifact manifest `manifestVersion` lists it:
+        its row for `id` without a version, else its highest explicit version.
+        A task's forms send the task's `manifest_version`, so they show the
+        data the task's own manifest lists.
 
         With any of them, searches the artifact's `data` rows instead and
         returns one page of them (`StaticDataSearchPage`): rows are kept when
@@ -28,7 +31,7 @@ paths:
         `searchKeys` row keys, and returned exactly as the artifact has them.
 
         Either response is cacheable by the caller's own browser for up to one
-        year (see the `Cache-Control` response header) — `(id, version)`
+        year (see the `Cache-Control` response header) — `(id, manifestVersion)`
         identifies immutable content — but marked `private` since this
         endpoint is scope-protected.
 
@@ -41,12 +44,14 @@ paths:
           schema:
             type: string
           example: "hscode-list"
-        - name: version
+        - name: manifestVersion
           in: query
           required: true
+          description: The artifact manifest version to resolve `id` through.
           schema:
-            type: string
-          example: "2026.1"
+            type: integer
+            minimum: 1
+          example: 3
         - name: q
           in: query
           required: false
@@ -108,7 +113,7 @@ paths:
                   - description: The raw artifact. Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
                   - $ref: '#/components/schemas/StaticDataSearchPage'
         '400':
-          description: Missing `version`, invalid `offset` / `limit`, a `searchKeys` entry that is not letters, digits and underscores, or more than 10 different `searchKeys`.
+          description: Missing `manifestVersion` or it is not a positive integer, invalid `offset` / `limit`, a `searchKeys` entry that is not letters, digits and underscores, or more than 10 different `searchKeys`.
           content:
             application/json:
               schema:
@@ -126,7 +131,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: No artifact registered for this `(id, version)`.
+          description: No artifact registered for this `(id, manifestVersion)`, or the manifest version is not published.
           content:
             application/json:
               schema:

@@ -29,6 +29,7 @@ function makeZoneView(state = 'IN_PROGRESS', stepId = 'step-1'): ZoneView {
     task_type: 'SIMPLE_FORM',
     state,
     step_id: stepId,
+    manifest_version: 1,
     view: [],
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
