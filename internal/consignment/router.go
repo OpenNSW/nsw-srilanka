@@ -173,7 +173,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 
 	// Resolved through the global catalog, not hardcoded, so it stays in step with the
 	// same "trader"/"cha" -> token-role mapping the task-authz layer
-	// (internal/tasks/taskauthz) uses.
+	// (core/platform/taskauthz) uses.
 	asTrader := slices.Contains(p.Roles, c.roles["trader"])
 	asCHA := slices.Contains(p.Roles, c.roles["cha"])
 	if !asTrader && !asCHA {
