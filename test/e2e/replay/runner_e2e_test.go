@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/replay"
+	"github.com/OpenNSW/core/replay"
 )
 
 // TestReplay_TradeUpToHSCode runs the trade-export flow through CHA selection

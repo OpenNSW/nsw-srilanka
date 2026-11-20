@@ -18,6 +18,7 @@ require (
 	github.com/OpenNSW/core/platform v0.0.0-20261119065747-bf44fcdbaeb4
 	github.com/OpenNSW/core/refid v0.5.0
 	github.com/OpenNSW/core/remote v0.9.0
+	github.com/OpenNSW/core/replay v0.0.0-20261119070135-f8da807a00b9
 	github.com/OpenNSW/core/secret v0.2.0
 	github.com/OpenNSW/core/shared v0.4.0
 	github.com/OpenNSW/core/storage v0.5.0
