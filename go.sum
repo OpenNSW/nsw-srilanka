@@ -1,7 +1,7 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/OpenNSW/core v0.0.0-20261119021944-f26994f36fef h1:S/muaTgn64OIK/gMRRtLOeWhl0QPTnGOmonzjhR5U/w=
-github.com/OpenNSW/core v0.0.0-20261119021944-f26994f36fef/go.mod h1:b4MNl/Rp+xpSJ4XLuIOof+pWT4SxDmrS8zZbCW0/Vrc=
+github.com/OpenNSW/core v0.0.0-20261119094345-8e4e7a003f80 h1:/+8GK+lMuuJ32uSLgURxQsDMSu5joNXyDbozOSMjasw=
+github.com/OpenNSW/core v0.0.0-20261119094345-8e4e7a003f80/go.mod h1:b4MNl/Rp+xpSJ4XLuIOof+pWT4SxDmrS8zZbCW0/Vrc=
 github.com/OpenNSW/core/authn v0.4.0 h1:kZNUGp49aAZ1ui19soMKF2qGVOc2os1PyS6UuRpT7UY=
 github.com/OpenNSW/core/authn v0.4.0/go.mod h1:9/yGWkx5t5u0+YBUH4FsaZO6wpq/5WK5tdyOD+yL2Ek=
 github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2vbo=
@@ -36,8 +36,8 @@ github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrx
 github.com/OpenNSW/core/secret v0.2.0/go.mod h1:MEkX9vnlPRVTn+JQQsb192PoY6p3hbFSOIV+FxIMrc0=
 github.com/OpenNSW/core/shared v0.4.0 h1:jk+nuMkp6EVk/mKPwpNZJZyMcbT8wzxhi4leQHlUuKk=
 github.com/OpenNSW/core/shared v0.4.0/go.mod h1:Lgh13h6agGl6WFR9i1W0iaUUky7wC0uLJrVc+FRRtMU=
-github.com/OpenNSW/core/staticdata v0.0.0-20261119021944-f26994f36fef h1:q1hW3vV8V3meSGf+BTASRVGZJEBS8gAI+Siy9W23jPU=
-github.com/OpenNSW/core/staticdata v0.0.0-20261119021944-f26994f36fef/go.mod h1:ZmaFYrwbkGVW+Sw9T24Id41quRDxxF1bRwYVZ2UI0C4=
+github.com/OpenNSW/core/staticdata v0.0.0-20261119094345-8e4e7a003f80 h1:2wX3W0EeyGW61KJ5OTs74ivhci/lZyZ3FIJ3/1kxrNM=
+github.com/OpenNSW/core/staticdata v0.0.0-20261119094345-8e4e7a003f80/go.mod h1:ZmaFYrwbkGVW+Sw9T24Id41quRDxxF1bRwYVZ2UI0C4=
 github.com/OpenNSW/core/storage v0.5.0 h1:dLFztXW8jKBnqt+4jUSCdFltW/GBCzNX4RPRl2vpCaU=
 github.com/OpenNSW/core/storage v0.5.0/go.mod h1:ZBWInmdTpu6E5Hgdu4r0UO0lq8r9CI4c59NtiT94wls=
 github.com/OpenNSW/core/temporal v0.1.0 h1:/wFL05TyuZpnz0rOsg30eY3viXixMrfh+zDXA+DtvXA=

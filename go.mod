@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/OpenNSW/core v0.0.0-20261119021944-f26994f36fef
+	github.com/OpenNSW/core v0.0.0-20261119094345-8e4e7a003f80
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea
 	github.com/OpenNSW/core/cors v0.1.0
@@ -21,7 +21,7 @@ require (
 	github.com/OpenNSW/core/replay v0.0.0-20261119070135-f8da807a00b9
 	github.com/OpenNSW/core/secret v0.2.0
 	github.com/OpenNSW/core/shared v0.4.0
-	github.com/OpenNSW/core/staticdata v0.0.0-20261119021944-f26994f36fef
+	github.com/OpenNSW/core/staticdata v0.0.0-20261119094345-8e4e7a003f80
 	github.com/OpenNSW/core/storage v0.5.0
 	github.com/OpenNSW/core/temporal v0.1.0
 	github.com/OpenNSW/core/trace v0.2.0
