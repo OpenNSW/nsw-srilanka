@@ -13,7 +13,7 @@ interface StaticDataParams {
   searchKeys?: string[]
 }
 
-// A key name as the API accepts it (internal/staticdata handler.go): the characters a
+// A key name as the API accepts it (core/staticdata handler.go): the characters a
 // displayTemplate placeholder can hold. A comma or a space would change what the API reads from
 // the comma-joined list sent on a typed search.
 const SEARCH_KEY_PATTERN = /^[A-Za-z0-9_]+$/
@@ -60,7 +60,7 @@ function isStaticDataRow(value: unknown): value is StaticDataRow {
   )
 }
 
-// (id, manifestVersion) identifies immutable content (see internal/staticdata's Cache-Control), so a successful fetch is kept for the lifetime of the
+// (id, manifestVersion) identifies immutable content (see core/staticdata's Cache-Control), so a successful fetch is kept for the lifetime of the
 // page: every field pointing at the same artifact, and every reopen of the same dropdown,
 // reuses it instead of re-fetching. A failed fetch is evicted so the next call retries.
 //
