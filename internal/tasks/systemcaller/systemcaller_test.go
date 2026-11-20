@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+	"github.com/OpenNSW/core/platform/taskauthz"
 )
 
 // recorder records what reached the task manager.

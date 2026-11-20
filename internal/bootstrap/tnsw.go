@@ -11,12 +11,12 @@ import (
 	"github.com/OpenNSW/core/payment"
 
 	"github.com/OpenNSW/core/platform/authn"
+	nswstorage "github.com/OpenNSW/core/platform/storage"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
-	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
 
 // tnswHandlers are the handlers behind TNSW's own routes.

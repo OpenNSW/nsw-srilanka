@@ -11,11 +11,11 @@ import (
 	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/httputil"
 	nswaudit "github.com/OpenNSW/core/platform/audit"
+	"github.com/OpenNSW/core/platform/taskauthz"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 const (

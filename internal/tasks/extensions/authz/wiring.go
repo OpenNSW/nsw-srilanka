@@ -3,8 +3,8 @@ package authz
 import (
 	"fmt"
 
+	"github.com/OpenNSW/core/platform/taskauthz"
 	"github.com/OpenNSW/core/taskflow/extensions"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // ExtAuthz is the extension id; it must match the ExtensionConfig.id declared in

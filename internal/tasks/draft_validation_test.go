@@ -14,11 +14,11 @@ import (
 	"github.com/OpenNSW/core/artifact/adapter/steptemplate"
 	"github.com/OpenNSW/core/artifact/testutil"
 	"github.com/OpenNSW/core/platform/authn"
+	"github.com/OpenNSW/core/platform/payloadschema"
 	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

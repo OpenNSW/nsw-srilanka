@@ -9,8 +9,8 @@ import (
 	"github.com/OpenNSW/core/artifact/testutil"
 	"github.com/OpenNSW/core/taskflow/store"
 
+	"github.com/OpenNSW/core/platform/taskauthz"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // stepCanAct loads the active step's template and leaves the decision to the
