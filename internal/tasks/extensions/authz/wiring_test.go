@@ -3,8 +3,8 @@ package authz
 import (
 	"testing"
 
+	"github.com/OpenNSW/core/platform/taskauthz"
 	"github.com/OpenNSW/core/taskflow/extensions"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 func TestRegister(t *testing.T) {

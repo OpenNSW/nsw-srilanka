@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/OpenNSW/core/platform/catalog"
-	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
+	nswstorage "github.com/OpenNSW/core/platform/storage"
 )
 
 // internalUploadTypesByClient turns storage.allowedInternalUploadTypes, keyed by

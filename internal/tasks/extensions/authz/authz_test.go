@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/OpenNSW/core/artifact/adapter/types"
+	"github.com/OpenNSW/core/platform/taskauthz"
 	"github.com/OpenNSW/core/taskflow/store"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 func testCatalog() taskauthz.Catalog {

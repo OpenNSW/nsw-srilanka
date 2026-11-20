@@ -11,7 +11,7 @@
 //
 // Reads are guarded separately, by internal/tasks/readauthz — core has no read
 // hook, so only the write path can be an extension. Both share the principal
-// types and the eligibility rule in internal/tasks/taskauthz.
+// types and the eligibility rule in core/platform/taskauthz.
 package authz
 
 import (
@@ -21,8 +21,8 @@ import (
 	"fmt"
 
 	"github.com/OpenNSW/core/artifact/adapter/types"
+	"github.com/OpenNSW/core/platform/taskauthz"
 	"github.com/OpenNSW/core/taskflow/store"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // Sentinel errors mapped to HTTP status by the task handler. errors.Is still

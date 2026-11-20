@@ -11,9 +11,9 @@ import (
 	corestorage "github.com/OpenNSW/core/storage"
 
 	"github.com/OpenNSW/core/platform/authn"
+	nswstorage "github.com/OpenNSW/core/platform/storage"
+	"github.com/OpenNSW/core/platform/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
-	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
-	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 )
 
 // uploaderStub prepares every upload the same way.

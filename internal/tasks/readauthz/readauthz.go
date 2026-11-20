@@ -34,7 +34,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+	"github.com/OpenNSW/core/platform/taskauthz"
 )
 
 // ClaimPrefix namespaces ownership claims inside a render config's

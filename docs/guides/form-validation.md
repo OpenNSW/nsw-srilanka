@@ -7,7 +7,7 @@ A form is checked twice:
 - **In the browser**, as the user fills it in. On a button that submits the form, the portal won't send one that breaks a rule.
 - **On the server**, when the submission arrives, against the same form's schema. This holds a call that skips the browser to the same rules.
 
-Both read the schema as JSON Schema draft-07. The server's exact rules are in the [payload schema extension's README](../../internal/tasks/extensions/payloadschema/README.md).
+Both read the schema as JSON Schema draft-07. The server's exact rules are in the [payload schema extension's README](https://github.com/OpenNSW/core/blob/main/platform/payloadschema/README.md).
 
 ## Turn on the server check for a step
 

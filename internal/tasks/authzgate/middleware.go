@@ -19,8 +19,8 @@ import (
 	"net/http"
 
 	"github.com/OpenNSW/core/platform/authn"
+	"github.com/OpenNSW/core/platform/taskauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // CaseRoles reports the logical roles any of parties holds on a case — in TNSW, the
