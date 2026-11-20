@@ -14,7 +14,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/replay"
+	"github.com/OpenNSW/core/replay"
 )
 
 // signingKid identifies the in-test signing key in the JWKS we serve.
