@@ -251,6 +251,17 @@ describe('FormRenderer on a refetched task', () => {
     expect(nameField().value).toBe('Coffee')
   })
 
+  it('keeps input when only the schema is a new object', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const onAction = vi.fn<ZoneAction>().mockResolvedValue(undefined)
+    const { refetch } = renderRefetchable({ name: 'Tea' }, onAction)
+    await typeName('Coffee')
+
+    await refetch({ name: 'Tea' }, { uiSchema: false })
+
+    expect(nameField().value).toBe('Coffee')
+  })
+
   it('saves nothing when nothing was entered', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const onAction = vi.fn<ZoneAction>().mockResolvedValue(undefined)

@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Theme } from '@radix-ui/themes'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -65,5 +65,68 @@ describe('TraderZoneLayout', () => {
       params: { id: 'layout-ports', version: '1' },
     })
     expect(mockRequest).toHaveBeenCalledWith(expect.objectContaining({ params: { manifestVersion: 6 } }))
+  })
+
+  describe("when a refetch finds the task's form", () => {
+    function formTask(stepId: string, name: string): ZoneView {
+      return {
+        ...task(1),
+        step_id: stepId,
+        view: [
+          {
+            id: 'form',
+            type: 'FORM',
+            payload: {
+              schema: { type: 'object', properties: { name: { type: 'string', title: 'Name' } } },
+              uiSchema: { type: 'VerticalLayout', elements: [{ type: 'Control', scope: '#/properties/name' }] },
+              data: { name },
+            },
+          },
+        ] as ZoneView['view'],
+      }
+    }
+
+    function renderTask(t: ZoneView) {
+      const { rerender } = render(
+        <Theme>
+          <TraderZoneLayout task={t} />
+        </Theme>,
+      )
+      return (next: ZoneView) =>
+        rerender(
+          <Theme>
+            <TraderZoneLayout task={next} />
+          </Theme>,
+        )
+    }
+
+    const nameField = () => screen.getByRole<HTMLInputElement>('textbox')
+    const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 100)))
+
+    // JsonForms reports the form's data a moment after mount and after each
+    // edit, so the edit waits for the first report and then for its own.
+    async function typeName(value: string) {
+      await settle()
+      fireEvent.change(nameField(), { target: { value } })
+      await settle()
+    }
+
+    it('on another step, shows that step’s data rather than input typed on the last one', async () => {
+      const refetch = renderTask(formTask('step-1', 'Tea'))
+      await typeName('Coffee')
+
+      refetch(formTask('step-2', 'Milk'))
+
+      await waitFor(() => expect(nameField().value).toBe('Milk'))
+    })
+
+    it('on the same step, keeps the input', async () => {
+      const refetch = renderTask(formTask('step-1', 'Tea'))
+      await typeName('Coffee')
+
+      refetch(formTask('step-1', 'Tea'))
+
+      await waitFor(() => expect(nameField().value).toBe('Coffee'))
+    })
   })
 })
