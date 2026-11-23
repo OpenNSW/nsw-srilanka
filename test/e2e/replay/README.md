@@ -2,7 +2,7 @@
 
 Data-driven end-to-end tests for the NSW backend. Each business flow is a JSON file; adding coverage means writing JSON, not Go.
 
-The generic engine (flow schema, variable store, step execution, polling) lives in [`internal/replay`](../../../internal/replay). This package is the in-process wiring, the actor configs (`configs/`), the flow files (`flows/`), and the tests that run them (`runner_e2e_test.go`).
+The generic engine (flow schema, variable store, step execution, polling) lives in [`OpenNSW/core/replay`](https://github.com/OpenNSW/core/tree/main/replay). This package is the in-process wiring, the actor configs (`configs/`), the flow files (`flows/`), and the tests that run them (`runner_e2e_test.go`).
 
 ## How it works
 

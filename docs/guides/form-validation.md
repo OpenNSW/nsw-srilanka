@@ -242,7 +242,7 @@ The button's `element` in the render config decides what is checked:
 | `element`                         | Browser        | Server                     |
 | --------------------------------- | -------------- | -------------------------- |
 | `primary_action`, `danger_action` | the whole form | the whole form             |
-| `draft_action` (and the autosave) | nothing        | only the `readOnly` values |
+| `draft_action`                    | nothing        | only the `readOnly` values |
 | `secondary_action`                | nothing        | the whole form             |
 
 A `secondary_action` is sent unchecked by the browser but checked in full on the server, so it suits a button that sends a complete form. On a button meant to send a form part-filled, the server refuses the submission.

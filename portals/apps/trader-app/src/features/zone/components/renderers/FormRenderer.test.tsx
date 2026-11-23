@@ -39,16 +39,6 @@ function formButton(name: string) {
   return screen.getByRole('button', { name })
 }
 
-// Types into the form's one field, under fake timers. JsonForms reports the
-// form's data a moment after mount and after each edit: the first report is
-// what counts as saved, so the edit waits for it, and the autosave timer
-// starts from the edit's own report.
-async function typeName(value: string) {
-  await act(async () => vi.advanceTimersByTimeAsync(100))
-  fireEvent.change(screen.getByRole('textbox'), { target: { value } })
-  await act(async () => vi.advanceTimersByTimeAsync(100))
-}
-
 describe('FormRenderer', () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -152,29 +142,18 @@ describe('FormRenderer', () => {
     expect(formButton('Submit').hasAttribute('disabled')).toBe(false)
   })
 
-  it('autosaves a draft without asking', async () => {
+  it('does not autosave a draft after the user edits', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const onAction = vi.fn<ZoneAction>().mockResolvedValue(undefined)
     renderForm({ name: 'Tea' }, onAction)
-    await typeName('Coffee')
 
-    await act(async () => vi.advanceTimersByTimeAsync(30_000))
-
-    expect(onAction).toHaveBeenCalledWith('save', { name: 'Coffee' }, { draft: true })
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-  })
-
-  it('holds the autosave while the dialog is open', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const onAction = vi.fn<ZoneAction>().mockResolvedValue(undefined)
-    renderForm({ name: 'Tea' }, onAction)
-    await typeName('Coffee')
-
-    fireEvent.click(formButton('Submit'))
+    await act(async () => vi.advanceTimersByTimeAsync(100))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Coffee' } })
+    // Let JsonForms report the edit, so the form holds unsaved input for the 30s below.
+    await act(async () => vi.advanceTimersByTimeAsync(100))
     await act(async () => vi.advanceTimersByTimeAsync(30_000))
 
     expect(onAction).not.toHaveBeenCalled()
-    expect(screen.getByRole('alertdialog', { name: 'Submit?' })).toBeTruthy()
   })
 })
 

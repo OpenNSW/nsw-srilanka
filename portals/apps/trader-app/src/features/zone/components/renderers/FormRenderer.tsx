@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema, Translator } from '@jsonforms/core'
 import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
@@ -47,10 +47,6 @@ const EMPTY_ADDITIONAL_ERRORS: RequiredFieldError[] = []
 
 // How long the "Draft saved" note stays next to the buttons.
 const DRAFT_SAVED_NOTE_MS = 3000
-
-// How long a form with a draft_action handle holds unsaved input before it
-// saves a draft by itself.
-const AUTOSAVE_DRAFT_MS = 30_000
 
 // AJV-shaped error so JsonForms maps it onto the missing control. `message`
 // must stay "is a required property" — the radix renderers rewrite that
@@ -250,7 +246,6 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const stepper = isStepperUiSchema(payload.uiSchema)
   const [onLastStep, setOnLastStep] = useState(() => !stepper)
   const shownHandles = (handles ?? []).filter((h) => onLastStep || acceptsPartialForm(h))
-  const draftHandle = interactive ? handles?.find((h) => h.element === 'draft_action') : undefined
   const unsaved = interactive && savedKey !== null && dataKey !== savedKey
   // The screen asks before the user leaves with unsaved input.
   useReportUnsaved(unsaved)
@@ -308,21 +303,6 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     }
     confirm.ask(h)
   }
-
-  // Autosave: a form that can save a draft does so once its input has stayed
-  // unsaved for AUTOSAVE_DRAFT_MS. A save (manual or not) clears the timer, as
-  // does any action in flight or a confirmation dialog open on screen, which
-  // a draft save in the background would close; one that fails leaves the
-  // input unsaved, so the timer starts again.
-  const autosaveDraft = useEffectEvent(() => {
-    if (draftHandle) dispatch(draftHandle)
-  })
-  const canAutosave = draftHandle !== undefined
-  useEffect(() => {
-    if (!unsaved || submitting || confirm.open || !canAutosave) return
-    const timer = setTimeout(autosaveDraft, AUTOSAVE_DRAFT_MS)
-    return () => clearTimeout(timer)
-  }, [unsaved, submitting, confirm.open, canAutosave])
 
   // The "Draft saved" note next to the buttons fades after a few seconds.
   useEffect(() => {
