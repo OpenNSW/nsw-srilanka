@@ -5,6 +5,8 @@ interface UploadMetadataRequest {
   filename: string
   mime_type: string
   size: number
+  task_id?: string
+  consignment_id?: string
 }
 
 interface UploadMetadataResponse {
@@ -26,7 +28,22 @@ export interface UploadResponse {
   name: string
 }
 
-export async function uploadFile(file: File, signal?: AbortSignal): Promise<UploadResponse> {
+/** Optional task/consignment context stamped onto storage prepare/confirm logs. */
+export interface UploadContext {
+  taskId?: string
+  consignmentId?: string
+}
+
+export async function uploadFile(
+  file: File,
+  context?: UploadContext,
+  signal?: AbortSignal,
+): Promise<UploadResponse> {
+  const scope = {
+    ...(context?.taskId ? { task_id: context.taskId } : {}),
+    ...(context?.consignmentId ? { consignment_id: context.consignmentId } : {}),
+  }
+
   const { data: metadata } = await http.request<UploadMetadataResponse>({
     url: `${API_BASE_URL}/api/v1/storage`,
     method: 'POST',
@@ -34,6 +51,7 @@ export async function uploadFile(file: File, signal?: AbortSignal): Promise<Uplo
       filename: file.name,
       mime_type: file.type || 'application/octet-stream',
       size: file.size,
+      ...scope,
     } satisfies UploadMetadataRequest,
     attachToken: true,
     signal,
@@ -51,6 +69,16 @@ export async function uploadFile(file: File, signal?: AbortSignal): Promise<Uplo
     console.error(`Direct storage upload error ${uploadResponse.status}: ${errorText}`)
     throw new Error(`Failed to upload file to storage: ${uploadResponse.status} ${uploadResponse.statusText}`)
   }
+
+  // The PUT goes to the storage backend, not this API. Confirm so logs can
+  // tell a finished upload from a prepare that never completed.
+  await http.request({
+    url: `${API_BASE_URL}/api/v1/storage/${encodeURIComponent(metadata.key)}/confirm`,
+    method: 'POST',
+    data: scope,
+    attachToken: true,
+    signal,
+  })
 
   return { key: metadata.key, name: metadata.name }
 }

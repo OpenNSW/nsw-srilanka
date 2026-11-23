@@ -1,7 +1,9 @@
+import { type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button } from '@radix-ui/themes'
 import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
+import { UploadProvider } from '@opennsw/jsonforms-renderers'
 import { ClaimBanner } from './ClaimBanner'
 import { useTask, type ActionErrorKey, type ClaimErrorKey } from './hooks'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
@@ -11,6 +13,26 @@ import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
 import { Banner, Breadcrumb, type BreadcrumbItem, PageState, RefreshButton, Surface } from '@portals/ui'
 import { useCan } from '@/hooks/useCan'
+import { getDownloadUrl, uploadFile } from '@/services/storage'
+
+function TaskUploadScope({
+  taskId,
+  consignmentId,
+  children,
+}: {
+  taskId?: string
+  consignmentId?: string
+  children: ReactNode
+}) {
+  return (
+    <UploadProvider
+      onUpload={(file) => uploadFile(file, { taskId, consignmentId })}
+      getDownloadUrl={(key) => getDownloadUrl(key)}
+    >
+      {children}
+    </UploadProvider>
+  )
+}
 
 export function TaskDetailScreen() {
   const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()
@@ -119,46 +141,48 @@ export function TaskDetailScreen() {
   breadcrumb.push({ label: title })
 
   return (
-    <div className="min-h-full">
-      <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between gap-4`}>
-        <Breadcrumb items={breadcrumb} />
-        <RefreshButton label={t('tasks.refresh')} refreshing={refreshing} onClick={refetch} />
+    <TaskUploadScope taskId={taskId} consignmentId={consignmentId}>
+      <div className="min-h-full">
+        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between gap-4`}>
+          <Breadcrumb items={breadcrumb} />
+          <RefreshButton label={t('tasks.refresh')} refreshing={refreshing} onClick={refetch} />
+        </div>
+        {submitError && (
+          <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
+            <Banner variant="error">{submitError}</Banner>
+          </div>
+        )}
+        {zoneView.claim && (
+          <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
+            <ClaimBanner
+              claim={zoneView.claim}
+              completed={zoneView.state === 'COMPLETED'}
+              canChange={canAct}
+              busy={claimBusy}
+              error={claimError && claimErrorMessages[claimError]}
+              onClaim={() => void changeClaim('claim')}
+              onRelease={() => void changeClaim('release')}
+            />
+          </div>
+        )}
+        <TraderZoneLayout
+          task={zoneView}
+          title={title}
+          formEpoch={formEpoch}
+          onSubmitForm={
+            submitted || !canAct
+              ? undefined
+              : (command, data, options) => (options?.draft ? saveDraft(data) : submit(command, data))
+          }
+        />
+        {zoneView.state === 'COMPLETED' && (
+          <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex justify-end`}>
+            <Button size="3" variant="soft" onClick={goToTasks} className="w-full sm:w-auto">
+              {t(isAgencyMode ? 'tasks.backToCase' : 'tasks.backToConsignment')}
+            </Button>
+          </div>
+        )}
       </div>
-      {submitError && (
-        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
-          <Banner variant="error">{submitError}</Banner>
-        </div>
-      )}
-      {zoneView.claim && (
-        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
-          <ClaimBanner
-            claim={zoneView.claim}
-            completed={zoneView.state === 'COMPLETED'}
-            canChange={canAct}
-            busy={claimBusy}
-            error={claimError && claimErrorMessages[claimError]}
-            onClaim={() => void changeClaim('claim')}
-            onRelease={() => void changeClaim('release')}
-          />
-        </div>
-      )}
-      <TraderZoneLayout
-        task={zoneView}
-        title={title}
-        formEpoch={formEpoch}
-        onSubmitForm={
-          submitted || !canAct
-            ? undefined
-            : (command, data, options) => (options?.draft ? saveDraft(data) : submit(command, data))
-        }
-      />
-      {zoneView.state === 'COMPLETED' && (
-        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex justify-end`}>
-          <Button size="3" variant="soft" onClick={goToTasks} className="w-full sm:w-auto">
-            {t(isAgencyMode ? 'tasks.backToCase' : 'tasks.backToConsignment')}
-          </Button>
-        </div>
-      )}
-    </div>
+    </TaskUploadScope>
   )
 }

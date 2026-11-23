@@ -2,10 +2,10 @@ openapi: 3.0.3
 info:
   title: NSW Sri Lanka / Storage API
   description: |
-    OpenAPI 3.0 specification for file storage: reserving an upload and
-    getting a download URL. The file's bytes never pass through this API:
-    they go to the storage backend through the presigned `upload_url` and
-    `download_url` it hands out.
+    OpenAPI 3.0 specification for file storage: reserving an upload,
+    confirming the presigned PUT finished, and getting a download URL. The
+    file's bytes never pass through this API: they go to the storage backend
+    through the presigned `upload_url` and `download_url` it hands out.
 
     Callers hold **file references**, not storage keys. A reference is an
     opaque string issued to one caller, which they get from an upload or a
@@ -49,7 +49,14 @@ paths:
 
         1. `PUT` the file's bytes to `upload_url`, with the `Content-Type`
            given as `mime_type` and exactly `size` bytes.
-        2. Keep `key` as the file's value, for example in a form's file field.
+        2. `POST /api/v1/storage/{key}/confirm` so the API can record that
+           the PUT finished (the PUT itself goes to the storage backend, not
+           through this API).
+        3. Keep `key` as the file's value, for example in a form's file field.
+
+        Optional `task_id` and `consignment_id` (or `case_id` as an alias for
+        `consignment_id`) name the task and consignment the upload belongs to
+        for logs only; they are not authorized.
 
         The allowed types and the size limit are the deployment's
         (`storage.allowedUploadTypes`, `storage.maxUploadBytes`), and the
@@ -181,6 +188,91 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/storage/{key}/confirm:
+    post:
+      summary: Confirm a finished upload
+      description: |
+        Records that the caller finished the presigned `PUT` to `upload_url`
+        for the file reference `{key}`. The PUT goes to the storage backend
+        (S3 or local content), so this API never sees it; call this afterwards
+        so prepare and completed uploads can be told apart in logs.
+
+        `{key}` must be a file reference issued to the caller for an upload
+        (the `key` from `POST /api/v1/storage` or `POST /api/v1/internal/storage`).
+        The object must already be present in storage.
+
+        The body may repeat optional `task_id` and `consignment_id` (or
+        `case_id`) for logs (same meaning as on reserve). An empty body is
+        accepted.
+
+        Requires scope `storage:write`.
+      operationId: confirmUpload
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: The file reference returned by the upload reserve.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmUploadRequest'
+      responses:
+        '204':
+          description: The upload is confirmed; the object is present.
+        '400':
+          description: Missing `{key}` or malformed JSON.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            The bearer token lacks scope `storage:write`, or `{key}` is not a
+            file reference issued to the caller for an upload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            The file does not exist in storage yet (the presigned PUT did not
+            complete, or has not become visible).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: |
+            `{key}` is a file reference that has expired. Reserve a new upload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error resolving the reference or checking the object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: |
+            Agency only. The deployment that stores the files failed, or
+            refused this deployment's credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/storage/{key}:
     get:
       summary: Get a download URL
@@ -307,6 +399,38 @@ components:
           minimum: 1
           description: The file's size in bytes; the upload must send exactly this many.
           example: 482133
+        task_id:
+          type: string
+          description: |
+            Optional. Task the upload belongs to, for system and audit logs
+            (`taskId`). Not authorized.
+          example: "fd5e8815-fc4a-5ff9-b9a8-4df1fc092f32"
+        consignment_id:
+          type: string
+          description: |
+            Optional. Consignment the upload belongs to, for system and audit
+            logs (`consignmentId`). Not authorized. Prefer this over `case_id`.
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        case_id:
+          type: string
+          description: |
+            Optional. Alias for `consignment_id` when the caller is an agency
+            (cases). Ignored when `consignment_id` is set. Logged as
+            `consignmentId`.
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    ConfirmUploadRequest:
+      type: object
+      properties:
+        task_id:
+          type: string
+          description: Same as `UploadRequest.task_id`.
+        consignment_id:
+          type: string
+          description: Same as `UploadRequest.consignment_id`.
+        case_id:
+          type: string
+          description: Same as `UploadRequest.case_id`.
 
     UploadResponse:
       type: object
