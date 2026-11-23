@@ -234,8 +234,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	// Captured before the call: core may strip system keys from the payload.
-	// The same list is what a file-resolution denial records. The request
-	// envelope is for category=audit only — never put on system slog attrs.
+	// The same list is what a file-resolution denial records.
 	command, _ := payload[orchestrator.CommandVar].(string)
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", command}
 	body := auditRequestMessage(command, payload, false)
@@ -277,8 +276,7 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 		return
 	}
 	// Captured before the call: core may strip system keys from the payload.
-	// The same list is what a file-resolution denial records. The request
-	// envelope is for category=audit only — never put on system slog attrs.
+	// The same list is what a file-resolution denial records.
 	command, _ := payload[orchestrator.CommandVar].(string)
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", command}
 	body := auditRequestMessage(command, payload, false)
@@ -554,9 +552,9 @@ func taskAuditMeta(status int, errCode string, logAttrs ...any) map[string]any {
 }
 
 // auditRequestMessage is the request envelope recorded on category=audit for a
-// draft or submit. It is a shallow copy of the form object without the reserved
-// __command key, taken before file references are resolved. System slog must
-// not receive this value.
+// draft or submit. It deep-copies the form object without the reserved
+// __command key, taken before file references are resolved in place. Do not
+// pass this value to system slog.
 func auditRequestMessage(command string, payload map[string]any, draft bool) any {
 	form := cloneFormPayload(payload)
 	if draft {
@@ -578,16 +576,27 @@ func auditEnvelopeMessage(req completeTaskStepRequest) any {
 	return auditRequestMessage(req.Command, req.Payload, req.Command == "")
 }
 
+// cloneFormPayload returns a deep copy of payload without the reserved
+// __command key. File resolution mutates the live submission in place, so the
+// audit snapshot must not share nested maps or slices with it.
 func cloneFormPayload(payload map[string]any) map[string]any {
 	if len(payload) == 0 {
 		return map[string]any{}
 	}
-	out := make(map[string]any, len(payload))
+	trimmed := make(map[string]any, len(payload))
 	for k, v := range payload {
 		if k == orchestrator.CommandVar {
 			continue
 		}
-		out[k] = v
+		trimmed[k] = v
+	}
+	raw, err := json.Marshal(trimmed)
+	if err != nil {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil || out == nil {
+		return map[string]any{}
 	}
 	return out
 }

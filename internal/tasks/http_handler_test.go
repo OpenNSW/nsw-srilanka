@@ -1024,6 +1024,21 @@ func TestAuditRequestMessage_OmitsCommandKey(t *testing.T) {
 	assert.Equal(t, map[string]any{"payload": map[string]any{"note": "hi"}}, draft)
 }
 
+func TestAuditRequestMessage_SurvivesInPlaceFileResolve(t *testing.T) {
+	payload := map[string]any{
+		"docs": map[string]any{"scan": "user-ref"},
+	}
+	msg := auditRequestMessage("submit", payload, false).(map[string]any)
+	form := msg["payload"].(map[string]any)
+	docs := form["docs"].(map[string]any)
+
+	// File resolution mutates the live submission's nested maps in place.
+	payload["docs"].(map[string]any)["scan"] = "stored-key"
+
+	assert.Equal(t, "user-ref", docs["scan"])
+	assert.Equal(t, "stored-key", payload["docs"].(map[string]any)["scan"])
+}
+
 func TestResolveFiles_StoresTheValues(t *testing.T) {
 	refs := newFakeFileRefs()
 	ref, _ := refs.Issue(userPrincipal("alice"), "stored-invoice-key", readSubmit...)
