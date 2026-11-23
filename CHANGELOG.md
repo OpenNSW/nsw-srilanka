@@ -6,6 +6,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-23
+
+### TL;DR
+
+- **What's new:** A trader's form keeps what they entered when the task screen refreshes. Before, a refresh could bring back older data and lose documents the trader had uploaded.
+- **What you need to do:** Deploy chart 1.2.1. There's no migration and no config change.
+- **Security:** The Trader Portal image moves to nginx 1.30.7, which fixes three nginx CVEs.
+
+### Fixed
+
+- Refreshing a task screen, or claiming or releasing the task, no longer resets an open form to older data. Before, autosave then saved that older data over the draft, which lost the documents a trader had uploaded. ([#1295](https://github.com/OpenNSW/nsw-srilanka/pull/1295))
+
+### Security
+
+- The Trader Portal image (`tnsw-web`) is built on `nginx/nginx-unprivileged`, where nginx publishes the image, at nginx 1.30.7. It fixes CVE-2026-121810, CVE-2026-123007 and CVE-2026-123633. ([#1279](https://github.com/OpenNSW/nsw-srilanka/pull/1279))
+
+### Known issues
+
+- SLC Edge callbacks held for retry are lost on a restart, and dropped after 24 hours. ([#1131](https://github.com/OpenNSW/nsw-srilanka/pull/1131))
+- With the `github` artifact loader, GitHub is a run-time dependency: definitions are fetched each time they are used.
+- Audit records are log lines sent over OTLP, with no store and no delivery guarantee. Without `otel.endpoint`, they are lost. Payments and storage events aren't audited.
+- The API connects to Temporal with a client certificate only, not an API key.
+- `/health` doesn't check Temporal.
+- The Helm chart has no persistent volume, so use S3 for storage.
+- The IdP is set up by hand from `idp/bootstrap/`.
+- Forms and workflows are in English only. The portal's own text is also in Sinhala and Tamil.
+- An NSW admin sees "Could not load consignments." on the list, and opens a consignment at `/admin/consignments/<consignment ID>`.
+- Cancelling a CDN in TNSW doesn't cancel it in ASYCUDA World. ([#988](https://github.com/OpenNSW/nsw-srilanka/pull/988))
+
 ## [1.2.0] - 2026-11-19
 
 ### TL;DR
@@ -1818,7 +1847,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.15.0...v1.0.0
