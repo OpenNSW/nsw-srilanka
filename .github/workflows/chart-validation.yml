@@ -1,6 +1,6 @@
 name: Chart Validation CI
 # Validates that the Helm chart lints, renders, and packages successfully on
-# PRs to main and in the merge queue, when the chart changes; otherwise the
+# PRs to main and release/** and in the merge queue, when the chart changes; otherwise the
 # check is skipped. This workflow never publishes anything — that's chart-build-dev.yml
 # (push to main) and release.yml (each app release). Purely a correctness
 # check, so a broken chart (a template that fails to render or package) is
@@ -8,7 +8,7 @@ name: Chart Validation CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
   merge_group:
 
 concurrency:

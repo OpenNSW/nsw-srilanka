@@ -31,7 +31,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 # Squash merges end their subject with "(#NNN)"; the last one is the PR.
-# Anything else reached main without a PR and is listed on its own.
+# Anything else reached the branch without a PR and is listed on its own.
 git log --first-parent --reverse --format='%h%x09%s' "$range" > "$tmp/commits"
 : > "$tmp/prs"
 : > "$tmp/direct"
