@@ -15,7 +15,9 @@ type Props = {
   onSubmitForm?: ZoneAction
   // Changes once an action's refetch has landed. Part of each zone's key, so a
   // step returning to the same form remounts it against the refreshed data
-  // rather than leaving the values it mounted with on screen.
+  // rather than leaving the values it mounted with on screen. The key also
+  // holds the step, so a refetch that finds the task on another step mounts
+  // that step's form afresh instead of keeping the last step's input in it.
   formEpoch?: number
   // The task's name, as the deployment configured it (its render config's
   // title). Without one the title falls back to the task type.
@@ -35,7 +37,7 @@ export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0, title }: P
       <SearchServiceProvider services={searchServices}>
         {task.view.map((component) => (
           <Zone
-            key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}
+            key={`${component.id}:${task.task_id}:${task.step_id}:${task.state}:${formEpoch}`}
             component={component}
             onAction={onSubmitForm}
           />
