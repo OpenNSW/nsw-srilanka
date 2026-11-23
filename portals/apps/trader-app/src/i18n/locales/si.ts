@@ -16,6 +16,13 @@ const si: Locale = {
       unauthorized: {
         title: 'ප්‍රවේශය සීමාකර තිබේ.',
         message: 'ඔබ ඔබගේ ගිණුමෙන් පුරනය වී ඇත, නමුත් මෙම පිටුවට ඔබට ප්‍රවේශ විය නොහැක.',
+        adminTitle: 'ආයුබෝවන්, පරිපාලකතුමනි',
+        adminMessage: 'ඔබ පරිපාලක ගිණුමකින් පුරනය වී ඇත. මෙම පිටුවේ පෙන්වීමට තවම කිසිවක් නැත.',
+        adminConsignmentIdPrompt: 'ඇතුළු වීමට කරුණාකර භාණ්ඩ තොග හැඳුනුම (Consignment ID) ඇතුළත් කරන්න.',
+        adminCaseIdPrompt: 'ඇතුළු වීමට කරුණාකර නඩු හැඳුනුම (Case ID) ඇතුළත් කරන්න.',
+        adminConsignmentIdPlaceholder: 'භාණ්ඩ තොග හැඳුනුම (Consignment ID)',
+        adminCaseIdPlaceholder: 'නඩු හැඳුනුම (Case ID)',
+        adminOpen: 'විවෘත කරන්න',
         signOut: 'පිටවන්න',
       },
     },
