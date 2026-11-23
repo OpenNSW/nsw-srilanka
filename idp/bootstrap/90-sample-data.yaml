@@ -284,6 +284,146 @@ attributes:
 credentials:
   password: "{{ .SAMPLE_USER_PASSWORD }}"
 ---
+# File: cda_application_reviewer.yaml
+resource_type: user
+id: 9a75f441-306b-4e16-980b-54231b8fde04
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_application_reviewer@government.dev"
+  family_name: "Application Reviewer"
+  given_name: "CDA"
+  phone_number: "+94771234593"
+  username: "cda_application_reviewer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_payment_officer.yaml
+resource_type: user
+id: 545b5e50-a4bd-4efd-98fa-145c6df881c5
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_payment_officer@government.dev"
+  family_name: "Payment Officer"
+  given_name: "CDA"
+  phone_number: "+94771234594"
+  username: "cda_payment_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_technical_support_officer.yaml
+resource_type: user
+id: bf161c88-1a5f-449d-8f8a-ca61ccbdae5f
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_technical_support_officer@government.dev"
+  family_name: "Technical Support Officer"
+  given_name: "CDA"
+  phone_number: "+94771234595"
+  username: "cda_technical_support_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_certificate_authorizer.yaml
+resource_type: user
+id: ac949d91-56ba-4de6-9cec-0662d4fdc099
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_certificate_authorizer@government.dev"
+  family_name: "Certificate Authorizer"
+  given_name: "CDA"
+  phone_number: "+94771234596"
+  username: "cda_certificate_authorizer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_processing_senior_officer.yaml
+resource_type: user
+id: dcab7c4b-fc7f-49ca-9649-c13bf9c7a83a
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_processing_senior_officer@government.dev"
+  family_name: "Processing Senior Officer"
+  given_name: "CDA"
+  phone_number: "+94771234597"
+  username: "cda_processing_senior_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_marketing_senior_officer.yaml
+resource_type: user
+id: 2dac9a8e-ca87-4e99-82f6-8a3580d20a23
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_marketing_senior_officer@government.dev"
+  family_name: "Marketing Senior Officer"
+  given_name: "CDA"
+  phone_number: "+94771234598"
+  username: "cda_marketing_senior_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_asycuda_officer.yaml
+resource_type: user
+id: 4ebb6a81-6563-42c9-a53e-9f4dd0b0d889
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_asycuda_officer@government.dev"
+  family_name: "ASYCUDA Officer"
+  given_name: "CDA"
+  phone_number: "+94771234599"
+  username: "cda_asycuda_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_certificate_authorizer_in_lieu.yaml
+resource_type: user
+id: c0243f76-433a-4ec5-8487-1f8edc10d2d7
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_certificate_authorizer_in_lieu@government.dev"
+  family_name: "Certificate Authorizer (In Lieu)"
+  given_name: "CDA"
+  phone_number: "+94771234600"
+  username: "cda_certificate_authorizer_in_lieu"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_application_reviewer_in_lieu.yaml
+resource_type: user
+id: e573b30a-1fd2-46ce-a63c-c2a9ac52f00a
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_application_reviewer_in_lieu@government.dev"
+  family_name: "Application Reviewer (In Lieu)"
+  given_name: "CDA"
+  phone_number: "+94771234601"
+  username: "cda_application_reviewer_in_lieu"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_asycuda_officer_in_lieu.yaml
+resource_type: user
+id: 986c7ae2-4e4d-4d3d-8af9-cbca037ef6b9
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_asycuda_officer_in_lieu@government.dev"
+  family_name: "ASYCUDA Officer (In Lieu)"
+  given_name: "CDA"
+  phone_number: "+94771234602"
+  username: "cda_asycuda_officer_in_lieu"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
 # File: CHA.yaml
 resource_type: group
 id: 01a13912-d495-7400-b5bc-541433e05751
@@ -448,4 +588,104 @@ description: NPPO officers group
 ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
 members:
   - id: ec4bc14f-40d2-4432-ab75-ed5c8527259d
+    type: user
+---
+# File: Application_Reviewing_Officers.yaml
+resource_type: group
+id: c8ba60d2-1b87-455e-baf9-45eaed9e9f2e
+name: CDA Application Reviewing Officers
+description: CDA Application Reviewing Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: 9a75f441-306b-4e16-980b-54231b8fde04
+    type: user
+---
+# File: Payment_Confirming_Officers.yaml
+resource_type: group
+id: 26163c33-6090-45d3-9bf4-0a360c6ce321
+name: CDA Payment Confirming Officers
+description: CDA Payment Confirming Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: 545b5e50-a4bd-4efd-98fa-145c6df881c5
+    type: user
+---
+# File: Technical_Support_Officers.yaml
+resource_type: group
+id: de8aa8e3-4068-4119-84b6-f5801cea4ec2
+name: CDA Technical Support Officers
+description: CDA Technical Support Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: bf161c88-1a5f-449d-8f8a-ca61ccbdae5f
+    type: user
+---
+# File: Quality_Certificate_Authorizing_Officers.yaml
+resource_type: group
+id: e1babfab-844b-4579-a408-1dec044c2400
+name: CDA Quality Certificate Authorizing Officers
+description: CDA Quality Certificate Authorizing Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: ac949d91-56ba-4de6-9cec-0662d4fdc099
+    type: user
+---
+# File: Processing_Division_Senior_Officers.yaml
+resource_type: group
+id: 27e6480e-3e9a-4ad6-8dee-cd68691a329b
+name: CDA Processing Division Senior Officers
+description: CDA Processing Division Senior Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: dcab7c4b-fc7f-49ca-9649-c13bf9c7a83a
+    type: user
+---
+# File: Marketing_Division_Senior_Officers.yaml
+resource_type: group
+id: 4347c288-2173-4243-ae7c-0f19331cf879
+name: CDA Marketing Division Senior Officers
+description: CDA Marketing Division Senior Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: 2dac9a8e-ca87-4e99-82f6-8a3580d20a23
+    type: user
+---
+# File: ASYCUDA_Green_Check_Officers.yaml
+resource_type: group
+id: 513775ed-350b-4a18-bc05-4c6b1d68dff8
+name: CDA ASYCUDA Green Check Officers
+description: CDA ASYCUDA Green Check Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: 4ebb6a81-6563-42c9-a53e-9f4dd0b0d889
+    type: user
+---
+# File: Quality_Certificate_Authorizing_Officers_In_Lieu.yaml
+resource_type: group
+id: 0f7aeb4d-16c1-4367-b098-5046a2916a26
+name: CDA Quality Certificate Authorizing Officers (In Lieu)
+description: CDA Quality Certificate Authorizing Officers (In Lieu) group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: c0243f76-433a-4ec5-8487-1f8edc10d2d7
+    type: user
+---
+# File: Application_Reviewing_Officers_In_Lieu.yaml
+resource_type: group
+id: 66d97b1b-aa67-4ffa-8be8-b04803eec11f
+name: CDA Application Reviewing Officers (In Lieu)
+description: CDA Application Reviewing Officers (In Lieu) group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: e573b30a-1fd2-46ce-a63c-c2a9ac52f00a
+    type: user
+---
+# File: ASYCUDA_Green_Check_Officers_In_Lieu.yaml
+resource_type: group
+id: 06d41856-93f8-4464-9815-7b59c7462556
+name: CDA ASYCUDA Green Check Officers (In Lieu)
+description: CDA ASYCUDA Green Check Officers (In Lieu) group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: 986c7ae2-4e4d-4d3d-8af9-cbca037ef6b9
     type: user

@@ -307,7 +307,7 @@ So declare every field a file upload writes: one missing from `files` reaches th
 A `MARKDOWN` section's template is a Go `text/template` filled with the section's data, and the portal renders the result as markdown. Two kinds of link mean something of their own there:
 
 - `[label](files:{{.path}})` links a file in the task's data. The path must be one of the render config's [`files`](#file-fields), so that the value the template prints is a reference issued to the reader. Clicking it opens the file in a new tab. A field with no file shows the label as plain text.
-- `` [`{{.reference_number}}`](copy:) `` shows a value as code with a copy button inside it, for a value the reader quotes elsewhere, such as a reference, certificate or invoice number. Keep the value inside the code, so an `_` or `*` in it stays as written. A value that comes out empty or blank shows nothing. Code outside a `copy:` link has no button.
+- ``[`{{.reference_number}}`](copy:)`` shows a value as code with a copy button inside it, for a value the reader quotes elsewhere, such as a reference, certificate or invoice number. Keep the value inside the code, so an `_` or `*` in it stays as written. A value that comes out empty or blank shows nothing. Code outside a `copy:` link has no button.
 
 ### Interactive Form Template Example (`render.json`)
 

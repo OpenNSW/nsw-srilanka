@@ -94,6 +94,16 @@ authn:
 catalog:
   roles:
     officer: CDA Officer
+    application_reviewer: CDA Application Reviewing Officer
+    application_reviewer_in_lieu: CDA Application Reviewing Officer (In Lieu)
+    payment_officer: CDA Payment Confirming Officer
+    technical_support_officer: CDA Technical Support Officer
+    certificate_authorizer: CDA Quality Certificate Authorizing Officer
+    certificate_authorizer_in_lieu: CDA Quality Certificate Authorizing Officer (In Lieu)
+    processing_senior_officer: CDA Processing Division Senior Officer
+    marketing_senior_officer: CDA Marketing Division Senior Officer
+    asycuda_officer: CDA ASYCUDA Green Check Officer
+    asycuda_officer_in_lieu: CDA ASYCUDA Green Check Officer (In Lieu)
   clients:
     tnsw: NSW_TO_CDA
 

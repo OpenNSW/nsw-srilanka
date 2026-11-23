@@ -1,4 +1,5 @@
-# Agency: CDA. Its OU, API resource server, officer role and group, officer portal,
+# Agency: CDA. Its OU, API resource server, officer, staff and admin roles and their
+# groups, officer portal,
 # and the NSW_TO_CDA M2M client with its role (it injects into the agency and replies
 # on its parked steps). CDA's own client for calling TNSW, CDA_TO_NSW, is in
 # 15-tnsw-agency-clients.yaml. Needs 10-nsw-platform.yaml.
@@ -141,6 +142,266 @@ resource_type: group
 id: 4d2e3edc-30c7-4a3a-8801-321ff02c5eab
 name: CDA Admins
 description: CDA admins group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: Application_Reviewing_Officer.yaml
+resource_type: role
+id: 1666669c-68fc-4fd5-bbd0-2c3823f23a93
+name: CDA Application Reviewing Officer
+description: Role for CDA application reviewing officers, who verify and review export coconut certificate applications
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: c8ba60d2-1b87-455e-baf9-45eaed9e9f2e
+    type: group
+---
+# File: Application_Reviewing_Officers.yaml
+resource_type: group
+id: c8ba60d2-1b87-455e-baf9-45eaed9e9f2e
+name: CDA Application Reviewing Officers
+description: CDA Application Reviewing Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: Application_Reviewing_Officer_In_Lieu.yaml
+resource_type: role
+id: 8548b7d9-0f68-41fa-aef5-9fe4d6b69902
+name: CDA Application Reviewing Officer (In Lieu)
+description: Role for CDA officers who verify and review export coconut certificate applications in lieu of the Application Reviewing Officer
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 66d97b1b-aa67-4ffa-8be8-b04803eec11f
+    type: group
+---
+# File: Application_Reviewing_Officers_In_Lieu.yaml
+resource_type: group
+id: 66d97b1b-aa67-4ffa-8be8-b04803eec11f
+name: CDA Application Reviewing Officers (In Lieu)
+description: CDA Application Reviewing Officers (In Lieu) group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: Payment_Confirming_Officer.yaml
+resource_type: role
+id: bb0d7e46-3207-4d31-ab55-30cde2e31f94
+name: CDA Payment Confirming Officer
+description: Role for CDA payment confirming officers, who confirm that application fees reached the CDA account
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 26163c33-6090-45d3-9bf4-0a360c6ce321
+    type: group
+---
+# File: Payment_Confirming_Officers.yaml
+resource_type: group
+id: 26163c33-6090-45d3-9bf4-0a360c6ce321
+name: CDA Payment Confirming Officers
+description: CDA Payment Confirming Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: Technical_Support_Officer.yaml
+resource_type: role
+id: a4cc623e-2511-4556-b024-88fcbf0a4529
+name: CDA Technical Support Officer
+description: Role for CDA technical support officers working export coconut certificate tasks
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: de8aa8e3-4068-4119-84b6-f5801cea4ec2
+    type: group
+---
+# File: Technical_Support_Officers.yaml
+resource_type: group
+id: de8aa8e3-4068-4119-84b6-f5801cea4ec2
+name: CDA Technical Support Officers
+description: CDA Technical Support Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: Quality_Certificate_Authorizing_Officer.yaml
+resource_type: role
+id: 6349508c-dd43-47d7-a662-c126aca5c3d7
+name: CDA Quality Certificate Authorizing Officer
+description: Role for CDA officers who authorize and issue export coconut quality certificates
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: e1babfab-844b-4579-a408-1dec044c2400
+    type: group
+---
+# File: Quality_Certificate_Authorizing_Officers.yaml
+resource_type: group
+id: e1babfab-844b-4579-a408-1dec044c2400
+name: CDA Quality Certificate Authorizing Officers
+description: CDA Quality Certificate Authorizing Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: Quality_Certificate_Authorizing_Officer_In_Lieu.yaml
+resource_type: role
+id: 3af49c90-ec1d-4b69-8111-b715d307e6c5
+name: CDA Quality Certificate Authorizing Officer (In Lieu)
+description: Role for CDA officers who authorize and issue export coconut quality certificates in lieu of the Quality Certificate Authorizing Officer
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 0f7aeb4d-16c1-4367-b098-5046a2916a26
+    type: group
+---
+# File: Quality_Certificate_Authorizing_Officers_In_Lieu.yaml
+resource_type: group
+id: 0f7aeb4d-16c1-4367-b098-5046a2916a26
+name: CDA Quality Certificate Authorizing Officers (In Lieu)
+description: CDA Quality Certificate Authorizing Officers (In Lieu) group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: Processing_Division_Senior_Officer.yaml
+resource_type: role
+id: 1b17a38e-3b28-4cf5-9833-7bca9c131d0b
+name: CDA Processing Division Senior Officer
+description: Role for CDA senior officers overseeing all processes of the Processing Division
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 27e6480e-3e9a-4ad6-8dee-cd68691a329b
+    type: group
+---
+# File: Processing_Division_Senior_Officers.yaml
+resource_type: group
+id: 27e6480e-3e9a-4ad6-8dee-cd68691a329b
+name: CDA Processing Division Senior Officers
+description: CDA Processing Division Senior Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: Marketing_Division_Senior_Officer.yaml
+resource_type: role
+id: 5280d212-9b9a-4b56-84d8-098805aaa7ff
+name: CDA Marketing Division Senior Officer
+description: Role for CDA senior officers overseeing export approvals for the Marketing Division
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 4347c288-2173-4243-ae7c-0f19331cf879
+    type: group
+---
+# File: Marketing_Division_Senior_Officers.yaml
+resource_type: group
+id: 4347c288-2173-4243-ae7c-0f19331cf879
+name: CDA Marketing Division Senior Officers
+description: CDA Marketing Division Senior Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: ASYCUDA_Green_Check_Officer.yaml
+resource_type: role
+id: 115f6400-d471-4156-9f75-367a190fccd5
+name: CDA ASYCUDA Green Check Officer
+description: Role for CDA officers who do the ASYCUDA green check on export coconut certificates
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 513775ed-350b-4a18-bc05-4c6b1d68dff8
+    type: group
+---
+# File: ASYCUDA_Green_Check_Officers.yaml
+resource_type: group
+id: 513775ed-350b-4a18-bc05-4c6b1d68dff8
+name: CDA ASYCUDA Green Check Officers
+description: CDA ASYCUDA Green Check Officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+---
+# File: ASYCUDA_Green_Check_Officer_In_Lieu.yaml
+resource_type: role
+id: 36059cd3-ca52-4e91-82bc-30573da3edac
+name: CDA ASYCUDA Green Check Officer (In Lieu)
+description: Role for CDA officers who do the ASYCUDA green check on export coconut certificates in lieu of the ASYCUDA Green Check Officer
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+permissions:
+  - resourceServerId: 01a13912-c931-7455-a232-a8dded191be7
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 06d41856-93f8-4464-9815-7b59c7462556
+    type: group
+---
+# File: ASYCUDA_Green_Check_Officers_In_Lieu.yaml
+resource_type: group
+id: 06d41856-93f8-4464-9815-7b59c7462556
+name: CDA ASYCUDA Green Check Officers (In Lieu)
+description: CDA ASYCUDA Green Check Officers (In Lieu) group
 ouId: 01a13912-d209-78da-9de0-dd544935e1ae
 ---
 # File: CDAPortalApp.yaml

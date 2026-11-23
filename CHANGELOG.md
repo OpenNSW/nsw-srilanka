@@ -625,11 +625,11 @@ For a local IdP, recreate its volumes: see [`idp/README.md`](https://github.com/
 
 - In the `refid` section of TNSW's and each agency's `config.yaml` (Helm: `backend.config.refid`), change every format that has a `date` segment, and add `timezone: Asia/Colombo` beside its `idType:`. A format without a date segment needs no change.
 
-  | Before           | After             |
-  | ---------------- | ----------------- |
-  | `layout: "2006"` | `format: "yyyy"`  |
-  | `layout: "01"`   | `format: "MM"`    |
-  | `layout: "06"`   | `format: "yy"`    |
+  | Before           | After            |
+  | ---------------- | ---------------- |
+  | `layout: "2006"` | `format: "yyyy"` |
+  | `layout: "01"`   | `format: "MM"`   |
+  | `layout: "06"`   | `format: "yy"`   |
 
 - The formats with a date segment are `blend_sheet_no`, `npqs_payment_ref`, `pqc_application_ref`, `pqc_certificate_serial`, `phyto_request_ref`, `lab_sample_ref` and `sample_ref`. Copy them from [`configs/config.example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.14.0/configs/config.example.yaml), [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.14.0/deployments/helm/values-example.yaml) or [`configs/agency/`](https://github.com/OpenNSW/nsw-srilanka/tree/v0.14.0/configs/agency).
 - The new build refuses a `layout:` (`refid: date segment requires a non-empty format`) and a dated format with no `timezone`, and the server stops at startup.
