@@ -52,6 +52,15 @@ export async function uploadFile(file: File, signal?: AbortSignal): Promise<Uplo
     throw new Error(`Failed to upload file to storage: ${uploadResponse.status} ${uploadResponse.statusText}`)
   }
 
+  // The PUT goes to the storage backend, not this API. Confirm so logs can
+  // tell a finished upload from a prepare that never completed.
+  await http.request({
+    url: `${API_BASE_URL}/api/v1/storage/${encodeURIComponent(metadata.key)}/confirm`,
+    method: 'POST',
+    attachToken: true,
+    signal,
+  })
+
   return { key: metadata.key, name: metadata.name }
 }
 
