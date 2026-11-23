@@ -177,3 +177,90 @@ describe('FormRenderer', () => {
     expect(screen.getByRole('alertdialog', { name: 'Submit?' })).toBeTruthy()
   })
 })
+
+// Refetching the task (the task screen's Refresh, a claim or a release)
+// rerenders the mounted form with a freshly parsed payload: equal content,
+// new objects.
+describe('FormRenderer on a refetched task', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function renderRefetchable(data: Record<string, unknown>, onAction: ZoneAction) {
+    const form = (payload: FormPayload) => (
+      <Theme>
+        <FormRenderer payload={payload} handles={[draft, submit]} onAction={onAction} />
+      </Theme>
+    )
+    const { rerender } = render(form({ schema, uiSchema, data }))
+    return {
+      refetch: (refetched: Record<string, unknown>, parts: { schema?: boolean; uiSchema?: boolean } = {}) =>
+        act(async () => {
+          rerender(
+            form({
+              schema: parts.schema === false ? schema : structuredClone(schema),
+              uiSchema: parts.uiSchema === false ? uiSchema : structuredClone(uiSchema),
+              data: refetched,
+            }),
+          )
+          await vi.advanceTimersByTimeAsync(100)
+        }),
+    }
+  }
+
+  const nameField = () => screen.getByRole<HTMLInputElement>('textbox')
+
+  it('keeps a saved draft on screen, and does not save it again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const onAction = vi.fn<ZoneAction>().mockResolvedValue(undefined)
+    const { refetch } = renderRefetchable({ name: 'Tea' }, onAction)
+    await typeName('Coffee')
+    fireEvent.click(formButton('Save as Draft'))
+    await act(async () => vi.advanceTimersByTimeAsync(100))
+
+    await refetch({ name: 'Coffee' })
+    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+
+    expect(nameField().value).toBe('Coffee')
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(onAction).toHaveBeenCalledWith('save', { name: 'Coffee' }, { draft: true })
+  })
+
+  it('keeps unsaved input, and autosaves it rather than the data the form opened with', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const onAction = vi.fn<ZoneAction>().mockResolvedValue(undefined)
+    const { refetch } = renderRefetchable({ name: 'Tea' }, onAction)
+    await typeName('Coffee')
+
+    await refetch({ name: 'Tea' })
+    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+
+    expect(nameField().value).toBe('Coffee')
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(onAction).toHaveBeenCalledWith('save', { name: 'Coffee' }, { draft: true })
+  })
+
+  it('keeps input when only the uiSchema is a new object', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const onAction = vi.fn<ZoneAction>().mockResolvedValue(undefined)
+    const { refetch } = renderRefetchable({ name: 'Tea' }, onAction)
+    await typeName('Coffee')
+
+    await refetch({ name: 'Tea' }, { schema: false })
+
+    expect(nameField().value).toBe('Coffee')
+  })
+
+  it('saves nothing when nothing was entered', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const onAction = vi.fn<ZoneAction>().mockResolvedValue(undefined)
+    const { refetch } = renderRefetchable({ name: 'Tea' }, onAction)
+    await act(async () => vi.advanceTimersByTimeAsync(100))
+
+    await refetch({ name: 'Tea' })
+    await act(async () => vi.advanceTimersByTimeAsync(30_000))
+
+    expect(nameField().value).toBe('Tea')
+    expect(onAction).not.toHaveBeenCalled()
+  })
+})
