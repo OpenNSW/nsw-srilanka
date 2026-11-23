@@ -33,8 +33,9 @@ function seedWithDefaults(
 // A stable empty array, not a fresh `[]` literal at the call site.
 //
 // @jsonforms/core's JsonFormsStateProvider re-syncs its internal store
-// whenever the `data`, `additionalErrors`, or `validationMode` props it's
-// given change reference (they're all in one effect's dependency array) by
+// whenever the `data`, `schema`, `uischema`, `additionalErrors`, or
+// `validationMode` props it's given change reference (they're all in one
+// effect's dependency array) by
 // dispatching `updateCore` — which unconditionally overwrites its own
 // internal data with whatever `data` prop it's handed, with no check for
 // whether that's older than what it already has. Two things below keep both
@@ -178,8 +179,8 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     [payload.schema, i18n, t],
   )
 
-  // Catch dataSeed up to data, synchronously, exactly when additionalErrors
-  // or validationMode is about to change — the only moments JsonForms's
+  // Catch dataSeed up to data, synchronously, exactly when additionalErrors,
+  // validationMode, schema or uiSchema is about to change — the only moments JsonForms's
   // resync effect actually fires (see EMPTY_ADDITIONAL_ERRORS above).
   // Outside of those moments dataSeed simply stays put: JsonForms's own
   // internal reducer is the source of truth for what's being typed
@@ -201,13 +202,38 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // repeated runs; only an unrealistic zero-delay, script-driven click
   // (impossible for an actual person, who needs time to see the file dialog
   // close and move to the button) hit this floor, and rarely even then.
+  //
+  // A new schema or uiSchema reference is one of those moments too, even with
+  // the same content: refetching the task (the task screen's Refresh, a claim
+  // or a release) hands this component a freshly parsed payload without
+  // remounting it. JsonForms then resets its data to the `data` prop, so that
+  // prop must be what the user has entered, not the data the form mounted
+  // with, or everything entered since (uploaded files included) is dropped and
+  // the autosave stores the older data over the draft.
   const [lastFed, setLastFed] = useState<{
     additionalErrors: RequiredFieldError[]
     validationMode: 'ValidateAndShow' | 'ValidateAndHide'
-  }>({ additionalErrors: EMPTY_ADDITIONAL_ERRORS, validationMode: 'ValidateAndHide' })
-  if (lastFed.additionalErrors !== stableAdditionalErrors || lastFed.validationMode !== validationMode) {
+    schema: Props['payload']['schema']
+    uiSchema: Props['payload']['uiSchema']
+  }>(() => ({
+    additionalErrors: EMPTY_ADDITIONAL_ERRORS,
+    validationMode: 'ValidateAndHide',
+    schema: payload.schema,
+    uiSchema: payload.uiSchema,
+  }))
+  if (
+    lastFed.additionalErrors !== stableAdditionalErrors ||
+    lastFed.validationMode !== validationMode ||
+    lastFed.schema !== payload.schema ||
+    lastFed.uiSchema !== payload.uiSchema
+  ) {
     if (dataSeed !== data) setDataSeed(data)
-    setLastFed({ additionalErrors: stableAdditionalErrors, validationMode })
+    setLastFed({
+      additionalErrors: stableAdditionalErrors,
+      validationMode,
+      schema: payload.schema,
+      uiSchema: payload.uiSchema,
+    })
   }
 
   // A FORM zone is editable iff it has at least one legal handle and a
