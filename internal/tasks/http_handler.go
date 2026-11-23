@@ -312,12 +312,13 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, ok := h.decodeEnvelope(w, r, "taskId", taskID, "stepId", stepID)
+	req, ok := h.decodeEnvelope(w, r, true, "taskId", taskID, "stepId", stepID)
 	if !ok {
 		return
 	}
 	if req.Command != "" {
 		slog.ErrorContext(r.Context(), "tasks: draft request names a command", "taskId", taskID, "stepId", stepID, "command", req.Command)
+		h.auditTaskUpdate(r.Context(), taskID, true, taskAuditMeta(http.StatusBadRequest, errInvalidRequestBody, "taskId", taskID, "stepId", stepID, "draft", true, "command", req.Command), auditRequestMessage(req.Command, req.Payload, true))
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
 		return
 	}
@@ -341,7 +342,7 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 // On a bad request it writes the error response and returns false. logAttrs name
 // the step in the log lines.
 func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, logAttrs ...any) (map[string]any, bool) {
-	req, ok := h.decodeEnvelope(w, r, logAttrs...)
+	req, ok := h.decodeEnvelope(w, r, false, logAttrs...)
 	if !ok {
 		return nil, false
 	}
@@ -365,9 +366,10 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 
 // decodeEnvelope reads the {command, payload} envelope the completion and draft
 // routes take: one JSON value within the size limit, whose payload does not set
-// the reserved "__command" key. On a bad request it writes the error response and
-// returns false. logAttrs name the step in the log lines.
-func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, logAttrs ...any) (completeTaskStepRequest, bool) {
+// the reserved "__command" key. draft is true on the draft route so parse-failure
+// audits use the draft envelope shape. On a bad request it writes the error
+// response and returns false. logAttrs name the step in the log lines.
+func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, draft bool, logAttrs ...any) (completeTaskStepRequest, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
 
 	ctx := r.Context()
@@ -378,7 +380,10 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, log
 		if req.Command != "" {
 			meta["command"] = req.Command
 		}
-		h.auditTaskUpdate(ctx, attrString(logAttrs, "taskId"), true, meta, auditEnvelopeMessage(req))
+		if draft {
+			meta["draft"] = true
+		}
+		h.auditTaskUpdate(ctx, attrString(logAttrs, "taskId"), true, meta, auditEnvelopeMessage(req, draft))
 		httputil.Error(w, r, status, message)
 	}
 
@@ -568,12 +573,13 @@ func auditRequestMessage(command string, payload map[string]any, draft bool) any
 }
 
 // auditEnvelopeMessage is auditRequestMessage for a decoded request envelope,
-// including partial bodies on parse failure.
-func auditEnvelopeMessage(req completeTaskStepRequest) any {
+// including partial bodies on parse failure. draft selects the draft envelope
+// shape; it is not inferred from an empty command.
+func auditEnvelopeMessage(req completeTaskStepRequest, draft bool) any {
 	if req.Command == "" && len(req.Payload) == 0 {
 		return nil
 	}
-	return auditRequestMessage(req.Command, req.Payload, req.Command == "")
+	return auditRequestMessage(req.Command, req.Payload, draft)
 }
 
 // cloneFormPayload returns a deep copy of payload without the reserved

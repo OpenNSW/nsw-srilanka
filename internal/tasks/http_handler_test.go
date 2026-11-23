@@ -1024,6 +1024,36 @@ func TestAuditRequestMessage_OmitsCommandKey(t *testing.T) {
 	assert.Equal(t, map[string]any{"payload": map[string]any{"note": "hi"}}, draft)
 }
 
+func TestAuditEnvelopeMessage_UsesRouteDraftFlag(t *testing.T) {
+	req := completeTaskStepRequest{Command: "submit", Payload: map[string]any{"note": "hi"}}
+	assert.Equal(t, map[string]any{
+		"command": "submit",
+		"payload": map[string]any{"note": "hi"},
+	}, auditEnvelopeMessage(req, false))
+	// Draft route keeps the draft envelope even when a command was wrongly sent.
+	assert.Equal(t, map[string]any{"payload": map[string]any{"note": "hi"}}, auditEnvelopeMessage(req, true))
+}
+
+func TestHandleSaveDraft_AuditsWhenCommandPresent(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	h := &HTTPHandler{MaxRequestBytes: 1024, Audit: client, Store: pendingFileTask()}
+	body := `{"command":"submit","payload":{"note":"x"}}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-0/draft", strings.NewReader(body))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-0")
+	rec := httptest.NewRecorder()
+	h.HandleSaveDraft(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, true, recs[0].Metadata["draft"])
+	assert.Equal(t, "submit", recs[0].Metadata["command"])
+	var msg map[string]any
+	require.NoError(t, json.Unmarshal(recs[0].Message, &msg))
+	assert.Equal(t, map[string]any{"payload": map[string]any{"note": "x"}}, msg)
+}
+
 func TestAuditRequestMessage_SurvivesInPlaceFileResolve(t *testing.T) {
 	payload := map[string]any{
 		"docs": map[string]any{"scan": "user-ref"},
