@@ -305,28 +305,29 @@ resource server.
 not from the app's requestable `scopes` list. So every caller is granted the relevant
 scopes via a role:
 
-| Caller                 | Grant                                                                                                                                                                        |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes. Both get `consignment:flow:write` (start a flow on a consignment); only `Trader` gets `consignment:write` (create one) |
-| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                |
-| `*_TO_NSW` M2M clients | **`AGENCY_TO_TNSW` role assigned to the application** (`type: app`) → `consignment:read`, `task:write`, `storage:read`, `storage:write` on `NSW_API`                         |
-| `NPQS_TO_NSW`          | Also **`AGENCY_TO_TNSW_PRIVILEGED`**, assigned to the application → `storage:internalwrite` on `NSW_API`, for the internal upload route                                      |
-| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                                                                                               |
-| CDA admin users        | `CDA Admin` role (via `CDA Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                |
-| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `workflow:inject`, `task:write` on the CDA API                                                                          |
-| EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                                                                                               |
-| EFC admin users        | `EFC Admin` role (via `EFC Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                |
-| `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `workflow:inject`, `task:write` on the EFC API                                                                          |
-| NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                                                                                            |
-| NPQS staff users       | `NPPO Assistant`, `NPPO Inspector` and `NPPO Officer` roles (via the `NPPO Assistants`, `NPPO Inspectors` and `NPPO Officers` groups) → the `NPQS Officer` scopes            |
-| NPQS admin users       | `NPQS Admin` role (via `NPQS Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                              |
-| SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                                                                                            |
-| SLTB admin users       | `SLTB Admin` role (via `SLTB Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                              |
-| `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `workflow:inject`, `task:write` on the NPQS API                                                                        |
-| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `workflow:inject`, `task:write` on the SLTB API                                                                        |
-| FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                                                                                            |
-| FCAU admin users       | `FCAU Admin` role (via `FCAU Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                              |
-| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `workflow:inject`, `task:write` on the FCAU API                                                                        |
+| Caller                 | Grant                                                                                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes. Both get `consignment:flow:write` (start a flow on a consignment); only `Trader` gets `consignment:write` (create one)                                        |
+| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                                                       |
+| `*_TO_NSW` M2M clients | **`AGENCY_TO_TNSW` role assigned to the application** (`type: app`) → `consignment:read`, `task:write`, `storage:read`, `storage:write` on `NSW_API`                                                                |
+| `NPQS_TO_NSW`          | Also **`AGENCY_TO_TNSW_PRIVILEGED`**, assigned to the application → `storage:internalwrite` on `NSW_API`, for the internal upload route                                                                             |
+| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                                                                                                                                      |
+| CDA admin users        | `CDA Admin` role (via `CDA Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                                                       |
+| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `workflow:inject`, `task:write` on the CDA API                                                                                                                 |
+| EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                                                                                                                                      |
+| EFC admin users        | `EFC Admin` role (via `EFC Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                                                       |
+| `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `workflow:inject`, `task:write` on the EFC API                                                                                                                 |
+| NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                                                                                                                                   |
+| NPQS staff users       | `NPPO Assistant`, `NPPO Inspector` and `NPPO Officer` roles (via the `NPPO Assistants`, `NPPO Inspectors` and `NPPO Officers` groups) → the `NPQS Officer` scopes                                                   |
+| NPQS admin users       | `NPQS Admin` role (via `NPQS Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                                                     |
+| SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                                                                                                                                   |
+| SLTB admin users       | `SLTB Admin` role (via `SLTB Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                                                     |
+| `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `workflow:inject`, `task:write` on the NPQS API                                                                                                               |
+| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `workflow:inject`, `task:write` on the SLTB API                                                                                                               |
+| FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                                                                                                                                   |
+| FCAU staff users       | `FCAU Director`, `FCAU Assistant Director` and `FCAU Food and Drugs Inspector` roles (via the `FCAU Directors`, `FCAU Assistant Directors` and `FCAU Food and Drugs Inspectors` groups) → the `FCAU Officer` scopes |
+| FCAU admin users       | `FCAU Admin` role (via `FCAU Admins` group) → `consignment:adminread`, `consignment:adminwrite`, `profile:read`                                                                                                     |
+| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `workflow:inject`, `task:write` on the FCAU API                                                                                                               |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to

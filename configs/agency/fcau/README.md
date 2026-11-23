@@ -76,12 +76,15 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates FCAU for this deployment, on the `FCAU API` resource server
 (`https://api.fcau.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                             | Client                | Grant                                                                                                                      |
-| ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Officer `fcau_officer`             | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
-| Admin `fcau_admin`                 | `OGA_PORTAL_APP_FCAU` | `FCAU Admin` role (via `FCAU Admins`): `consignment:adminread`/`adminwrite`, `profile:read`                                |
-| TNSW injecting and replying        | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `workflow:inject`, and `task:write` to reply on FCAU's parked steps, which its catalog maps `tnsw` to |
-| FCAU decision callback and storage | `FCAU_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` and `storage:read`/`write` on TNSW                                                     |
+| Caller                                               | Client                | Grant                                                                                                                            |
+| ---------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Officer `fcau_officer`                               | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                             |
+| Director `fcau_director`                             | `OGA_PORTAL_APP_FCAU` | `FCAU Director` role (via `FCAU Directors`): the `FCAU Officer` scopes; views the matrix tasks                                   |
+| Assistant Director `fcau_assistant_director`         | `OGA_PORTAL_APP_FCAU` | `FCAU Assistant Director` role (via `FCAU Assistant Directors`): the `FCAU Officer` scopes; views the matrix tasks               |
+| Food and Drugs Inspector `fcau_food_drugs_inspector` | `OGA_PORTAL_APP_FCAU` | `FCAU Food and Drugs Inspector` role (via `FCAU Food and Drugs Inspectors`): the `FCAU Officer` scopes; acts on the matrix tasks |
+| Admin `fcau_admin`                                   | `OGA_PORTAL_APP_FCAU` | `FCAU Admin` role (via `FCAU Admins`): `consignment:adminread`/`adminwrite`, `profile:read`                                      |
+| TNSW injecting and replying                          | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `workflow:inject`, and `task:write` to reply on FCAU's parked steps, which its catalog maps `tnsw` to       |
+| FCAU decision callback and storage                   | `FCAU_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` and `storage:read`/`write` on TNSW                                                           |
 
 `FCAU_TO_NSW` and the roles that grant it the NSW API are in TNSW's OU, in
 [`idp/bootstrap/15-tnsw-agency-clients.yaml`](../../../idp/bootstrap/15-tnsw-agency-clients.yaml).

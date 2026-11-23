@@ -93,6 +93,9 @@ authn:
 catalog:
   roles:
     officer: FCAU Officer
+    director: FCAU Director
+    assistant_director: FCAU Assistant Director
+    food_drugs_inspector: FCAU Food and Drugs Inspector
   clients:
     tnsw: NSW_TO_FCAU
 
