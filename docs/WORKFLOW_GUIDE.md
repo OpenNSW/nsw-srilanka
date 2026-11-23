@@ -397,7 +397,7 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 
 **Pointers:**
 
-- **Absolute:** a pointer starting with `/` is a [JSON Pointer](https://www.rfc-editor.org/rfc/rfc6901) from the root of the inputs.
+- **Absolute:** a pointer starting with `/` is a [JSON Pointer](https://www.rfc-editor.org/rfc/rfc6901.html) from the root of the inputs.
 - **Relative:** a pointer starting with `0/` is a [Relative JSON Pointer](https://datatracker.ietf.org/doc/html/draft-bhutton-relative-json-pointer) from the current element. It's only allowed in an entry with `each`. Only `0/` is supported.
 
 | Field       | Meaning                                                                                                                                                                                                                                          |

@@ -1,6 +1,6 @@
 # NSW Sri Lanka Platform
 
-[![Go Version](https://img.shields.io/badge/Go-1.27-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.27-blue.svg)](https://go.dev)
 ![Platform](https://img.shields.io/badge/NSW-Platform-green.svg)
 
 `nsw-srilanka` is the deployer-specific application repository for the **Sri Lanka instance** of the National Single Window (NSW) Platform.
