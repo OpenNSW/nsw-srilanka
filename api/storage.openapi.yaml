@@ -193,9 +193,14 @@ paths:
         (S3 or local content), so this API never sees it; call this afterwards
         so prepare and completed uploads can be told apart in logs.
 
+        Observability only: a failed confirm does not undo the PUT. Clients may
+        treat confirm as best-effort and keep using `{key}` after a successful
+        PUT even when confirm returns an error (for example the object is not
+        visible yet).
+
         `{key}` must be a file reference issued to the caller for an upload
         (the `key` from `POST /api/v1/storage` or `POST /api/v1/internal/storage`).
-        The object must already be present in storage.
+        The object must already be present in storage for a successful confirm.
 
         Requires scope `storage:write`.
       operationId: confirmUpload
