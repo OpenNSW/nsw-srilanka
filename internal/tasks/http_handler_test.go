@@ -152,7 +152,7 @@ func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
 	t.Run("draft", func(t *testing.T) {
 		client, capture := nswaudit.NewWithCapture()
 		h := &HTTPHandler{Audit: client}
-		h.writeCompletion(httptest.NewRecorder(), req, nil, "taskId", "t1", "stepId", "s1", "draft", true)
+		h.writeCompletion(httptest.NewRecorder(), req, nil, nil, "taskId", "t1", "stepId", "s1", "draft", true)
 		recs := capture.Records()
 		require.Len(t, recs, 1)
 		assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
@@ -166,7 +166,7 @@ func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
 		client, capture := nswaudit.NewWithCapture()
 		h := &HTTPHandler{Audit: client}
-		h.writeCompletion(httptest.NewRecorder(), req, payloadschema.ErrInvalidPayload, "taskId", "t1", "stepId", "s1", "command", "submit")
+		h.writeCompletion(httptest.NewRecorder(), req, payloadschema.ErrInvalidPayload, nil, "taskId", "t1", "stepId", "s1", "command", "submit")
 		recs := capture.Records()
 		require.Len(t, recs, 1)
 		assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
@@ -178,7 +178,7 @@ func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
 	t.Run("draft not enabled", func(t *testing.T) {
 		client, capture := nswaudit.NewWithCapture()
 		h := &HTTPHandler{Audit: client}
-		h.writeCompletion(httptest.NewRecorder(), req, orchestrator.ErrDraftNotEnabled, "taskId", "t1", "stepId", "s1", "draft", true)
+		h.writeCompletion(httptest.NewRecorder(), req, orchestrator.ErrDraftNotEnabled, nil, "taskId", "t1", "stepId", "s1", "draft", true)
 		recs := capture.Records()
 		require.Len(t, recs, 1)
 		assert.Equal(t, "draft_not_enabled", recs[0].Metadata["error"])
@@ -942,6 +942,10 @@ func TestHandleCompleteTaskStep_AuditsFileDenial(t *testing.T) {
 	assert.Equal(t, "file_not_yours", recs[0].Metadata["error"])
 	assert.Equal(t, http.StatusForbidden, recs[0].Metadata["status"])
 	assert.Equal(t, "submit", recs[0].Metadata["command"])
+	var msg map[string]any
+	require.NoError(t, json.Unmarshal(recs[0].Message, &msg))
+	assert.Equal(t, "submit", msg["command"])
+	assert.Equal(t, map[string]any{"invoice": alicesRef}, msg["payload"])
 }
 
 func TestHandleCompleteTaskStep_AuditsStaleStepWithCommand(t *testing.T) {
@@ -970,6 +974,10 @@ func TestHandleCompleteTaskStep_AuditsStaleStepWithCommand(t *testing.T) {
 	assert.Equal(t, "stale_step", recs[0].Metadata["error"])
 	assert.Equal(t, "step-0", recs[0].Metadata["stepId"])
 	assert.Equal(t, "submit", recs[0].Metadata["command"])
+	var msg map[string]any
+	require.NoError(t, json.Unmarshal(recs[0].Message, &msg))
+	assert.Equal(t, "submit", msg["command"])
+	assert.Equal(t, map[string]any{}, msg["payload"])
 }
 
 func TestHandleSaveDraft_AuditsStaleStepAsDraft(t *testing.T) {
@@ -998,6 +1006,22 @@ func TestHandleSaveDraft_AuditsStaleStepAsDraft(t *testing.T) {
 	assert.Equal(t, true, recs[0].Metadata["draft"])
 	_, hasCommand := recs[0].Metadata["command"]
 	assert.False(t, hasCommand)
+	var msg map[string]any
+	require.NoError(t, json.Unmarshal(recs[0].Message, &msg))
+	_, hasCmd := msg["command"]
+	assert.False(t, hasCmd)
+	assert.Equal(t, map[string]any{}, msg["payload"])
+}
+
+func TestAuditRequestMessage_OmitsCommandKey(t *testing.T) {
+	got := auditRequestMessage("submit", map[string]any{"__command": "submit", "note": "hi"}, false)
+	assert.Equal(t, map[string]any{
+		"command": "submit",
+		"payload": map[string]any{"note": "hi"},
+	}, got)
+
+	draft := auditRequestMessage("", map[string]any{"note": "hi"}, true)
+	assert.Equal(t, map[string]any{"payload": map[string]any{"note": "hi"}}, draft)
 }
 
 func TestResolveFiles_StoresTheValues(t *testing.T) {
@@ -1009,7 +1033,7 @@ func TestResolveFiles_StoresTheValues(t *testing.T) {
 	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("alice")))
 	payload := map[string]any{"invoice": ref, "__command": "submit"}
 
-	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload, []any{"taskId", testTaskID, "stepId", "step-1", "command", payload["__command"]})
+	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload, nil, []any{"taskId", testTaskID, "stepId", "step-1", "command", payload["__command"]})
 
 	require.True(t, ok)
 	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)
@@ -1069,7 +1093,7 @@ func TestWriteCompletion_DraftNotEnabledIsABadRequest(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/", nil)
 
-	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrDraftNotEnabled, "x"))
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrDraftNotEnabled, "x"), nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), errDraftNotEnabled)
@@ -1081,7 +1105,7 @@ func TestWriteCompletion_StepNotGuardedIsForbidden(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 
-	(&HTTPHandler{Audit: client}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, "x"), "taskId", "t1", "stepId", "s1")
+	(&HTTPHandler{Audit: client}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, "x"), nil, "taskId", "t1", "stepId", "s1")
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), errForbiddenTaskAction)
@@ -1099,7 +1123,7 @@ func TestWriteCompletion_InvalidPayloadIsABadRequest(t *testing.T) {
 		{Path: "/outcome", Message: "missing property"},
 	}}
 
-	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("PRE_RESUME extension %q failed: %w", "payload_schema", invalid))
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("PRE_RESUME extension %q failed: %w", "payload_schema", invalid), nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), errInvalidPayload)
