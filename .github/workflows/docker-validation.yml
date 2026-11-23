@@ -1,6 +1,6 @@
 name: Docker Validation CI
 # Validates that the deployable Docker images build successfully, and that each
-# has no fixable CRITICAL CVE, on PRs to main and in the merge queue, when any
+# has no fixable CRITICAL CVE, on PRs to main and release/** and in the merge queue, when any
 # file in a Docker build context changes; otherwise the builds are skipped. The
 # scan policy and accepted risks are in .github/scripts/trivy-image.sh and
 # .trivyignore. This workflow never pushes images. Image publishing is handled
@@ -8,7 +8,7 @@ name: Docker Validation CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
   merge_group:
 
 jobs:

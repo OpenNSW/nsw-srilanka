@@ -1,6 +1,8 @@
 name: Release - Tag from version.txt
 # Merging a change to version.txt releases that version: this tags the merge
-# commit vX.Y.Z and starts release.yml on the tag, so nobody tags by hand.
+# commit vX.Y.Z and starts release.yml on the tag, so nobody tags by hand. It
+# runs on main and on the maintenance branches (release/X.Y.x) that patch
+# releases come from.
 #
 # release.yml is started with workflow_dispatch because a tag pushed with
 # GITHUB_TOKEN does not trigger other workflows; dispatch is the exception. It
@@ -8,7 +10,7 @@ name: Release - Tag from version.txt
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
     paths: [version.txt]
 
 permissions:
@@ -53,6 +55,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           if ! { bash .github/scripts/check-version.sh "$TAG" && \
+                 bash .github/scripts/check-release-line.sh "$GITHUB_REF_NAME" "$TAG" && \
                  bash .github/scripts/release-notes.sh "$VERSION" > /dev/null; } 2> error.txt; then
             echo "::error file=version.txt::$(tr '\n' ' ' < error.txt)"
             exit 1

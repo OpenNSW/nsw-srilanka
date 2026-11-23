@@ -9,10 +9,16 @@
 # same order on new and existing databases. The SQL itself is checked by
 # applying it (test-migrations.sh).
 #
-# Usage: check-migrations.sh BASE
+# When BRANCH, the branch the change merges into, is a maintenance branch
+# (release/X.Y.x), no migration may be added either: a patch release ships no
+# migration, so a database never holds a version the next minor release
+# numbers differently.
+#
+# Usage: check-migrations.sh BASE [BRANCH]
 set -euo pipefail
 
-base="${1:?usage: check-migrations.sh BASE}"
+base="${1:?usage: check-migrations.sh BASE [BRANCH]}"
+branch="${2:-}"
 cd "$(git rev-parse --show-toplevel)"
 if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null; then
   echo "check-migrations.sh: '${base}' is not a commit in this repository; fetch it first." >&2
@@ -48,6 +54,14 @@ while IFS= read -r file; do
     fail "migrations/${file} is edited. The migrator never re-runs an applied migration, so the edit would never reach existing databases; add a new migration instead."
   fi
 done < <(git ls-tree --name-only "$base" migrations/ | sed 's|^migrations/||')
+
+if [[ "${branch#refs/heads/}" == release/* ]]; then
+  while IFS= read -r file; do
+    if ! git cat-file -e "${base}:migrations/${file}" 2>/dev/null; then
+      fail "migrations/${file} is new, but ${branch#refs/heads/} is a maintenance branch, and a patch release adds no migration. Ship it in the next release from main."
+    fi
+  done < <(names migrations)
+fi
 
 if [ "$errors" -gt 0 ]; then
   echo "${errors} problem(s) in migrations/." >&2
