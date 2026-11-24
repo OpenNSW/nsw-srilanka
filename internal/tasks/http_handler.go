@@ -4,6 +4,8 @@ package tasks
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -237,7 +239,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	// The same list is what a file-resolution denial records.
 	command, _ := payload[orchestrator.CommandVar].(string)
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", command}
-	body := auditRequestMessage(command, payload, false)
+	body := h.requestAuditMessage(command, payload, false)
 	if !h.resolveFiles(w, r, taskID, stepID, payload, body, attrs) {
 		return
 	}
@@ -279,7 +281,7 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	// The same list is what a file-resolution denial records.
 	command, _ := payload[orchestrator.CommandVar].(string)
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", command}
-	body := auditRequestMessage(command, payload, false)
+	body := h.requestAuditMessage(command, payload, false)
 	if !h.resolveFiles(w, r, taskID, stepID, payload, body, attrs) {
 		return
 	}
@@ -318,7 +320,7 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Command != "" {
 		slog.ErrorContext(r.Context(), "tasks: draft request names a command", "taskId", taskID, "stepId", stepID, "command", req.Command)
-		h.auditTaskUpdate(r.Context(), taskID, true, taskAuditMeta(http.StatusBadRequest, errInvalidRequestBody, "taskId", taskID, "stepId", stepID, "draft", true, "command", req.Command), auditRequestMessage(req.Command, req.Payload, true))
+		h.auditTaskUpdate(r.Context(), taskID, true, taskAuditMeta(http.StatusBadRequest, errInvalidRequestBody, "taskId", taskID, "stepId", stepID, "draft", true, "command", req.Command), h.requestAuditMessage(req.Command, req.Payload, true))
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
 		return
 	}
@@ -327,7 +329,7 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		payload = make(map[string]any)
 	}
 	attrs := []any{"taskId", taskID, "stepId", stepID, "draft", true}
-	body := auditRequestMessage("", payload, true)
+	body := h.requestAuditMessage("", payload, true)
 	if !h.resolveFiles(w, r, taskID, stepID, payload, body, attrs) {
 		return
 	}
@@ -383,7 +385,7 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, dra
 		if draft {
 			meta["draft"] = true
 		}
-		h.auditTaskUpdate(ctx, attrString(logAttrs, "taskId"), true, meta, auditEnvelopeMessage(req, draft))
+		h.auditTaskUpdate(ctx, attrString(logAttrs, "taskId"), true, meta, h.envelopeAuditMessage(req, draft))
 		httputil.Error(w, r, status, message)
 	}
 
@@ -426,7 +428,7 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, dra
 
 // resolveFiles replaces the file references in a submission for step stepID
 // of task taskID with the stored values they stand for, so only those are
-// stored. body is the request envelope recorded on category=audit only.
+// stored. body is the request fingerprint recorded on category=audit only.
 // auditAttrs is the slog-style list the denial and the completion record both
 // carry (no request body). On failure it writes the response and returns false.
 func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskID, stepID string, payload map[string]any, body any, auditAttrs []any) bool {
@@ -556,53 +558,69 @@ func taskAuditMeta(status int, errCode string, logAttrs ...any) map[string]any {
 	return meta
 }
 
-// auditRequestMessage is the request envelope recorded on category=audit for a
-// draft or submit. It deep-copies the form object without the reserved
-// __command key, taken before file references are resolved in place. Do not
-// pass this value to system slog.
-func auditRequestMessage(command string, payload map[string]any, draft bool) any {
-	form := cloneFormPayload(payload)
-	if draft {
-		return map[string]any{"payload": form}
+// requestAuditMessage is the category=audit message for a draft or submit: the
+// envelope's byte size and SHA-256, not the form fields. Form values wait for
+// an audit destination with its own access rules (#903). Nil when Audit is
+// unset, so the marshal is skipped. Taken before file references are resolved.
+// Do not pass this value to system slog.
+func (h *HTTPHandler) requestAuditMessage(command string, payload map[string]any, draft bool) any {
+	if h.Audit == nil {
+		return nil
 	}
-	msg := map[string]any{"payload": form}
-	if command != "" {
-		msg["command"] = command
-	}
-	return msg
+	return fingerprintRequest(command, payload, draft)
 }
 
-// auditEnvelopeMessage is auditRequestMessage for a decoded request envelope,
+// envelopeAuditMessage is requestAuditMessage for a decoded request envelope,
 // including partial bodies on parse failure. draft selects the draft envelope
 // shape; it is not inferred from an empty command.
-func auditEnvelopeMessage(req completeTaskStepRequest, draft bool) any {
+func (h *HTTPHandler) envelopeAuditMessage(req completeTaskStepRequest, draft bool) any {
+	if h.Audit == nil {
+		return nil
+	}
 	if req.Command == "" && len(req.Payload) == 0 {
 		return nil
 	}
-	return auditRequestMessage(req.Command, req.Payload, draft)
+	return fingerprintRequest(req.Command, req.Payload, draft)
 }
 
-// cloneFormPayload returns a deep copy of payload without the reserved
-// __command key. File resolution mutates the live submission in place, so the
-// audit snapshot must not share nested maps or slices with it.
-func cloneFormPayload(payload map[string]any) map[string]any {
+// fingerprintRequest returns {bytes, sha256} for the draft or submit envelope
+// (payload without the reserved __command key). On marshal failure it records
+// an error marker instead of looking like an empty form.
+func fingerprintRequest(command string, payload map[string]any, draft bool) any {
+	form := omitCommandKey(payload)
+	var envelope map[string]any
+	if draft {
+		envelope = map[string]any{"payload": form}
+	} else {
+		envelope = map[string]any{"payload": form}
+		if command != "" {
+			envelope["command"] = command
+		}
+	}
+	raw, err := json.Marshal(envelope)
+	if err != nil {
+		return map[string]any{"error": "payload not recorded"}
+	}
+	sum := sha256.Sum256(raw)
+	return map[string]any{
+		"bytes":  len(raw),
+		"sha256": hex.EncodeToString(sum[:]),
+	}
+}
+
+// omitCommandKey returns a shallow copy of payload without the reserved
+// __command key. Only used to build the envelope JSON for fingerprinting;
+// call before file resolution mutates the live map.
+func omitCommandKey(payload map[string]any) map[string]any {
 	if len(payload) == 0 {
 		return map[string]any{}
 	}
-	trimmed := make(map[string]any, len(payload))
+	out := make(map[string]any, len(payload))
 	for k, v := range payload {
 		if k == orchestrator.CommandVar {
 			continue
 		}
-		trimmed[k] = v
-	}
-	raw, err := json.Marshal(trimmed)
-	if err != nil {
-		return map[string]any{}
-	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil || out == nil {
-		return map[string]any{}
+		out[k] = v
 	}
 	return out
 }
