@@ -594,7 +594,6 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 
 	// Storage
 	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(fileHandler.Upload))))
-	mux.Handle(nswstorage.ConfirmUploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(fileHandler.ConfirmUpload))))
 	mux.Handle(nswstorage.DownloadRoute, withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(fileHandler.Download))))
 
 	// Mode-specific routes: TNSW's consignment, company, payment and webhook
