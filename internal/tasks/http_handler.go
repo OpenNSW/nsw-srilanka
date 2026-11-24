@@ -484,7 +484,7 @@ func (h *HTTPHandler) rejectFiles(w http.ResponseWriter, r *http.Request, taskID
 }
 
 // writeCompletion answers a completion attempt or a draft save: 204 when the workflow accepted the
-// step, otherwise the error mapped to its status. body is the request envelope for
+// step, otherwise the error mapped to its status. body is the request fingerprint for
 // category=audit only. logAttrs name the step for system slog and audit metadata.
 func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, err error, body any, logAttrs ...any) {
 	ctx := r.Context()
