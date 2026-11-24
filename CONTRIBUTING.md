@@ -67,7 +67,8 @@ SKIP_TESTS=1 git push                # skip tests only
 
 ## CI pipeline
 
-Pull requests to `main` run these pipelines. The code pipelines run only when
+Pull requests to `main` and to maintenance branches (`release/X.Y.x`, see
+[Patch releases](#patch-releases)) run these pipelines. The code pipelines run only when
 their files change, and otherwise skip their jobs; a skipped check counts as
 passed.
 
@@ -118,7 +119,8 @@ that migrations already on `main` are unchanged, then applies them to
 PostgreSQL 16 with the pinned migrator: a fresh install, and an upgrade from
 `main` in which each new migration is applied, rolled back and compared with the
 schema from before it, then applied again. A new migration therefore needs a
-`@DOWN` that undoes every schema change its `@UP` makes. To run it locally
+`@DOWN` that undoes every schema change its `@UP` makes. A PR to a maintenance
+branch may add no migration. To run it locally
 against a PostgreSQL, with the migrator installed (see Database migrations in
 the README):
 
@@ -149,14 +151,16 @@ Runs on every PR. Labels it from its title and author, then fails the
 
 Runs on every PR. When the PR changes `version.txt`, it runs the checks the
 release will run, so a bad release PR fails in review; otherwise it passes at
-once. [CHANGELOG.md](CHANGELOG.md) is written only by a release PR, together
+once. A release PR into a maintenance branch `release/X.Y.x` may only release
+a patch of that line, `vX.Y.Z`. [CHANGELOG.md](CHANGELOG.md) is written only by a release PR, together
 with `version.txt`, so a PR that changes it without `version.txt` fails. Put the
 note for deployers in the PR's Deployment Notes instead; the release's
 CHANGELOG section is written from them.
 
 ### Required checks and the merge queue
 
-`main` merges through a merge queue, and these checks must pass:
+`main` merges through a merge queue, and these checks must pass (on a
+maintenance branch too, without the queue):
 **Conventional Commit Title**, **Release notes label**, **Release version**,
 **Secret Scan**, **Quality Gate**, **Test & Security**, **Quality Check & Build**,
 **Docker images**, **Lint, Render & Package Helm Chart**, **Migrations** and
@@ -170,7 +174,7 @@ together don't reach `main`. **Conventional Commit Title**, **Release notes labe
 
 ## Releasing
 
-[`version.txt`](version.txt) holds the released version as its tag name (`v0.2.0`); CHANGELOG headings use the number alone (`## [0.2.0]`). Merging a PR that changes it releases that version: [`auto-tag.yml`](.github/workflows/auto-tag.yml) tags the merge commit and starts [`release.yml`](.github/workflows/release.yml), which builds and publishes the tnsw-api, tnsw-web and tnsw-migrate images, then creates the GitHub Release. The release opens with the version's section of [CHANGELOG.md](CHANGELOG.md), then the image digests, then GitHub's list of the PRs merged since the previous release. Nobody tags by hand.
+[`version.txt`](version.txt) holds the released version as its tag name (`v0.2.0`); CHANGELOG headings use the number alone (`## [0.2.0]`). Merging a PR that changes it, into `main` or a maintenance branch, releases that version: [`auto-tag.yml`](.github/workflows/auto-tag.yml) tags the merge commit and starts [`release.yml`](.github/workflows/release.yml), which builds and publishes the tnsw-api, tnsw-web and tnsw-migrate images, then creates the GitHub Release. The release opens with the version's section of [CHANGELOG.md](CHANGELOG.md), then the image digests, then GitHub's list of the PRs merged since the previous release in its history. Nobody tags by hand.
 
 ### Release-notes labels
 
@@ -189,12 +193,12 @@ Fill in the PR template's **Deployment Notes** whenever a deployer has to do som
 
 ### Cutting a release
 
-1. **Open a release PR** from `main` that does two things:
+1. **Open a release PR** from `main`, or from a maintenance branch for a [patch release](#patch-releases), that does two things:
    - sets `version.txt` to the new version, e.g. `v0.2.0`;
    - moves `## [Unreleased]` under `## [X.Y.Z] - YYYY-MM-DD` in CHANGELOG.md, written for the people who deploy TNSW: upgrade notes first, then what was added, changed and fixed. In Claude Code, the `draft-changelog` skill drafts it from the merged PRs and their Deployment Notes. Use absolute links; the section is copied into the GitHub Release.
    - dates that heading **the day the PR will merge, in Sri Lanka time** (UTC+05:30): `TZ=Asia/Colombo date +%F`.
 
-   The **Release version** check confirms the version is valid, higher than the last one and not yet released, and that the PR writes its CHANGELOG section.
+   The **Release version** check confirms the version is valid, higher than the base branch's and not yet released, and that the PR writes its CHANGELOG section.
 
 2. **Merge it.** That is the release: the merge commit is tagged and released. Merge it only when you mean to ship, and if the PR has waited, update the heading's date to today first. The release run warns when the date and the merge day differ.
 3. **If the release fails at "Release Notes"**, nothing was built. Fix the cause in a new release PR; the tag is only created once the checks pass. To retry a release that failed later on, re-run the failed run of `release.yml`.
@@ -206,6 +210,20 @@ A tag pushed by hand still starts `release.yml`, but only releases if `version.t
 While on 0.x, a breaking change or a new feature bumps the minor version (0.2.0 → 0.3.0), and fixes alone bump the patch (0.2.0 → 0.2.1).
 
 The Helm chart is released with the app, in lockstep: `release.yml` publishes `lk-tnsw` at the same version, with `appVersion` set to it, so chart X.Y.Z deploys the X.Y.Z images by default. [`Chart.yaml`](deployments/helm/lk-tnsw/Chart.yaml) holds only placeholders — don't bump it. A chart-only change ships in the next release.
+
+### Patch releases
+
+A patch release ships fixes to the version in production while `main` holds work for the next minor or major release.
+
+1. **Fix `main` first.** The fix merges to `main` through a normal PR. If everything on `main` since the last release is a fix, release the patch from `main` as above and stop here.
+2. **Cut the maintenance branch**, once per line: a maintainer creates `release/X.Y.x` from the line's newest tag, e.g. `release/1.2.x` from `v1.2.0`. Its protection matches `main`'s, without the merge queue.
+3. **Backport each fix.** Branch from `release/X.Y.x` as `<type>/<issue>-<short-slug>-X.Y.x`, cherry-pick the fix's squash commit with `git cherry-pick -x <sha>`, and open a PR into `release/X.Y.x` with the fix's title and label and "Backport of #N" under Related Issues. A patch carries fixes and security updates only: no migration (the **Migrations** check refuses one) and no new required configuration.
+4. **Release it.** Open a release PR into `release/X.Y.x` that sets `version.txt` to the next patch, `vX.Y.Z`, and adds its CHANGELOG section. Merging it tags and releases the patch, as on `main`.
+5. **Bring the notes to `main`.** The next release PR on `main` copies in the CHANGELOG sections of the patches released since, and leaves the fixes they shipped out of its own section.
+
+A patch to an older line, such as 1.2.1 after 1.3.0, is tagged `1.2.1` and `1.2`. The major version tag, `latest` and GitHub's latest release stay with the highest release. Patch only the line production runs; once it moves to a newer minor version, the old line gets no more patches.
+
+### Workflow artifacts
 
 A TNSW release doesn't ship workflow artifacts. TNSW stays backward compatible with the artifacts already released from [`OpenNSW/one-trade-artifacts`](https://github.com/OpenNSW/one-trade-artifacts/releases), so its release notes don't pin them or list their changes. Each artifacts release names the oldest TNSW release it works with.
 

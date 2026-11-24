@@ -18,25 +18,28 @@ Drafts the next release's section of `CHANGELOG.md`. Deployers read that section
 ## Preflight
 
 1. `gh auth status` — if it fails, tell the user and stop.
-2. `git fetch origin`, and work from `origin/main`: releases are cut from it, and drafting on a feature branch describes the wrong code. Unless the user already has a release branch, create one: `git switch -c chore/release-vX.Y.Z origin/main`.
-3. Find the previous release on GitHub, and resolve its commit on `origin` — local clones can carry stale test tags with the same names:
+2. `git fetch origin`, and work from the line being released: `origin/main`, or for a patch release (CONTRIBUTING.md, "Patch releases") the maintenance branch `origin/release/X.Y.x`. Call it `$line`. Drafting on a feature branch describes the wrong code. Unless the user already has a release branch, create one: `git switch -c chore/release-vX.Y.Z "$line"`.
+3. Find the previous release in that line's history, the highest release tag `$line` contains, and resolve its commit on `origin`. Use `origin`'s tags: local clones can carry stale test tags with the same names. A patch released from a maintenance branch isn't in `main`'s history, so `main`'s next release is compared with the release `main` was built on.
 
    ```bash
-   prev=$(gh release list --repo OpenNSW/nsw-srilanka --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')
-   from=$(git ls-remote origin "refs/tags/${prev}^{}" | cut -f1)       # annotated tag
-   [ -n "$from" ] || from=$(git ls-remote origin "refs/tags/${prev}" | cut -f1)
+   line=origin/main   # or origin/release/X.Y.x for a patch release
+   tags=$(git ls-remote --tags origin 'v*' | awk '{t=$2; sub("refs/tags/","",t); if (sub(/\^\{\}$/,"",t)) peeled[t]=$1; else obj[t]=$1} END {for (t in obj) print (t in peeled ? peeled[t] : obj[t]), t}')
+   prev=$(printf '%s\n' "$tags" | grep -v -- '-' | while read -r c t; do
+     git merge-base --is-ancestor "$c" "$line" 2>/dev/null && echo "$t"
+   done | bash .github/scripts/highest-version.sh)
+   from=$(printf '%s\n' "$tags" | awk -v t="$prev" '$2 == t {print $1}')
    ```
 
    No release yet? Ask the user which commit to start from.
 
-4. Agree the version with the user. Suggest one from what you collect: while on 0.x, a breaking change or a new feature means the next minor (0.2.0 → 0.3.0), fixes alone the next patch (0.2.0 → 0.2.1).
+4. Agree the version with the user. Suggest one from what you collect: a breaking change or a new feature means the next minor (1.2.0 → 1.3.0), fixes alone the next patch (1.2.0 → 1.2.1). A maintenance branch releases only the next patch of its line.
 
 ## Collect
 
 Run the bundled collector and read all of its output:
 
 ```bash
-.agents/skills/draft-changelog/scripts/collect.sh --from "$from" --to origin/main > <scratch dir>/release-input.md
+.agents/skills/draft-changelog/scripts/collect.sh --from "$from" --to "$line" > <scratch dir>/release-input.md
 ```
 
 Write it outside the repo (`$TMPDIR` or `/tmp`) so it is never committed. It is read-only and takes about a second per PR. It prints:
@@ -55,6 +58,8 @@ Put it directly under `## [Unreleased]` — moving in anything already there —
 - `### Added`, `### Changed`, `### Fixed` — the changes a deployer or an agency would notice, one line each with the PR linked. Fold related PRs (a backend and a frontend part, say) into one line. Don't list every PR; the release page already does.
 - `### Security` — fixes and hardening worth knowing about.
 - `### Known issues` — the previous section's known issues that still hold, plus new ones.
+
+When drafting from `main`, look for patch releases made from a maintenance branch since `$prev`: release tags on `origin` that `$line` doesn't contain, above `$prev`. Copy each one's section from `git show vX.Y.Z:CHANGELOG.md` into this file, below yours and above `$prev`'s, highest first, and add its link reference. Leave the fixes they shipped out of your section: deployers on that patch already have them.
 
 The difference between a deployer's line and a restated PR title:
 
@@ -84,10 +89,10 @@ Finally, update the link references at the foot of the file:
 
 1. `bash .github/scripts/changelog-section.sh X.Y.Z` must print exactly your section. It is the extraction the release workflow runs, and the release fails before building anything if it prints nothing.
 2. `bash .github/scripts/changelog-section.sh X.Y.Z | grep -oE '\]\([^)]*\)' | grep -v '^](https://'` must print nothing — any output is a relative link.
-3. `bash .github/scripts/check-version.sh vX.Y.Z <previous vX.Y.Z>` passes, and `git status --short` shows only `CHANGELOG.md` and `version.txt` modified.
+3. `bash .github/scripts/check-version.sh vX.Y.Z <previous vX.Y.Z>` passes (for a patch, `bash .github/scripts/check-release-line.sh release/X.Y.x vX.Y.Z` too), and `git status --short` shows only `CHANGELOG.md` and `version.txt` modified.
 4. Re-read the Upgrade notes against the collector output: each one has a source.
 5. Read the whole section once as a deployer, and cut any line they can't act on or check.
 
 ## Hand off
 
-Show the user the drafted section, then the open questions: PRs that look like they need an upgrade step but say nothing, PRs merged without a release-notes label, anything you could not confirm, and any line you carried over from a PR's notes for developers. Don't commit unless asked. The release PR goes through the `create-pull-request` skill. Tell the user plainly that merging it releases `vX.Y.Z` — the merge commit is tagged and published automatically — so they merge only when ready to ship. If it won't merge today (Sri Lanka time), tell them to update the heading's date on the day it does; the release run warns when the two differ.
+Show the user the drafted section, then the open questions: PRs that look like they need an upgrade step but say nothing, PRs merged without a release-notes label, anything you could not confirm, and any line you carried over from a PR's notes for developers. Don't commit unless asked. The release PR goes through the `create-pull-request` skill, with the line's branch (`main` or `release/X.Y.x`) as its base. Tell the user plainly that merging it releases `vX.Y.Z` — the merge commit is tagged and published automatically — so they merge only when ready to ship. If it won't merge today (Sri Lanka time), tell them to update the heading's date on the day it does; the release run warns when the two differ.
