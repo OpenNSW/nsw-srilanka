@@ -3,8 +3,9 @@ name: Release - Build and Publish Images
 # to GHCR, and the lk-tnsw Helm chart at the same version.
 #
 # Triggers:
-#   - Automatic: merging a change to version.txt. auto-tag.yml tags the merge
-#                commit and dispatches this workflow on that tag.
+#   - Automatic: merging a change to version.txt, on main or on a maintenance
+#                branch (release/X.Y.x). auto-tag.yml tags the merge commit and
+#                dispatches this workflow on that tag.
 #   - Manual:    pushing a SemVer tag (e.g. v1.2.0), or workflow_dispatch with a
 #                version input; either way version.txt must say that version.
 #
@@ -35,6 +36,11 @@ name: Release - Build and Publish Images
 #   GitHub Release body, and version.txt must name the same version. Otherwise
 #   the run fails before anything is built or pushed. To retry a release,
 #   re-run the failed run or dispatch on the tag.
+#
+# Older lines:
+#   A patch to an older line (1.2.1 after 1.3.0) is tagged 1.2.1 and 1.2 only.
+#   The major version tag, `latest` and GitHub's latest release stay with the
+#   highest release.
 
 on:
   # Automatic: pushing a SemVer tag (e.g. v1.2.0) triggers a full release.
@@ -65,6 +71,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      is_latest: ${{ steps.place.outputs.is_latest }}
+      previous_tag: ${{ steps.place.outputs.previous_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -111,6 +120,42 @@ jobs:
           if [ "$HEADING_DATE" != "$MERGE_DATE" ]; then
             echo "::warning file=CHANGELOG.md::CHANGELOG.md dates ${VERSION} '${HEADING_DATE:-no date}', but it was merged on ${MERGE_DATE} (Sri Lanka time). Releases are dated the merge day in Sri Lanka time; correct the heading in a later PR."
           fi
+
+      # A patch release can come from a maintenance branch (release/X.Y.x) after
+      # a newer release, so this release's place among the others decides:
+      #   - is_latest: only the highest release moves the `latest` and major
+      #     version image tags and becomes GitHub's latest release. A
+      #     pre-release never does.
+      #   - previous_tag: GitHub's generated notes list the PRs since the
+      #     highest earlier release in this commit's history, not since the
+      #     newest release overall. A pre-release counts only for a pre-release.
+      - name: Place the release among the others
+        id: place
+        env:
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_VERSION"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          TAG="v${VERSION#v}"
+          stable() { grep -v -- '-' || true; }
+
+          if [[ "$TAG" == *-* ]]; then
+            IS_LATEST=false
+            EARLIER=$(git tag --merged HEAD --list 'v*')
+          else
+            HIGHEST=$({ git ls-remote --tags --refs origin 'v*' | sed 's|.*refs/tags/||'; echo "$TAG"; } \
+              | stable | bash .github/scripts/highest-version.sh)
+            if [ "$HIGHEST" = "$TAG" ]; then IS_LATEST=true; else IS_LATEST=false; fi
+            EARLIER=$(git tag --merged HEAD --list 'v*' | stable)
+          fi
+          PREVIOUS=$(printf '%s\n' "$EARLIER" | { grep -vx -- "$TAG" || true; } | bash .github/scripts/highest-version.sh)
+
+          echo "is_latest=${IS_LATEST}" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=${PREVIOUS}" >> "$GITHUB_OUTPUT"
+          echo "${TAG}: latest=${IS_LATEST}; previous release in its history: ${PREVIOUS:-none}"
 
       - name: Upload release notes
         uses: actions/upload-artifact@v7
@@ -248,24 +293,30 @@ jobs:
             org.opencontainers.image.revision=${{ env.GIT_COMMIT }}
             org.opencontainers.image.created=${{ steps.build-time.outputs.build_time }}
 
+      # The major version (1) and `latest` follow the highest release only, so a
+      # patch to an older line (1.2.1 after 1.3.0) moves just 1.2.1 and 1.2.
+      # `latest=false` turns off metadata-action's own `latest`, which follows
+      # every semver tag.
       - name: Extract release tags
         id: release-tags
         if: steps.release-mode.outputs.enabled == 'true'
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}
+          flavor: |
+            latest=false
           tags: |
             # semver tags for tag-push releases: 1.2.3, 1.2, 1
             type=semver,pattern={{version}},enable=${{ github.event_name == 'push' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' }}
-            type=semver,pattern={{major}},enable=${{ github.event_name == 'push' }}
+            type=semver,pattern={{major}},enable=${{ github.event_name == 'push' && needs.release-notes.outputs.is_latest == 'true' }}
             # For manual dispatch, raw tag covers the exact version supplied.
             type=raw,value=${{ steps.version.outputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=semver,pattern={{version}},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=semver,pattern={{major}},enable=${{ github.event_name == 'workflow_dispatch' }}
-            # 'latest' is only written in release mode (never on dry runs)
-            type=raw,value=latest,enable=${{ steps.release-mode.outputs.enabled == 'true' }}
+            type=semver,pattern={{major}},enable=${{ github.event_name == 'workflow_dispatch' && needs.release-notes.outputs.is_latest == 'true' }}
+            # 'latest' is written in release mode (never on dry runs), for the highest release only
+            type=raw,value=latest,enable=${{ steps.release-mode.outputs.enabled == 'true' && needs.release-notes.outputs.is_latest == 'true' }}
 
       - name: Build and push image
         id: build
@@ -341,7 +392,7 @@ jobs:
       - name: Upload Trivy results (linux/amd64)
         if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-amd64.sarif', matrix.image_name)) != ''
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4.39.3
+        uses: github/codeql-action/upload-sarif@v4.39.4
         with:
           sarif_file: trivy-${{ matrix.image_name }}-linux-amd64.sarif
           category: ${{ matrix.image_name }}-linux-amd64
@@ -349,7 +400,7 @@ jobs:
       - name: Upload Trivy results (linux/arm64)
         if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-arm64.sarif', matrix.image_name)) != ''
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4.39.3
+        uses: github/codeql-action/upload-sarif@v4.39.4
         with:
           sarif_file: trivy-${{ matrix.image_name }}-linux-arm64.sarif
           category: ${{ matrix.image_name }}-linux-arm64
@@ -603,35 +654,23 @@ jobs:
           echo "Rendered release body:"
           cat release-body.md
 
-      # GitHub's generated notes list the PRs merged since the previous release.
-      # With no previous release they would list every PR in the repo's history,
-      # so the first release goes without them; its CHANGELOG section covers it.
-      - name: Check for an earlier release
-        id: previous
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: v${{ needs.collate-digests.outputs.version }}
-        run: |
-          COUNT=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 100 \
-            --json tagName --jq '[.[] | select(.tagName != env.TAG)] | length')
-          if [ "$COUNT" -gt 0 ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "No earlier release — GitHub's generated notes are left off this one."
-          fi
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', needs.collate-digests.outputs.version) || github.ref }}
           name: TNSW ${{ needs.collate-digests.outputs.version }}
           body_path: release-body.md
-          # Appends GitHub's own changelog — merged PRs since the previous release,
+          # Appends GitHub's own changelog — merged PRs since the previous release
+          # in this commit's history (see "Place the release among the others"),
           # grouped by label per .github/release.yml, plus a compare link. `body`
           # above is PRE-pended and `name` is kept, so this only adds a section.
-          # Off for the first release; see "Check for an earlier release".
-          generate_release_notes: ${{ steps.previous.outputs.exists == 'true' }}
+          # With no earlier release the notes would list every PR in the repo's
+          # history, so the first release goes without them.
+          generate_release_notes: ${{ needs.release-notes.outputs.previous_tag != '' }}
+          previous_tag: ${{ needs.release-notes.outputs.previous_tag }}
+          # Only the highest release is GitHub's latest, so a patch to an older
+          # line doesn't take it from a newer release.
+          make_latest: ${{ needs.release-notes.outputs.is_latest }}
           draft: false
           prerelease: ${{ needs.collate-digests.outputs.is_prerelease == 'true' }}
           # Attach the digest manifest so gitops.yaml can fetch it directly

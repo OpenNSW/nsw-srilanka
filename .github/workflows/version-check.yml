@@ -6,7 +6,8 @@ name: Version Check
 # queue it checks the PR again against what is merged ahead of it, and drops a
 # release PR whose version isn't higher than the version ahead of it.
 # CHANGELOG.md is written only by a release PR, so a PR that changes it without
-# version.txt fails too.
+# version.txt fails too. A release PR into a maintenance branch (release/X.Y.x)
+# may only release the next patch of that line.
 
 on:
   pull_request:
@@ -33,6 +34,7 @@ jobs:
       - name: Check the release
         env:
           BASE_REF: ${{ github.base_ref }}
+          BRANCH: ${{ github.base_ref || github.event.merge_group.base_ref }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "merge_group" ]; then
             BASE="HEAD^"
@@ -53,6 +55,7 @@ jobs:
           echo "Release PR: ${PREVIOUS:-no previous version} -> ${TAG}"
 
           if ! { bash .github/scripts/check-version.sh "$TAG" "$PREVIOUS" && \
+                 bash .github/scripts/check-release-line.sh "$BRANCH" "$TAG" && \
                  bash .github/scripts/release-notes.sh "${TAG#v}" > /dev/null; } 2> error.txt; then
             echo "::error file=version.txt::$(tr '\n' ' ' < error.txt)"
             exit 1
