@@ -1,5 +1,5 @@
 name: Migration Check
-# Checks the SQL migrations, on PRs to main and in the merge queue, when
+# Checks the SQL migrations, on PRs to main and release/** and in the merge queue, when
 # migrations/, the migrator pin in the Dockerfile or this check change;
 # otherwise the check is skipped. It applies them to PostgreSQL with the
 # migrator version the tnsw-migrate image pins: a fresh install, and an
@@ -9,7 +9,7 @@ name: Migration Check
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
   merge_group:
 
 permissions:
@@ -82,9 +82,12 @@ jobs:
 
       # On a PR, HEAD is GitHub's preview of the merge, so HEAD^ is the base
       # branch. In the merge queue, each PR is one squash commit, so HEAD^ is
-      # everything merged ahead of it.
+      # everything merged ahead of it. A PR to a maintenance branch
+      # (release/X.Y.x) may add no migration.
       - name: Check names, numbering and existing migrations
-        run: bash .github/scripts/check-migrations.sh HEAD^
+        env:
+          BRANCH: ${{ github.base_ref || github.event.merge_group.base_ref }}
+        run: bash .github/scripts/check-migrations.sh HEAD^ "$BRANCH"
 
       # The module cache is keyed on the Dockerfile, where the migrator is pinned.
       - name: Set up Go
