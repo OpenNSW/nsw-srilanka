@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -36,9 +35,7 @@ const (
 	errTaskNotFound         = "task not found"
 	errAuthenticationReq    = "authentication required"
 	errForbiddenTaskAction  = "you may not perform this action on this task"
-	errInvalidRequestBody   = "invalid request body"
 	errStaleStep            = "this step is no longer active; refetch the task"
-	errRequestBodyTooLarge  = "request body too large"
 	errFileNotReference     = "a file in the submission is not a file reference; upload it again"
 	errFileNotYours         = "a file in the submission was issued to someone else"
 	errFileExpired          = "a file in the submission has expired; refetch the task and submit again"
@@ -323,8 +320,8 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Command != "" {
 		slog.ErrorContext(r.Context(), "tasks: draft request names a command", "taskId", taskID, "stepId", stepID, "command", req.Command)
-		h.auditTaskUpdate(r.Context(), taskID, true, taskAuditMeta(http.StatusBadRequest, errInvalidRequestBody, "taskId", taskID, "stepId", stepID, "draft", true, "command", req.Command), req.digest)
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		h.auditTaskUpdate(r.Context(), taskID, true, taskAuditMeta(http.StatusBadRequest, httputil.MsgInvalidBody, "taskId", taskID, "stepId", stepID, "draft", true, "command", req.Command), req.digest)
+		httputil.Error(w, r, http.StatusBadRequest, httputil.MsgInvalidBody)
 		return
 	}
 	payload := req.Payload
@@ -353,7 +350,7 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 
 	if req.Command == "" {
 		slog.ErrorContext(r.Context(), "tasks: failed to parse request", append(logAttrs, "error", errors.New("invalid request body: must contain 'command' (string)"))...)
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		httputil.Error(w, r, http.StatusBadRequest, httputil.MsgInvalidBody)
 		return nil, nil, false
 	}
 
@@ -368,15 +365,19 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 	return payload, req.digest, true
 }
 
-// decodeEnvelope reads the {command, payload} envelope the completion and draft
-// routes take: one JSON value within the size limit, whose payload does not set
-// the reserved "__command" key. On a bad request it writes the error response
-// and returns false. logAttrs name the step in the log lines. On success,
-// req.digest is the size and SHA-256 of the envelope as encoding/json encodes
-// it. A body that does not decode has none.
-func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, logAttrs ...any) (completeTaskStepRequest, bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
+// envelopeBodyOptions is the task envelope's contract beyond DecodeJSON's defaults: a field
+// it does not declare is ignored.
+var envelopeBodyOptions = []httputil.DecodeOption{httputil.AllowUnknownFields()}
 
+// decodeEnvelope reads the {command, payload} envelope the completion and draft
+// routes take: at most one JSON value within the size limit, whose payload does not
+// set the reserved "__command" key. An empty body is an empty envelope; a route that
+// needs a command checks for one. On a bad request it writes the error response and
+// returns false. logAttrs name the step in the log lines. On success, req.digest is
+// the size and SHA-256 of the envelope as encoding/json encodes it. A refused body
+// has one too when its JSON value decoded and only what follows it was refused; one
+// whose value does not decode has none.
+func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, logAttrs ...any) (completeTaskStepRequest, bool) {
 	ctx := r.Context()
 	var req completeTaskStepRequest
 	var digest any
@@ -390,42 +391,25 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, log
 		httputil.Error(w, r, status, message)
 	}
 
-	// The body must contain at most one JSON value: json.Decoder.Decode only parses the
-	// first value and silently ignores anything after it, so a second Decode call is
-	// required to confirm nothing trails it. The digest is taken from that first value,
-	// and only when it decoded: a failed Decode leaves it unset.
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			fail(http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err)
-			return completeTaskStepRequest{}, false
-		}
-
-		// An empty body is tolerated here; a route that needs a command checks for one.
-		// Only fail on genuinely malformed JSON.
-		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
-			fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: malformed JSON"))
-			return completeTaskStepRequest{}, false
-		}
-
-		// If unexpected data follows the first JSON value, reject the request.
-	} else if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
+	err := httputil.DecodeJSON(w, r, h.MaxRequestBytes, &req, envelopeBodyOptions...)
+	// The digest is taken from the JSON value whenever it decoded: also when what follows
+	// it is refused (ErrTrailingData), but not when the value itself is refused or absent.
+	if err == nil || errors.Is(err, httputil.ErrTrailingData) {
 		digest = h.envelopeDigest(req)
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			fail(http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err)
-			return completeTaskStepRequest{}, false
-		}
-		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: unexpected data after JSON value"))
+	}
+	switch {
+	case err == nil, errors.Is(err, httputil.ErrBodyEmpty):
+	case errors.Is(err, httputil.ErrBodyTooLarge):
+		fail(http.StatusRequestEntityTooLarge, httputil.MsgBodyTooLarge, err)
 		return completeTaskStepRequest{}, false
-	} else {
-		digest = h.envelopeDigest(req)
+	default:
+		fail(http.StatusBadRequest, httputil.MsgInvalidBody, err)
+		return completeTaskStepRequest{}, false
 	}
 
 	// Validate system metadata collision
 	if _, exists := req.Payload[orchestrator.CommandVar]; exists {
-		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request payload: '__command' is a reserved system key"))
+		fail(http.StatusBadRequest, httputil.MsgInvalidBody, errors.New("invalid request payload: '__command' is a reserved system key"))
 		return completeTaskStepRequest{}, false
 	}
 	req.digest = digest
