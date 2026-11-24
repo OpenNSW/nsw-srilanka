@@ -472,8 +472,11 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess,
-		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
+	fileOpts := []nswstorage.FileHandlerOption{nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads)}
+	if cfg.Server.StrictRequestBodies {
+		fileOpts = append(fileOpts, nswstorage.WithStrictRequestBodies())
+	}
+	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess, fileOpts...)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), tasks.RenderConfigs(artifacts))

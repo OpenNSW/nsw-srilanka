@@ -84,9 +84,9 @@ type ServerConfig struct {
 	LogLevel        slog.Level `yaml:"logLevel"`
 	MaxRequestBytes int64      `yaml:"maxRequestBytes"`
 	// StrictRequestBodies makes the endpoints that accept a body field they do not
-	// declare refuse it with 400 instead: task submissions and drafts, and agency flow
-	// starts, which also refuse anything after the JSON value. Unset or false keeps them
-	// accepted.
+	// declare refuse it with 400 instead: task submissions and drafts, and file uploads
+	// and agency flow starts, which also refuse anything after the JSON value and answer
+	// a body over their limit with 413. Unset or false keeps them as they were.
 	StrictRequestBodies bool          `yaml:"strictRequestBodies"`
 	ReadHeaderTimeout   time.Duration `yaml:"readHeaderTimeout"`
 	ReadTimeout         time.Duration `yaml:"readTimeout"`

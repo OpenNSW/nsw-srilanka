@@ -77,7 +77,11 @@ paths:
           description: |
             Malformed JSON, a missing `filename` or `mime_type`, a `size` that
             is not positive, a file over the size limit, or a file name whose
-            extension `mime_type` doesn't have.
+            extension `mime_type` doesn't have. Without the server's
+            `server.strictRequestBodies`, also a request body over 1 MiB; a
+            field besides `filename`, `mime_type` and `size`, and anything
+            after the JSON value, are ignored. With it, those two are a 400
+            that names an unknown field.
           content:
             application/json:
               schema:
@@ -90,6 +94,14 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Forbidden. The bearer token lacks scope `storage:write`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: |
+            With the server's `server.strictRequestBodies`, a request body over
+            1 MiB (a 400 without it).
           content:
             application/json:
               schema:
@@ -151,7 +163,11 @@ paths:
           description: |
             Malformed JSON, a missing `filename` or `mime_type`, a `size` that
             is not positive, a file over the size limit, or a file name whose
-            extension `mime_type` doesn't have.
+            extension `mime_type` doesn't have. Without the server's
+            `server.strictRequestBodies`, also a request body over 1 MiB; a
+            field besides `filename`, `mime_type` and `size`, and anything
+            after the JSON value, are ignored. With it, those two are a 400
+            that names an unknown field.
           content:
             application/json:
               schema:
@@ -164,6 +180,14 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Forbidden. The bearer token lacks scope `storage:internalwrite`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: |
+            With the server's `server.strictRequestBodies`, a request body over
+            1 MiB (a 400 without it).
           content:
             application/json:
               schema:
