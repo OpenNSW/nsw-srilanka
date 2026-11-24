@@ -52,6 +52,7 @@ const (
 // that are not the caller's mistake. writeCompletion maps each to its status.
 var (
 	errTaskReadFailed    = errors.New("task read failed")
+	errActCheckFailed    = errors.New("act check failed")
 	errFileResolveFailed = errors.New("file resolve failed")
 )
 
@@ -199,14 +200,18 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, resp)
 }
 
-// canAct reports whether in may act on record's active step. A failure to
-// decide is logged and taken as no: the reader can still open the task's
-// files, and refetches the task to submit them.
+// canAct reports whether in may act on record's active step. A step that
+// declares no authz rule is one no one may act on. A failure to decide is
+// logged and taken as no: the reader can still open the task's files, and
+// refetches the task to submit them.
 func (h *HTTPHandler) canAct(ctx context.Context, record store.TaskRecord, in taskauthz.Input) bool {
 	if h.CanAct == nil {
 		return false
 	}
 	ok, err := h.CanAct(ctx, record, in)
+	if errors.Is(err, orchestrator.ErrStepNotGuarded) {
+		return false
+	}
 	if err != nil {
 		slog.ErrorContext(ctx, "tasks: failed to decide whether the reader can act; their file references can only be opened", "taskId", record.TaskID, "error", err)
 		return false
@@ -223,8 +228,6 @@ func (h *HTTPHandler) canAct(ctx context.Context, record store.TaskRecord, in ta
 // completes only that step, so a submission for a step the task has since left is
 // rejected (409) instead of applied to a later one.
 func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Request) {
-	// TODO: retrieve the authenticated context and validate it against the
-	// task's ownership bounds before completing the step.
 	taskID := r.PathValue("id")
 	if taskID == "" {
 		slog.ErrorContext(r.Context(), "tasks: missing task id in request")
@@ -238,6 +241,11 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	record, err := h.admitSubmitter(r.Context(), taskID, stepID)
+	if err != nil {
+		h.writeCompletion(w, r, err, nil, "taskId", taskID, "stepId", stepID)
+		return
+	}
 	payload, digest, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
 	if !ok {
 		return
@@ -245,7 +253,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	// Read before the call: core may strip system keys from the payload.
 	command, _ := payload[orchestrator.CommandVar].(string)
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", command}
-	err := h.resolveFiles(r.Context(), taskID, stepID, payload)
+	err = h.resolveFiles(r.Context(), record, payload)
 	if err == nil {
 		err = h.Manager.CompleteTaskStep(r.Context(), taskID, stepID, payload)
 	}
@@ -278,6 +286,11 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 		return
 	}
 
+	record, err := h.admitSubmitter(r.Context(), taskID, stepID)
+	if err != nil {
+		h.writeCompletion(w, r, err, nil, "taskId", taskID, "stepId", stepID)
+		return
+	}
 	payload, digest, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
 	if !ok {
 		return
@@ -285,7 +298,7 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	// Read before the call: core may strip system keys from the payload.
 	command, _ := payload[orchestrator.CommandVar].(string)
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", command}
-	err = h.resolveFiles(r.Context(), taskID, stepID, payload)
+	err = h.resolveFiles(r.Context(), record, payload)
 	if err == nil {
 		err = h.Manager.CompleteTaskStepByToken(r.Context(), token, payload)
 	}
@@ -317,7 +330,13 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, ok := h.decodeEnvelope(w, r, "taskId", taskID, "stepId", stepID, "draft", true)
+	attrs := []any{"taskId", taskID, "stepId", stepID, "draft", true}
+	record, err := h.admitSubmitter(r.Context(), taskID, stepID)
+	if err != nil {
+		h.writeCompletion(w, r, err, nil, attrs...)
+		return
+	}
+	req, ok := h.decodeEnvelope(w, r, attrs...)
 	if !ok {
 		return
 	}
@@ -331,8 +350,7 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	if payload == nil {
 		payload = make(map[string]any)
 	}
-	attrs := []any{"taskId", taskID, "stepId", stepID, "draft", true}
-	err := h.resolveFiles(r.Context(), taskID, stepID, payload)
+	err = h.resolveFiles(r.Context(), record, payload)
 	if err == nil {
 		// Marked as a draft save so the payload schema extension knows a draft by the
 		// route it came through, not by the command core sets for it.
@@ -432,27 +450,58 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, log
 	return req, true
 }
 
-// resolveFiles replaces the file references in a submission for step stepID
-// of task taskID with the stored values they stand for, so only those are
-// stored. A missing task, a stale step, and a file the caller cannot submit
-// are returned for writeCompletion to answer.
-func (h *HTTPHandler) resolveFiles(ctx context.Context, taskID, stepID string, payload map[string]any) error {
+// errCanActUnset reports a handler built without CanAct, which cannot decide whether a
+// caller may act, so admitSubmitter refuses every submission.
+var errCanActUnset = errors.New("tasks: CanAct is not set")
+
+// admitSubmitter returns the task a submission or draft for step stepID of task taskID
+// is for, or the error writeCompletion answers when it can't be taken: the caller has no
+// identity, the task does not exist or can't be read, stepID is not its active step, the
+// step declares no authz rule, or the caller may not act on it. The routes call it before
+// reading the body, so a request it refuses is never read. It decides only whether the
+// caller may act on the step at all, by the rules core enforces (CanAct); core still
+// decides which command they may run. It fails closed: without CanAct, or when CanAct
+// can't decide, no one is admitted.
+func (h *HTTPHandler) admitSubmitter(ctx context.Context, taskID, stepID string) (store.TaskRecord, error) {
+	in, ok := taskauthz.InputFromContext(ctx)
+	if !ok {
+		return store.TaskRecord{}, taskauthzext.ErrUnauthenticated
+	}
 	record, err := h.Store.GetTask(ctx, taskID)
 	if errors.Is(err, store.ErrTaskNotFound) {
-		return err
+		return store.TaskRecord{}, err
 	}
 	if err != nil {
-		return fmt.Errorf("%w: %w", errTaskReadFailed, err)
+		return store.TaskRecord{}, fmt.Errorf("%w: %w", errTaskReadFailed, err)
 	}
-	// Which fields hold files depends on the step. Core rejects a submission
-	// for a step that is not active anyway; do it first, before resolving
-	// anything against the wrong step.
+	// Core refuses a submission for a step that is not active; refusing it here as well
+	// keeps the body of one from being read, and files from being resolved against the
+	// wrong step.
 	if record.ActiveStepID != stepID {
-		return fmt.Errorf("%w: call was for step %q, active step is %q", orchestrator.ErrStaleStep, stepID, record.ActiveStepID)
+		return store.TaskRecord{}, fmt.Errorf("%w: call was for step %q, active step is %q", orchestrator.ErrStaleStep, stepID, record.ActiveStepID)
 	}
+	if h.CanAct == nil {
+		return store.TaskRecord{}, fmt.Errorf("%w: %w", errActCheckFailed, errCanActUnset)
+	}
+	mayAct, err := h.CanAct(ctx, record, in)
+	switch {
+	case errors.Is(err, orchestrator.ErrStepNotGuarded):
+		return store.TaskRecord{}, err
+	case err != nil:
+		return store.TaskRecord{}, fmt.Errorf("%w: %w", errActCheckFailed, err)
+	case !mayAct:
+		return store.TaskRecord{}, fmt.Errorf("%w: the caller may not act on step %q", taskauthzext.ErrForbidden, stepID)
+	}
+	return record, nil
+}
 
+// resolveFiles replaces the file references in a submission for record's active
+// step with the stored values they stand for, so only those are stored. record
+// is the task admitSubmitter admitted. A file the caller cannot submit is
+// returned for writeCompletion to answer.
+func (h *HTTPHandler) resolveFiles(ctx context.Context, record store.TaskRecord, payload map[string]any) error {
 	p, _ := authn.FromContext(ctx)
-	err = h.Files.FromCaller(ctx, record, payload, p)
+	err := h.Files.FromCaller(ctx, record, payload, p)
 	switch {
 	case err == nil:
 		return nil
@@ -484,6 +533,15 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 	case err == nil:
 		finish(http.StatusNoContent, false, "")
 		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, store.ErrTaskNotFound):
+		finish(http.StatusNotFound, true, "task_not_found")
+		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+	case errors.Is(err, errTaskReadFailed):
+		finish(http.StatusInternalServerError, true, "task_read_failed")
+		httputil.InternalServerError(w, r, "tasks: failed to read task", err, "taskId", taskID)
+	case errors.Is(err, errActCheckFailed):
+		finish(http.StatusInternalServerError, true, "act_check_failed")
+		httputil.InternalServerError(w, r, "tasks: failed to decide whether the caller may act", err, "taskId", taskID)
 	case errors.Is(err, orchestrator.ErrStaleStep):
 		slog.InfoContext(ctx, "tasks: stale step", append(logAttrs, "error", err)...)
 		finish(http.StatusConflict, true, "stale_step")
@@ -523,12 +581,6 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 func (h *HTTPHandler) writeResolveFailure(w http.ResponseWriter, r *http.Request, err error, taskID, stepID string, finish func(int, bool, string)) bool {
 	ctx := r.Context()
 	switch {
-	case errors.Is(err, store.ErrTaskNotFound):
-		finish(http.StatusNotFound, true, "task_not_found")
-		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
-	case errors.Is(err, errTaskReadFailed):
-		finish(http.StatusInternalServerError, true, "task_read_failed")
-		httputil.InternalServerError(w, r, "tasks: failed to read task", err, "taskId", taskID)
 	case errors.Is(err, fileaccess.ErrInvalid):
 		slog.WarnContext(ctx, "tasks: submission carries a file value that is not a file reference", "taskId", taskID, "stepId", stepID)
 		finish(http.StatusBadRequest, true, "file_not_reference")

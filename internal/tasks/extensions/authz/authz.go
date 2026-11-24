@@ -22,6 +22,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/platform/taskauthz"
+	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/store"
 )
 
@@ -111,8 +112,9 @@ func (e *Extension) MayAct(ctx context.Context, record *store.TaskRecord, in tas
 // MayActOnStep reports whether in, the caller, may act on record's active step,
 // whose template is step: whether every PRE_RESUME authz extension on it lets
 // the caller run some command in the task's current state, as core runs them
-// all before a submission. A step with none is one no one may act on, as the
-// task manager refuses it (core's WithRequiredPreResumeExtensions).
+// all before a submission. A step with none is one no one may act on: it
+// returns orchestrator.ErrStepNotGuarded, the error the task manager refuses it
+// with (core's WithRequiredPreResumeExtensions).
 func (e *Extension) MayActOnStep(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, step types.StepTemplate) (bool, error) {
 	declared := false
 	for _, ext := range step.Extensions {
@@ -124,7 +126,10 @@ func (e *Extension) MayActOnStep(ctx context.Context, record *store.TaskRecord, 
 			return false, err
 		}
 	}
-	return declared, nil
+	if !declared {
+		return false, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, step.ID)
+	}
+	return true, nil
 }
 
 func parseRules(record *store.TaskRecord, properties json.RawMessage) (rules, error) {

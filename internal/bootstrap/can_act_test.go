@@ -7,6 +7,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/testutil"
+	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/store"
 
 	"github.com/OpenNSW/core/platform/taskauthz"
@@ -42,19 +43,20 @@ func TestStepCanAct(t *testing.T) {
 	}
 
 	for name, tc := range map[string]struct {
-		record store.TaskRecord
-		in     taskauthz.Input
-		want   bool
+		record  store.TaskRecord
+		in      taskauthz.Input
+		want    bool
+		wantErr error
 	}{
-		"the step's rules allow the caller":  {record("traders"), input("Trader", "trader"), true},
-		"the step's rules refuse the caller": {record("traders"), input("CHA", "cha"), false},
-		"a step with no rule":                {record("no_rule"), input("Trader", "trader"), false},
+		"the step's rules allow the caller":  {record: record("traders"), in: input("Trader", "trader"), want: true},
+		"the step's rules refuse the caller": {record: record("traders"), in: input("CHA", "cha")},
+		"a step with no rule":                {record: record("no_rule"), in: input("Trader", "trader"), wantErr: orchestrator.ErrStepNotGuarded},
 		// Nothing is loaded: the registry has no template with an empty ID.
-		"no active step template": {record(""), input("Trader", "trader"), false},
+		"no active step template": {record: record(""), in: input("Trader", "trader")},
 	} {
 		got, err := canAct(context.Background(), tc.record, tc.in)
-		if err != nil || got != tc.want {
-			t.Errorf("%s: canAct = %v, %v; want %v", name, got, err, tc.want)
+		if !errors.Is(err, tc.wantErr) || (tc.wantErr == nil && err != nil) || got != tc.want {
+			t.Errorf("%s: canAct = %v, %v; want %v, %v", name, got, err, tc.want, tc.wantErr)
 		}
 	}
 	onV2 := record("traders")

@@ -96,6 +96,10 @@ paths:
         underlying workflow. The request body must contain exactly one JSON
         value; trailing data after it is rejected.
 
+        The task, its active step and whether the caller may act on that
+        step are checked before the body is read, so a request refused for
+        one of them (401, 403, 404 or 409) is answered without reading it.
+
         `{stepId}` is the step being completed: the `step_id` the task's zone
         view reported. Only that step is completed; a submission for a step
         the task has since left is rejected with 409 and changes nothing.
@@ -201,7 +205,11 @@ paths:
         the server authorizes it as the command the template names for
         drafts, so the body carries no `command`.
 
-        Declared file fields follow the same rule as a submission.
+        Declared file fields follow the same rule as a submission, and so
+        does the order: the task, its active step and whether the caller may
+        act on that step are checked before the body is read, so a request
+        refused for one of them (401, 403, 404 or 409) is answered without
+        reading it.
 
         Requires scope `task:write`.
       operationId: saveTaskStepDraft
@@ -296,6 +304,11 @@ paths:
         hold a file reference issued to the caller's client that can be
         submitted, such as one an upload returned. A reference the dispatch
         carried can only be opened, so it can't be sent back.
+
+        The task the token names, its active step and whether the caller may
+        act on that step are checked before the body is read, so a callback
+        refused for one of them (401, 403, 404 or 409) is answered without
+        reading it.
 
         Requires scope `task:write`.
       operationId: completeTaskStepByCallbackToken
