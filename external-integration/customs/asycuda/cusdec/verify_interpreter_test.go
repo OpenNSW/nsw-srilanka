@@ -145,14 +145,13 @@ func TestVerifyInterpreter_SendsTheDeclarationAsJSON(t *testing.T) {
 
 	// Implementing BuildParts is what routes an interpreter to multipart, so
 	// the signature here has to be the one the plugin switches on --
-	// plugins.MultipartInterpreter's, down to the context.Context. Go matches
+	// tasktypes.MultipartInterpreter's, down to the context.Context. Go matches
 	// method sets exactly: written with any in place of context.Context this
 	// assertion can never hold, and would pass just as readily on an
 	// interpreter that had gained the method.
 	//
-	// The interface is restated rather than imported because
-	// internal/tasks/plugins imports this package, so naming it here would be
-	// a cycle.
+	// The interface is restated rather than imported so that this integration
+	// does not depend on the package that dispatches it.
 	_, isMultipart := any(VerifyInterpreter{}).(interface {
 		BuildParts(context.Context, map[string]any) ([]remote.Part, error)
 	})

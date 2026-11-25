@@ -68,6 +68,7 @@ import (
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/systemcaller"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/tasktypes"
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
@@ -296,9 +297,9 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// OGAs are sent file tokens issued to the machine client each calls back
 	// as. An agency doesn't own its files: what it stores are TNSW's tokens,
 	// which it sends back to TNSW as they are.
-	var ogaFiles taskplugins.OGAFiles
+	var ogaFiles tasktypes.OGAFiles
 	if !cfg.Storage.IsProxy() {
-		ogaFiles = taskplugins.OGAFiles{
+		ogaFiles = tasktypes.OGAFiles{
 			ClientFor: func(serviceID string) (string, bool) {
 				clientID, ok := globalCatalog.Clients[serviceID]
 				return clientID, ok
@@ -986,10 +987,10 @@ func (s registryStaticData) Title(ctx context.Context, manifestVersion int, id, 
 // that stores a copy of a document another service links to.
 //
 // A table rather than a run of near-identical registrations, as
-// taskplugins.Register does for the same reason — seven of them inline was most
-// of initTask's branching, and adding an eighth meant editing a function that
-// has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, staticData taskplugins.StaticData, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
+// tasktypes.Register and taskplugins.Register do for the same reason — seven
+// of them inline was most of initTask's branching, and adding an eighth meant
+// editing a function that has nothing else to do with plugins.
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates tasktypes.HTMLTemplateSource, files tasktypes.DocumentSaver, staticData tasktypes.StaticData, caseTasks taskplugins.CaseTasks, fetcher tasktypes.RemoteFetcher) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -1000,10 +1001,10 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{taskplugins.TaskTypeSLPAConsolidationResolve, trade.NewGenericExecutorPlugin(taskplugins.SLPAConsolidationResolveFunc)},
 		{taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)},
 		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
-		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
-		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files, staticData)},
+		{tasktypes.TaskTypeRefIDGenerator, tasktypes.NewRefIDGeneratorPlugin(refIDs)},
+		{tasktypes.TaskTypeHTMLDocumentGenerator, tasktypes.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files, staticData)},
 		{taskplugins.TaskTypeSLPACaseContainers, taskplugins.NewSLPACaseContainersPlugin(caseTasks)},
-		{taskplugins.TaskTypeRemoteFileArchiver, taskplugins.NewRemoteFileArchiverPlugin(fetcher, files)},
+		{tasktypes.TaskTypeRemoteFileArchiver, tasktypes.NewRemoteFileArchiverPlugin(fetcher, files)},
 	}
 
 	for _, e := range entries {
@@ -1037,8 +1038,8 @@ func initTask(
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
-	ogaFiles taskplugins.OGAFiles,
-	caseAttrs taskplugins.CaseAttributes,
+	ogaFiles tasktypes.OGAFiles,
+	caseAttrs tasktypes.CaseAttributes,
 	artifacts *artifact.Set,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
@@ -1048,12 +1049,15 @@ func initTask(
 	pluginsRegistry := plugins.NewRegistry()
 	declarations := cusdec.NewDeclarationRepository(db)
 	dispatchNotes := cdn.NewDispatchNoteRepository(db)
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
+	if err := tasktypes.Register(pluginsRegistry, remoteManager, paymentService, ogaFiles, caseAttrs); err != nil {
+		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
+	}
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, storageService, taskplugins.CustomsSubmissions{
 		Declarations:  declarations,
 		DispatchNotes: dispatchNotes,
 		Cases:         declarations,
 		Notes:         dispatchNotes,
-	}, caseAttrs); err != nil {
+	}); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	taskStore := gormstore.New(db)

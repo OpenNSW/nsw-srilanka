@@ -7,7 +7,7 @@ import (
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 )
 
-// Package plugins hosts taskv2's dispatching plugins. Outbound calls are
+// Package tasktypes hosts taskv2's dispatching plugins. Outbound calls are
 // routed through remote.Manager so service base URLs, auth, and timeouts
 // live in config.yaml's services list — template configs
 // specify only service_id + path.
