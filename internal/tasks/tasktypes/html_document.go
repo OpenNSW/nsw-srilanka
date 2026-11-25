@@ -54,7 +54,7 @@ var errStaticDataCall = errors.New("staticdata takes a static_data id and a valu
 // task's inputs, stores the document, and records where it went:
 //
 //	{"task_type": "HTML_DOCUMENT_GENERATOR", "output_namespace": "permit_doc",
-//	 "plugin_properties": {"template_id": "npqs-permit--html", "filename": "permit.html"}}
+//	 "plugin_properties": {"template_id": "permit--html", "filename": "permit.html"}}
 //
 // The node's input_mapping assembles everything the document prints into the
 // inputs — form submissions, reviewer decisions, a reference ID generated
@@ -63,7 +63,7 @@ var errStaticDataCall = errors.New("staticdata takes a static_data id and a valu
 // what it is given.
 //
 // A template names a code by its static_data row with the staticdata resolver:
-// {{ staticdata "customs-cusdec--port-of-entry-and-discharge" .port }}
+// {{ staticdata "declaration--port-of-entry" .port }}
 // prints the title of the row whose const is .port, in that artifact as the
 // manifest version the task started on lists it, the manifest version the
 // template itself comes from. An empty or missing value prints nothing, and a

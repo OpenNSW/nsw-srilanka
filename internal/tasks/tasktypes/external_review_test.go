@@ -74,7 +74,7 @@ func newReviewService(t *testing.T, status int) (*remote.Manager, *reviewService
 func reviewContext(inputs map[string]any) plugins.PluginContext {
 	return plugins.PluginContext{
 		Context: context.Background(),
-		Record:  &store.TaskRecord{TaskID: reviewTaskID, ActiveStepID: reviewStepID, CaseID: "consignment-1"},
+		Record:  &store.TaskRecord{TaskID: reviewTaskID, ActiveStepID: reviewStepID, CaseID: "case-1"},
 		Inputs:  inputs,
 	}
 }
@@ -99,7 +99,7 @@ func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
 	require.Len(t, calls, 1)
 	call := calls[0]
 	// The other side starts its review flow on the same case.
-	assert.Equal(t, "/api/v1/internal/cases/consignment-1/flows", call.path)
+	assert.Equal(t, "/api/v1/internal/cases/case-1/flows", call.path)
 	assert.Equal(t, map[string]any{
 		"workflowId":    "review",
 		"flowId":        reviewTaskID,
@@ -115,8 +115,8 @@ func TestExternalReview_DispatchNeeds(t *testing.T) {
 		config string
 		caseID string
 	}{
-		"path":                {`{"service_id": "agency", "service_workflow_id": "review"}`, "consignment-1"},
-		"service_workflow_id": {`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows"}`, "consignment-1"},
+		"path":                {`{"service_id": "agency", "service_workflow_id": "review"}`, "case-1"},
+		"service_workflow_id": {`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows"}`, "case-1"},
 		"a case":              {`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review"}`, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -174,16 +174,16 @@ const dispatchConfig = `{"service_id": "agency", "path": "/api/v1/internal/cases
 
 func TestExternalReview_DispatchSendsTheCaseAttributes(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	cases := &caseAttributesStub{attrs: map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}}
+	cases := &caseAttributesStub{attrs: map[string]any{"company": map[string]any{"name": "Adam PVT LTD"}}}
 	p := NewExternalReviewPlugin(mgr, tokenFor, cases)
 
 	err := p.Execute(reviewContext(map[string]any{"submission": map[string]any{"field": "v1"}}), json.RawMessage(dispatchConfig))
 
 	require.ErrorIs(t, err, ErrSuspended)
-	assert.Equal(t, []string{"consignment-1"}, cases.reads)
+	assert.Equal(t, []string{"case-1"}, cases.reads)
 	calls := svc.calls()
 	require.Len(t, calls, 1)
-	assert.Equal(t, map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}, calls[0].body["attributes"])
+	assert.Equal(t, map[string]any{"company": map[string]any{"name": "Adam PVT LTD"}}, calls[0].body["attributes"])
 	// The input is the node's, unchanged.
 	assert.Equal(t, map[string]any{"field": "v1"}, calls[0].body["input"])
 }
@@ -216,7 +216,7 @@ func TestExternalReview_FailedCaseAttributesReadIsRetried(t *testing.T) {
 
 func TestExternalReview_ReplySendsNoCaseAttributes(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	cases := &caseAttributesStub{attrs: map[string]any{"traderCompany": map[string]any{"name": "Adam PVT LTD"}}}
+	cases := &caseAttributesStub{attrs: map[string]any{"company": map[string]any{"name": "Adam PVT LTD"}}}
 	p := NewExternalReviewPlugin(mgr, tokenFor, cases)
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x", "submission": map[string]any{}}), json.RawMessage(dispatchConfig))
@@ -238,7 +238,7 @@ func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
 	require.ErrorIs(t, err, ErrSuspended)
 	calls := svc.calls()
 	require.Len(t, calls, 1)
-	assert.Equal(t, "/api/v1/internal/cases/consignment-1/flows", calls[0].path)
+	assert.Equal(t, "/api/v1/internal/cases/case-1/flows", calls[0].path)
 }
 
 func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
@@ -417,16 +417,16 @@ func TestNewExternalReviewPlugin_PanicsOnMissingDependencies(t *testing.T) {
 	renderConfig := func(context.Context, store.TaskRecord) (json.RawMessage, error) { return nil, nil }
 
 	tests := map[string]func(){
-		"nil manager": func() { NewExternalReviewPlugin(nil, OGAFiles{}, noCaseAttributes{}) },
-		"nil cases":   func() { NewExternalReviewPlugin(remote.NewManager(), OGAFiles{}, nil) },
+		"nil manager": func() { NewExternalReviewPlugin(nil, FileTokens{}, noCaseAttributes{}) },
+		"nil cases":   func() { NewExternalReviewPlugin(remote.NewManager(), FileTokens{}, nil) },
 		"issuer without client lookup": func() {
-			NewExternalReviewPlugin(remote.NewManager(), OGAFiles{IssueForClient: issue, RenderConfigOf: renderConfig}, noCaseAttributes{})
+			NewExternalReviewPlugin(remote.NewManager(), FileTokens{IssueForClient: issue, RenderConfigOf: renderConfig}, noCaseAttributes{})
 		},
 		"client lookup without issuer": func() {
-			NewExternalReviewPlugin(remote.NewManager(), OGAFiles{ClientFor: clientFor}, noCaseAttributes{})
+			NewExternalReviewPlugin(remote.NewManager(), FileTokens{ClientFor: clientFor}, noCaseAttributes{})
 		},
 		"issuer without render config": func() {
-			NewExternalReviewPlugin(remote.NewManager(), OGAFiles{ClientFor: clientFor, IssueForClient: issue}, noCaseAttributes{})
+			NewExternalReviewPlugin(remote.NewManager(), FileTokens{ClientFor: clientFor, IssueForClient: issue}, noCaseAttributes{})
 		},
 	}
 	for name, build := range tests {
@@ -435,7 +435,7 @@ func TestNewExternalReviewPlugin_PanicsOnMissingDependencies(t *testing.T) {
 }
 
 func TestNewExternalReviewPlugin_AcceptsZeroOrCompleteFiles(t *testing.T) {
-	assert.NotPanics(t, func() { NewExternalReviewPlugin(remote.NewManager(), OGAFiles{}, noCaseAttributes{}) })
+	assert.NotPanics(t, func() { NewExternalReviewPlugin(remote.NewManager(), FileTokens{}, noCaseAttributes{}) })
 	assert.NotPanics(t, func() {
 		NewExternalReviewPlugin(remote.NewManager(), withRenderConfig(tokenFor, reviewRenderConfig), noCaseAttributes{})
 	})

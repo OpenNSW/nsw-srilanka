@@ -11,19 +11,19 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 )
 
-// OGAFiles hands an OGA the files in what it is sent as file tokens issued to
-// it, which it redeems on this deployment's storage route. A stored value
-// never leaves for an OGA as it is.
+// FileTokens replaces the stored files in what a step sends another service
+// with file tokens issued to that service's client, which it redeems on this
+// deployment's storage route. A stored value never leaves as it is.
 //
-// Only the deployment that owns the files can issue them. An agency, whose
-// storage proxies to TNSW, stores TNSW's tokens and sends them back as they
-// are: it uses the zero OGAFiles.
-type OGAFiles struct {
+// Only the deployment that owns the files can issue them. A deployment whose
+// storage proxies to the owner's stores the owner's tokens and sends them back
+// as they are: it uses the zero FileTokens.
+type FileTokens struct {
 	// ClientFor returns the machine client the outbound service serviceID
 	// calls back as.
 	ClientFor func(serviceID string) (clientID string, ok bool)
 	// IssueForClient returns a token that lets the machine client clientID
-	// open value, and nothing more. It never expires: the OGA keeps it in its
+	// open value, and nothing more. It never expires: the service keeps it in its
 	// own records.
 	IssueForClient func(clientID, value string) (string, error)
 	// RenderConfigOf returns a task's render config, whose files list names
@@ -36,7 +36,7 @@ type OGAFiles struct {
 // config declares holds a token for serviceID's client. data itself is not
 // changed. A file to send with no client to issue it to is an error, not sent
 // as it is.
-func (f OGAFiles) tokenize(ctx context.Context, record store.TaskRecord, root string, data any, serviceID string) (any, error) {
+func (f FileTokens) tokenize(ctx context.Context, record store.TaskRecord, root string, data any, serviceID string) (any, error) {
 	if f.IssueForClient == nil {
 		return data, nil
 	}

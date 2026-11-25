@@ -42,8 +42,8 @@ func mark(seen *[]string) func(string) (string, error) {
 
 func TestParse(t *testing.T) {
 	files := []string{
-		"traderinput.invoice_file_url",
-		"fcau.analysis_certificates[*]",
+		"applicantform.invoice_file_url",
+		"lab.analysis_certificates[*]",
 		"userform.supportingDocuments[*].file",
 		"userform.items[*].lines[*].certificate",
 		"review.batches[*][*]",
@@ -70,7 +70,7 @@ func TestParseWithoutFiles(t *testing.T) {
 
 func TestParseRejects(t *testing.T) {
 	for _, raw := range []string{
-		`{"files":"traderinput.invoice"}`,
+		`{"files":"applicantform.invoice"}`,
 		`{"files":[1]}`,
 		`[]`,
 	} {
@@ -122,13 +122,13 @@ func TestRebase(t *testing.T) {
 		path, prefix, want string
 		ok                 bool
 	}{
-		{"traderinput.invoice", "traderinput", "invoice", true},
-		{"traderinput.docs[*].file", "traderinput", "docs[*].file", true},
-		{"traderinput.invoice", "", "traderinput.invoice", true},
-		{"traderinput.invoice", "userform", "", false},
-		{"traderinput", "traderinput", "", false},
-		{"traderinput[*].file", "traderinput", "", false},
-		{"traderinputs.invoice", "traderinput", "", false},
+		{"applicantform.invoice", "applicantform", "invoice", true},
+		{"applicantform.docs[*].file", "applicantform", "docs[*].file", true},
+		{"applicantform.invoice", "", "applicantform.invoice", true},
+		{"applicantform.invoice", "userform", "", false},
+		{"applicantform", "applicantform", "", false},
+		{"applicantform[*].file", "applicantform", "", false},
+		{"applicantforms.invoice", "applicantform", "", false},
 	}
 	for _, tc := range cases {
 		got, ok := parse(t, tc.path)[0].Rebase(tc.prefix)
@@ -140,8 +140,8 @@ func TestRebase(t *testing.T) {
 
 func TestReplace(t *testing.T) {
 	data := decode(t, `{
-		"traderinput": {"invoice": "k1", "note": "not a file"},
-		"fcau": {"certs": ["k2", "k3"]},
+		"applicantform": {"invoice": "k1", "note": "not a file"},
+		"lab": {"certs": ["k2", "k3"]},
 		"userform": {
 			"docs": [{"file": "k4", "name": "a"}, {"file": "k5"}],
 			"items": [{"lines": [{"cert": "k6"}, {"cert": "k7"}]}, {"lines": []}]
@@ -150,8 +150,8 @@ func TestReplace(t *testing.T) {
 	}`)
 	var seen []string
 	paths := parse(t,
-		"traderinput.invoice",
-		"fcau.certs[*]",
+		"applicantform.invoice",
+		"lab.certs[*]",
 		"userform.docs[*].file",
 		"userform.items[*].lines[*].cert",
 		"review.batches[*][*]",
@@ -161,8 +161,8 @@ func TestReplace(t *testing.T) {
 	}
 
 	want := decode(t, `{
-		"traderinput": {"invoice": "k1!", "note": "not a file"},
-		"fcau": {"certs": ["k2!", "k3!"]},
+		"applicantform": {"invoice": "k1!", "note": "not a file"},
+		"lab": {"certs": ["k2!", "k3!"]},
 		"userform": {
 			"docs": [{"file": "k4!", "name": "a"}, {"file": "k5!"}],
 			"items": [{"lines": [{"cert": "k6!"}, {"cert": "k7!"}]}, {"lines": []}]
@@ -303,8 +303,8 @@ func TestReplaceRebased(t *testing.T) {
 	payload := decode(t, `{"invoice": "k1", "other": "k2"}`)
 	var seen []string
 	var rebased []filefields.Path
-	for _, p := range parse(t, "traderinput.invoice", "userform.other") {
-		if r, ok := p.Rebase("traderinput"); ok {
+	for _, p := range parse(t, "applicantform.invoice", "userform.other") {
+		if r, ok := p.Rebase("applicantform"); ok {
 			rebased = append(rebased, r)
 		}
 	}

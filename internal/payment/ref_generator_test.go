@@ -48,21 +48,21 @@ func TestRefGenerator_DefaultFormat(t *testing.T) {
 // reads back, alongside the checkout's other metadata.
 func TestRefGenerator_FeeFormat(t *testing.T) {
 	refIDs := &fakeRefIDs{}
-	metadata := ReferenceMetadata("CDA", "fee_payment_ref", map[string]string{"exporterId": "0002", "mainCategory": "01"})
+	metadata := ReferenceMetadata("AGENCY", "fee_payment_ref", map[string]string{"exporterId": "0002", "mainCategory": "01"})
 	metadata["task_id"] = "task-1"
 
 	ref, err := NewRefGenerator(refIDs).GenerateReference(context.Background(), checkout(metadata))
 
 	require.NoError(t, err)
-	assert.Equal(t, "CDA/fee_payment_ref/1", ref)
-	assert.Equal(t, []generateCall{{issuer: "CDA", idType: "fee_payment_ref", params: map[string]string{
+	assert.Equal(t, "AGENCY/fee_payment_ref/1", ref)
+	assert.Equal(t, []generateCall{{issuer: "AGENCY", idType: "fee_payment_ref", params: map[string]string{
 		"exporterId": "0002", "mainCategory": "01",
 	}}}, refIDs.calls)
 }
 
 // A format needs both its issuer and its id_type.
 func TestRefGenerator_PartialFormatRejected(t *testing.T) {
-	full := ReferenceMetadata("CDA", "fee_payment_ref", nil)
+	full := ReferenceMetadata("AGENCY", "fee_payment_ref", nil)
 	for name, metadata := range map[string]map[string]string{
 		"issuer only":  {metadataKeyIssuer: full[metadataKeyIssuer]},
 		"id_type only": {metadataKeyIDType: full[metadataKeyIDType]},

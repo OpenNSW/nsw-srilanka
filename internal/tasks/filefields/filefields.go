@@ -3,7 +3,7 @@
 //
 // A render config lists its file fields at the top level:
 //
-//	"files": ["traderinput.invoice", "userform.documents[*].file"]
+//	"files": ["applicantform.invoice", "userform.documents[*].file"]
 //
 // Each entry is a path into the task's data:
 //
@@ -103,8 +103,8 @@ func (p Path) String() string {
 }
 
 // Rebase returns p relative to the value at the top-level field prefix, for
-// data that holds only that value: "traderinput.invoice" rebased on
-// "traderinput" is "invoice". ok is false when p does not lie inside prefix.
+// data that holds only that value: "applicantform.invoice" rebased on
+// "applicantform" is "invoice". ok is false when p does not lie inside prefix.
 // An empty prefix returns p unchanged.
 func (p Path) Rebase(prefix string) (rebased Path, ok bool) {
 	if prefix == "" {

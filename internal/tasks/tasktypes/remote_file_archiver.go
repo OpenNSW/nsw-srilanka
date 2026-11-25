@@ -15,7 +15,7 @@ import (
 )
 
 // TaskTypeRemoteFileArchiver stores a copy of a document another service hands
-// out by link, so the trader opens it from this deployment's storage.
+// out by link, so the applicant opens it from this deployment's storage.
 const TaskTypeRemoteFileArchiver = "REMOTE_FILE_ARCHIVER"
 
 // RemoteFetcher downloads from a registered service. *remote.Manager satisfies it,
@@ -28,17 +28,17 @@ type RemoteFetcher interface {
 // at the URL in its source input and stores it:
 //
 //	{"task_type": "REMOTE_FILE_ARCHIVER", "output_namespace": "payment_slip_file",
-//	 "plugin_properties": {"service_id": "slpa", "source_input": "payment_slip_url",
-//	   "mime_type": "application/pdf", "filename": "slpa-payment-slip.pdf"}}
+//	 "plugin_properties": {"service_id": "port", "source_input": "payment_slip_url",
+//	   "mime_type": "application/pdf", "filename": "payment-slip.pdf"}}
 //
-// A service like SLPA's CMS hands out its documents as signed links that expire,
-// so a trader who opens one later finds nothing, and the document never reaches
+// A service that hands out its documents as signed links that expire means
+// an applicant who opens one later finds nothing, and the document never reaches
 // this deployment. This step downloads it while the link is good and stores it,
 // and the render config links the stored copy.
 //
 // The URL is fetched through the service's own client, so the download goes only
 // to that service's host, with its credentials. A source that is a base64 data:
-// URI, as SLPA sends its gate pass barcode, carries the document inline, so it is
+// URI, as some services send an image such as a barcode, carries the document inline, so it is
 // decoded instead, and stored only when its type is mime_type.
 //
 // The stored file's metadata is written to <output_namespace> as {key, name,
@@ -46,7 +46,7 @@ type RemoteFetcher interface {
 // the source input is empty, so the page keeps showing what the service sent.
 //
 // A download the service refuses (a 4xx: an expired or unknown link) is recorded
-// as {error} and the step goes on: the trader still has the service's own link,
+// as {error} and the step goes on: the applicant still has the service's own link,
 // and a refusal would only repeat on a retry. A transport failure or a 5xx is
 // returned, so the engine retries it.
 type RemoteFileArchiverPlugin struct {
@@ -164,8 +164,8 @@ func (p *RemoteFileArchiverPlugin) download(ctx context.Context, serviceID, sour
 	return resp.Body, "", nil
 }
 
-// isDataURI reports whether source carries the document inline, as SLPA sends
-// its gate pass barcode, rather than linking to it.
+// isDataURI reports whether source carries the document inline, as a data: URI,
+// rather than linking to it.
 func isDataURI(source string) bool {
 	return len(source) >= len("data:") && strings.EqualFold(source[:len("data:")], "data:")
 }
