@@ -85,11 +85,14 @@ func (a *mockAgency) handleInject(w http.ResponseWriter, r *http.Request, agency
 		http.Error(w, "bad inject: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	taskID, _ := body[taskIDField].(string)
-	if taskID == "" {
+	flowID, _ := body[taskIDField].(string)
+	if flowID == "" {
 		http.Error(w, "missing "+taskIDField, http.StatusBadRequest)
 		return
 	}
+	// TNSW names the flow "<taskId>-<workflowId>", and a replay step names the TNSW task.
+	workflowID, _ := body["workflowId"].(string)
+	taskID := strings.TrimSuffix(flowID, "-"+workflowID)
 	a.mu.Lock()
 	a.injects[taskID] = storedInject{agencyID: agencyID, taskID: taskID, body: body}
 	a.mu.Unlock()

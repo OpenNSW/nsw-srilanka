@@ -222,6 +222,32 @@ func TestClientHandlerConflict(t *testing.T) {
 	}
 }
 
+// One caller task starts two workflows on the same case, each under a flow ID of its own
+// (the task's ID and the workflow), as TNSW does for a payment check and then the
+// officer's review. Both start, and a repeat of either starts nothing more.
+func TestClientHandlerTwoWorkflowsFromOneTask(t *testing.T) {
+	list := clientFlows
+	list.Workflows = []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}}, {ID: "receipt", Clients: []string{"tnsw"}}}
+	h, repo, wm := newClientHandler(t, list)
+	bodies := []string{
+		`{"workflowId":"notice","flowId":"task-1-notice","callbackToken":"tok-1"}`,
+		`{"workflowId":"receipt","flowId":"task-1-receipt","callbackToken":"tok-2"}`,
+	}
+	for _, body := range append(bodies, bodies...) {
+		if rec := post(h, tnsw, body); rec.Code != http.StatusOK {
+			t.Fatalf("status = %d for %s, body %s", rec.Code, body, rec.Body)
+		}
+	}
+	for id, template := range map[string]string{"task-1-notice": "notice", "task-1-receipt": "receipt"} {
+		if f, ok := repo.flows[id]; !ok || f.TemplateID != template {
+			t.Errorf("flow %s = %+v, want one recorded for %s", id, f, template)
+		}
+	}
+	if len(wm.starts) != 2 || wm.starts[0].id != "task-1-notice" || wm.starts[1].id != "task-1-receipt" {
+		t.Errorf("starts = %v, want task-1-notice then task-1-receipt", wm.starts)
+	}
+}
+
 // A failed start leaves the flow recorded with its owner, so the caller's retry starts it.
 // A failed record starts nothing.
 func TestClientHandlerFailures(t *testing.T) {

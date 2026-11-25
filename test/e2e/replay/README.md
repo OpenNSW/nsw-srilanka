@@ -101,6 +101,9 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
 | `inbound`  | The HTTP endpoint the mock agency exposes to receive injects from the NSW app                                                                                                                                                       |
 | `outbound` | How the mock posts the callback back to the NSW app. `{callbackToken}` in `callbackPath` is the token the inject carried (`inbound.callbackTokenField`): it names the one step the inject was for, and the app completes only that. |
 
+`inbound.taskIDField` names the field holding the flow ID. TNSW sends `<taskId>-<workflowId>`
+there, and the mock files the inject under the TNSW task ID, which is what a replay step names.
+
 ### `configs/payments/<id>.json`
 
 ```json
