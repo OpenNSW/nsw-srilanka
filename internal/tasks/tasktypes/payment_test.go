@@ -257,12 +257,15 @@ func checkoutResponse() *payment.CreateCheckoutResponse {
 	return &payment.CreateCheckoutResponse{SessionID: "session-1", ReferenceNumber: "000201000020001", Type: payment.FlowTypeInstruction}
 }
 
+// defaultIssuer is the default issuer generatedFrom builds its generator with.
+const defaultIssuer = "ACME"
+
 // generatedFrom feeds a checkout's metadata to paymentref.RefGenerator, as the
 // payment service does, and returns the refid call it makes.
 func generatedFrom(t *testing.T, req payment.CreateCheckoutRequest) refIDCall {
 	t.Helper()
 	refIDs := &fakeRefIDs{}
-	_, err := paymentref.NewRefGenerator(refIDs).GenerateReference(context.Background(), req)
+	_, err := paymentref.NewRefGenerator(refIDs, defaultIssuer).GenerateReference(context.Background(), req)
 	require.NoError(t, err)
 	require.Len(t, refIDs.calls, 1)
 	return refIDs.calls[0]
@@ -306,7 +309,7 @@ func TestPaymentPlugin_Execute_DefaultReferenceFormat(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrSuspended)
 	call := generatedFrom(t, svc.lastReq)
-	assert.Equal(t, paymentref.DefaultReferenceIssuer, call.issuer)
+	assert.Equal(t, defaultIssuer, call.issuer)
 	assert.Equal(t, paymentref.DefaultReferenceIDType, call.idType)
 	assert.Empty(t, call.params)
 }

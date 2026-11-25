@@ -200,7 +200,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
-	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
+	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs, paymentReferenceIssuer))
 	// Built before payment and storage are handed to the task stack. Workers
 	// can emit events as soon as those services exist, so the auditor has to
 	// be attached here rather than after the task manager starts. Telemetry
@@ -673,6 +673,11 @@ func newHTTPServer(cfg config.ServerConfig, handler http.Handler) *http.Server {
 		IdleTimeout:       cfg.IdleTimeout,
 	}
 }
+
+// paymentReferenceIssuer is the issuer of the default payment reference format,
+// TNSW/payment_ref, which the refid section of the server config defines. A fee
+// without a reference format of its own is issued one in it.
+const paymentReferenceIssuer = "TNSW"
 
 // parentWorkflowQueue is the Temporal task queue the macro/parent workflow
 // runner polls.
