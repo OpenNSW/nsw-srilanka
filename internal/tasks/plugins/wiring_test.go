@@ -38,7 +38,7 @@ func TestRegister_InstallsTheSriLankanTaskTypes(t *testing.T) {
 		_, ok := reg.Get(taskType)
 		assert.True(t, ok, "%s is registered", taskType)
 	}
-	// The generic task types are tasktypes.Register's to install.
+	// The generic task types are bootstrap's to install.
 	_, ok := reg.Get(tasktypes.TaskTypeAuthAPICall)
 	assert.False(t, ok)
 }

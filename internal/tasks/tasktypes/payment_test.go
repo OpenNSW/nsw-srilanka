@@ -485,3 +485,7 @@ func TestDecimalFromAny_KeepsFloatPrecision(t *testing.T) {
 		t.Fatalf("decimalFromAny(4500.567) = %s, want 4500.567", got.String())
 	}
 }
+
+func TestNewPaymentPlugin_NilServicePanics(t *testing.T) {
+	assert.Panics(t, func() { NewPaymentPlugin(nil) })
+}

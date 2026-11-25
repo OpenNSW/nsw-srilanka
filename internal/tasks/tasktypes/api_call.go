@@ -208,10 +208,19 @@ type APICallPlugin struct {
 	interpreter Interpreter
 }
 
+// NewAPICallPlugin builds the AUTH_API_CALL plugin, which calls the services
+// manager lists and sends the step's mapped inputs as they are. manager must be
+// non-nil.
 func NewAPICallPlugin(manager *remote.Manager) *APICallPlugin {
+	if manager == nil {
+		panic("manager is nil")
+	}
 	return &APICallPlugin{manager: manager, interpreter: passthroughInterpreter{}}
 }
 
+// NewAPICallPluginWithInterpreter builds an AUTH_API_CALL plugin whose
+// requests and responses interp shapes. A nil interp sends the mapped inputs
+// as they are, as NewAPICallPlugin does.
 func NewAPICallPluginWithInterpreter(manager *remote.Manager, interp Interpreter) *APICallPlugin {
 	p := NewAPICallPlugin(manager)
 	if interp != nil {

@@ -980,6 +980,31 @@ func (s registryStaticData) Title(ctx context.Context, manifestVersion int, id, 
 // TemporalManager runs the per-task (micro) sub-workflows, while the
 // parent/macro workflow runner is owned by the workflow package and wired
 // separately (see Stage 5 below).
+// registerTaskTypes installs the generic task types this deployment uses from
+// tasktypes and core's taskflow/plugins. registerFlowPlugins installs the ones
+// that need a store or source only the application has, and taskplugins the
+// Sri Lankan ones.
+func registerTaskTypes(reg *plugins.Registry, mgr *remote.Manager, paymentService payment.Service, ogaFiles tasktypes.OGAFiles, cases tasktypes.CaseAttributes) error {
+	entries := []struct {
+		taskType string
+		plugin   plugins.TaskPlugin
+	}{
+		{tasktypes.TaskTypeUserInput, plugins.NewUserInputPlugin()},
+		{tasktypes.TaskTypeValueWriter, tasktypes.NewValueWriterPlugin()},
+		{tasktypes.TaskTypeExternalReview, tasktypes.NewExternalReviewPlugin(mgr, ogaFiles, cases)},
+		{tasktypes.TaskTypePayment, tasktypes.NewPaymentPlugin(paymentService)},
+		{tasktypes.TaskTypeAPICall, plugins.NewAPICallPlugin(plugins.DefaultHTTPDispatcher)},
+		{tasktypes.TaskTypeAuthAPICall, tasktypes.NewAPICallPlugin(mgr)},
+	}
+
+	for _, e := range entries {
+		if err := reg.Register(e.taskType, e.plugin); err != nil {
+			return fmt.Errorf("failed to register %s plugin: %w", e.taskType, err)
+		}
+	}
+	return nil
+}
+
 // registerFlowPlugins installs the plugins this deployment adds on top of the
 // task-plugin set: the synchronous transforms that shape a fan-out, the CHA
 // writer, the reference ID generator, the HTML document generator, the lookup
@@ -987,7 +1012,7 @@ func (s registryStaticData) Title(ctx context.Context, manifestVersion int, id, 
 // that stores a copy of a document another service links to.
 //
 // A table rather than a run of near-identical registrations, as
-// tasktypes.Register and taskplugins.Register do for the same reason — seven
+// registerTaskTypes and taskplugins.Register do for the same reason — seven
 // of them inline was most of initTask's branching, and adding an eighth meant
 // editing a function that has nothing else to do with plugins.
 func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates tasktypes.HTMLTemplateSource, files tasktypes.DocumentSaver, staticData tasktypes.StaticData, caseTasks taskplugins.CaseTasks, fetcher tasktypes.RemoteFetcher) error {
@@ -1049,8 +1074,8 @@ func initTask(
 	pluginsRegistry := plugins.NewRegistry()
 	declarations := cusdec.NewDeclarationRepository(db)
 	dispatchNotes := cdn.NewDispatchNoteRepository(db)
-	if err := tasktypes.Register(pluginsRegistry, remoteManager, paymentService, ogaFiles, caseAttrs); err != nil {
-		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
+	if err := registerTaskTypes(pluginsRegistry, remoteManager, paymentService, ogaFiles, caseAttrs); err != nil {
+		return nil, nil, err
 	}
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, storageService, taskplugins.CustomsSubmissions{
 		Declarations:  declarations,

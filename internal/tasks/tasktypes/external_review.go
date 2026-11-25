@@ -35,7 +35,20 @@ type CaseAttributes interface {
 // form to the configured service+path, starting the other side's review flow. The
 // files in it are sent as tokens for the OGA, issued through files, and the attributes of
 // the dispatch's case, read from cases, are sent with each flow it starts.
+// manager and cases must be non-nil, and files either zero or complete.
 func NewExternalReviewPlugin(manager *remote.Manager, files OGAFiles, cases CaseAttributes) *ExternalReviewPlugin {
+	if manager == nil {
+		panic("manager is nil")
+	}
+	if cases == nil {
+		panic("cases is nil")
+	}
+	if (files.ClientFor == nil) != (files.IssueForClient == nil) {
+		panic("files needs both ClientFor and IssueForClient, or neither")
+	}
+	if files.IssueForClient != nil && files.RenderConfigOf == nil {
+		panic("files needs RenderConfigOf with IssueForClient")
+	}
 	return &ExternalReviewPlugin{client: newDispatchHelper(manager), files: files, cases: cases}
 }
 

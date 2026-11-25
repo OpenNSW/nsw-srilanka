@@ -33,9 +33,11 @@ type NotificationPlugin struct {
 	devMode bool
 }
 
-// NewNotificationPlugin builds the plugin. s must be non-nil; bootstrap
-// fail-fasts if the notification manager could not initialize.
+// NewNotificationPlugin builds the plugin. s must be non-nil.
 func NewNotificationPlugin(s sender, devMode bool) *NotificationPlugin {
+	if s == nil {
+		panic("sender is nil")
+	}
 	return &NotificationPlugin{sender: s, devMode: devMode}
 }
 

@@ -410,3 +410,33 @@ func TestExternalReview_ConfigErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestNewExternalReviewPlugin_PanicsOnMissingDependencies(t *testing.T) {
+	issue := func(string, string) (string, error) { return "", nil }
+	clientFor := func(string) (string, bool) { return "", false }
+	renderConfig := func(context.Context, store.TaskRecord) (json.RawMessage, error) { return nil, nil }
+
+	tests := map[string]func(){
+		"nil manager": func() { NewExternalReviewPlugin(nil, OGAFiles{}, noCaseAttributes{}) },
+		"nil cases":   func() { NewExternalReviewPlugin(remote.NewManager(), OGAFiles{}, nil) },
+		"issuer without client lookup": func() {
+			NewExternalReviewPlugin(remote.NewManager(), OGAFiles{IssueForClient: issue, RenderConfigOf: renderConfig}, noCaseAttributes{})
+		},
+		"client lookup without issuer": func() {
+			NewExternalReviewPlugin(remote.NewManager(), OGAFiles{ClientFor: clientFor}, noCaseAttributes{})
+		},
+		"issuer without render config": func() {
+			NewExternalReviewPlugin(remote.NewManager(), OGAFiles{ClientFor: clientFor, IssueForClient: issue}, noCaseAttributes{})
+		},
+	}
+	for name, build := range tests {
+		t.Run(name, func(t *testing.T) { assert.Panics(t, build) })
+	}
+}
+
+func TestNewExternalReviewPlugin_AcceptsZeroOrCompleteFiles(t *testing.T) {
+	assert.NotPanics(t, func() { NewExternalReviewPlugin(remote.NewManager(), OGAFiles{}, noCaseAttributes{}) })
+	assert.NotPanics(t, func() {
+		NewExternalReviewPlugin(remote.NewManager(), withRenderConfig(tokenFor, reviewRenderConfig), noCaseAttributes{})
+	})
+}
