@@ -25,11 +25,14 @@ import (
 	nswauthn "github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/core/platform/catalog"
 	"github.com/OpenNSW/core/platform/payloadschema"
+	nswpayment "github.com/OpenNSW/core/platform/payment"
+	platformrenderer "github.com/OpenNSW/core/platform/renderer"
 	nswstorage "github.com/OpenNSW/core/platform/storage"
 	"github.com/OpenNSW/core/platform/storage/fileaccess"
 	"github.com/OpenNSW/core/platform/storage/filetoken"
 	"github.com/OpenNSW/core/platform/systemlog"
 	"github.com/OpenNSW/core/platform/taskauthz"
+	"github.com/OpenNSW/core/platform/tasktypes"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
 	sharedaudit "github.com/OpenNSW/core/shared/audit"
@@ -55,7 +58,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
-	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -68,7 +70,6 @@ import (
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/systemcaller"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/tasktypes"
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
@@ -1097,7 +1098,7 @@ func initTask(
 	}
 
 	// Construct UI projectors and the renderer/zoneview assembler
-	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector(), taskrenderer.NewSLPASundryProjector())
+	projectors := append(uiprojector.DefaultProjectors(), platformrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector(), taskrenderer.NewSLPASundryProjector())
 	uiAssembler, err := uiprojector.NewAssembler(registryTemplateProvider{artifacts: artifacts}, projectors)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build ui assembler: %w", err)

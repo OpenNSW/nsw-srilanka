@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/core/httputil"
 	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/core/platform/authn"
+	"github.com/OpenNSW/core/platform/filefields"
 	"github.com/OpenNSW/core/platform/payloadschema"
 	"github.com/OpenNSW/core/platform/securitylog"
 	"github.com/OpenNSW/core/platform/storage/fileaccess"
@@ -23,7 +24,6 @@ import (
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
 )
 

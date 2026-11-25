@@ -9,7 +9,6 @@ require (
 	github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea
 	github.com/OpenNSW/core/cors v0.1.0
 	github.com/OpenNSW/core/database v0.3.0
-	github.com/OpenNSW/core/htmlgen v0.0.0-20261006063237-d8b90361237e
 	github.com/OpenNSW/core/httputil v0.2.0
 	github.com/OpenNSW/core/json v0.0.0-20260917101529-36df0ddf30e0
 	github.com/OpenNSW/core/notification v0.3.0
@@ -52,6 +51,7 @@ require (
 
 require (
 	github.com/OpenNSW/core/authn v0.4.0 // indirect
+	github.com/OpenNSW/core/htmlgen v0.0.0-20261006063237-d8b90361237e // indirect
 	github.com/aws/aws-sdk-go-v2 v1.48.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.27 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.33.21 // indirect

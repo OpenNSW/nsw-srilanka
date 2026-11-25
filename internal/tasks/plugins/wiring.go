@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/OpenNSW/core/platform/tasktypes"
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
@@ -20,7 +21,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/gatepass"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/invoice"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/tasktypes"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
