@@ -6,8 +6,10 @@ name: Version Check
 # queue it checks the PR again against what is merged ahead of it, and drops a
 # release PR whose version isn't higher than the version ahead of it.
 # CHANGELOG.md is written only by a release PR, so a PR that changes it without
-# version.txt fails too. A release PR into a maintenance branch (release/X.Y.x)
-# may only release the next patch of that line.
+# version.txt fails too. A release PR's CHANGELOG section must link only merged
+# pull requests, and issues and commits that exist. A release PR into a
+# maintenance branch (release/X.Y.x) may only release the next patch of that
+# line.
 
 on:
   pull_request:
@@ -35,6 +37,8 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           BRANCH: ${{ github.base_ref || github.event.merge_group.base_ref }}
+          # check-changelog-links.sh looks the section's links up with gh.
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "merge_group" ]; then
             BASE="HEAD^"
@@ -58,6 +62,10 @@ jobs:
                  bash .github/scripts/check-release-line.sh "$BRANCH" "$TAG" && \
                  bash .github/scripts/release-notes.sh "${TAG#v}" > /dev/null; } 2> error.txt; then
             echo "::error file=version.txt::$(tr '\n' ' ' < error.txt)"
+            exit 1
+          fi
+          if ! bash .github/scripts/check-changelog-links.sh "${TAG#v}" 2> error.txt; then
+            echo "::error file=CHANGELOG.md::$(tr '\n' ' ' < error.txt)"
             exit 1
           fi
           if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then

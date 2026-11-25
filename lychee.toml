@@ -20,6 +20,12 @@ exclude = [
   # tag (v1.0.0-rc.1) counts too.
   '^https://github\.com/OpenNSW/nsw-srilanka/(blob|tree)/v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?/',
   '^https://github\.com/OpenNSW/nsw-srilanka/compare/v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?\.\.\.',
+  # Pull requests, issues and commits on GitHub. They don't move once they
+  # exist, and CHANGELOG.md links hundreds of them, so checking them all on
+  # every PR fails on GitHub's occasional 502s and 503s. A release PR checks
+  # the ones its section adds through the GitHub API
+  # (.github/scripts/check-changelog-links.sh).
+  '^https://github\.com/[^/]+/[^/]+/(pull|issues|commit)/',
 ]
 
 exclude_path = ['(^|/)tmp/', '(^|/)node_modules/', '(^|/)\.claude/worktrees/']
@@ -28,4 +34,7 @@ exclude_path = ['(^|/)tmp/', '(^|/)node_modules/', '(^|/)\.claude/worktrees/']
 accept = ["100..=103", "200..=299", "429"]
 
 max_retries = 3
+# Seconds before the first retry; each later one waits twice as long (5, 10,
+# 20), to ride out a brief GitHub 5xx.
+retry_wait_time = 5
 timeout = 20
