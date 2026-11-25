@@ -1,6 +1,6 @@
 // Package plugins holds the task types specific to Sri Lanka's integrations
 // (SLC Edge, SLPA, the IPPC ePhyto Hub) and wires them into a plugin registry.
-// The generic task types they build on live in internal/tasks/tasktypes.
+// The generic task types they build on live in core/platform/tasktypes.
 // The taskType keys must match the Type field on SubTaskTemplate configs
 // loaded into the artifact registry.
 package plugins
