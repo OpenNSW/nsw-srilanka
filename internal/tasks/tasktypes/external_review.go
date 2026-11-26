@@ -141,6 +141,10 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 	if cfg.ServiceWorkflowID == "" {
 		return "", nil, fmt.Errorf("external_review: service_workflow_id is required")
 	}
+	// The workflow is part of the flow's ID, which the other side refuses with a "/".
+	if strings.Contains(cfg.ServiceWorkflowID, "/") {
+		return "", nil, configError(fmt.Errorf("external_review: service_workflow_id %q must not contain \"/\"", cfg.ServiceWorkflowID))
+	}
 	if ctx.Record.CaseID == "" {
 		return "", nil, fmt.Errorf("external_review: the task has no case")
 	}
@@ -239,11 +243,23 @@ func replyTokenFrom(inputs map[string]any) (string, error) {
 	return token, nil
 }
 
+// flowIDSep joins a task's ID and the other side's workflow in the ID of the flow the
+// task starts there.
+const flowIDSep = "-"
+
+// dispatchFlowID is the ID of the flow taskID starts on the other side to run
+// workflowID: one per task and workflow, so a task can start several of the other
+// side's workflows, and a retried dispatch names the same flow. A step that runs again
+// replies on the other side's token: a second dispatch of the same workflow from the
+// same task names the flow already started.
+func dispatchFlowID(taskID, workflowID string) string {
+	return taskID + flowIDSep + workflowID
+}
+
 // startFlowBody is the body of the other side's client flows route: the workflow to
-// start, this task's ID as the flow's, so a retried dispatch is recognised as the same
-// flow, the data as its input, and callbackToken. callbackToken is opaque and names the
-// step this dispatch is for; the reviewer calls back on it, so a late or repeated
-// callback can't complete a later step.
+// start, the flow's ID (see dispatchFlowID), the data as its input, and callbackToken.
+// callbackToken is opaque and names the step this dispatch is for; the reviewer calls
+// back on it, so a late or repeated callback can't complete a later step.
 //
 // data carries only the values declared by the workflow node's input_mapping
 // — not the full record state — so the external reviewer sees the explicit
@@ -251,7 +267,7 @@ func replyTokenFrom(inputs map[string]any) (string, error) {
 func startFlowBody(record *store.TaskRecord, workflowID string, data any, callbackToken string) map[string]any {
 	return map[string]any{
 		"workflowId":    workflowID,
-		"flowId":        record.TaskID,
+		"flowId":        dispatchFlowID(record.TaskID, workflowID),
 		"input":         data,
 		"callbackToken": callbackToken,
 	}

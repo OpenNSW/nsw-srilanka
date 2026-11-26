@@ -39,7 +39,7 @@ type AgencyConfig struct {
 // from the NSW app.
 type AgencyInbound struct {
 	Endpoint           string `json:"endpoint"`           // Go mux pattern, e.g. "POST /api/v1/internal/cases/{caseId}/flows"
-	TaskIDField        string `json:"taskIDField"`        // JSON field carrying the TNSW task id, e.g. "flowId"
+	TaskIDField        string `json:"taskIDField"`        // JSON field carrying the flow ID, e.g. "flowId": the TNSW task id, then "-" and the inject's workflowId
 	CallbackTokenField string `json:"callbackTokenField"` // JSON field carrying the callback token, e.g. "callbackToken"; fills {callbackToken} in outbound.callbackPath
 }
 

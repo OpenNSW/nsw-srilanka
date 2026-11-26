@@ -222,6 +222,106 @@ func TestClientHandlerConflict(t *testing.T) {
 	}
 }
 
+// One caller task starts two workflows on the same case, each under a flow ID of its own
+// (the task's ID and the workflow), as TNSW does for a payment check and then the
+// officer's review. Both start, and a repeat of either starts nothing more.
+func TestClientHandlerTwoWorkflowsFromOneTask(t *testing.T) {
+	list := clientFlows
+	list.Workflows = []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}}, {ID: "receipt", Clients: []string{"tnsw"}}}
+	h, repo, wm := newClientHandler(t, list)
+	bodies := []string{
+		`{"workflowId":"notice","flowId":"task-1-notice","callbackToken":"tok-1"}`,
+		`{"workflowId":"receipt","flowId":"task-1-receipt","callbackToken":"tok-2"}`,
+	}
+	for _, body := range append(bodies, bodies...) {
+		if rec := post(h, tnsw, body); rec.Code != http.StatusOK {
+			t.Fatalf("status = %d for %s, body %s", rec.Code, body, rec.Body)
+		}
+	}
+	for id, template := range map[string]string{"task-1-notice": "notice", "task-1-receipt": "receipt"} {
+		if f, ok := repo.flows[id]; !ok || f.TemplateID != template {
+			t.Errorf("flow %s = %+v, want one recorded for %s", id, f, template)
+		}
+	}
+	if len(wm.starts) != 2 || wm.starts[0].id != "task-1-notice" || wm.starts[1].id != "task-1-receipt" {
+		t.Errorf("starts = %v, want task-1-notice then task-1-receipt", wm.starts)
+	}
+}
+
+// A dispatch TNSW started before it added the workflow to the flow ID (flow "task-1") and
+// retries after it ("task-1-notice") resumes the flow it started. A prior flow for another
+// workflow or case is not that flow, so a new one starts under the new ID.
+func TestClientHandlerPriorFlowID(t *testing.T) {
+	list := clientFlows
+	list.Workflows = []ClientFlow{{ID: "notice", Clients: []string{"tnsw"}}, {ID: "receipt", Clients: []string{"tnsw"}}}
+	prior := func(caseID, template string, status Status) Flow {
+		return Flow{WorkflowID: "task-1", CaseID: caseID, TemplateID: template, Status: status, ManifestVersion: 2}
+	}
+	for name, tc := range map[string]struct {
+		prior      Flow
+		body       string
+		wantFlow   string   // the flow the response names
+		wantStarts []string // the workflows started
+	}{
+		"retry of a started prior flow": {
+			prior: prior("C1", "notice", StatusStarted), body: `{"workflowId":"notice","flowId":"task-1-notice"}`,
+			wantFlow: "task-1",
+		},
+		"retry of a prior flow that failed to start": {
+			prior: prior("C1", "notice", StatusStarting), body: `{"workflowId":"notice","flowId":"task-1-notice"}`,
+			wantFlow: "task-1", wantStarts: []string{"task-1"},
+		},
+		"another workflow from the same task": {
+			prior: prior("C1", "notice", StatusStarted), body: `{"workflowId":"receipt","flowId":"task-1-receipt"}`,
+			wantFlow: "task-1-receipt", wantStarts: []string{"task-1-receipt"},
+		},
+		"prior flow on another case": {
+			prior: prior("C2", "notice", StatusStarted), body: `{"workflowId":"notice","flowId":"task-1-notice"}`,
+			wantFlow: "task-1-notice", wantStarts: []string{"task-1-notice"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo, wm := newMemRepo(tc.prior), &startCapture{}
+			h := NewClientHandler(newService(t, repo, wm), list, catalogClients)
+			for range 2 { // a repeat changes nothing
+				rec := post(h, tnsw, tc.body)
+				if rec.Code != http.StatusOK {
+					t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+				}
+				var f Flow
+				if err := json.Unmarshal(rec.Body.Bytes(), &f); err != nil || f.WorkflowID != tc.wantFlow {
+					t.Fatalf("flow = %+v, err = %v, want %s", f, err, tc.wantFlow)
+				}
+			}
+			var started []string
+			for _, s := range wm.starts {
+				started = append(started, s.id)
+			}
+			if !reflect.DeepEqual(started, tc.wantStarts) {
+				t.Errorf("starts = %v, want %v", started, tc.wantStarts)
+			}
+			if tc.wantFlow == "task-1" && len(repo.flows) != 1 {
+				t.Errorf("flows = %v, want only the prior one", repo.flows)
+			}
+		})
+	}
+}
+
+func TestPriorFlowID(t *testing.T) {
+	for _, tc := range []struct{ flowID, workflowID, want string }{
+		{"task-1-notice", "notice", "task-1"},
+		{"0b6f3f6e-3c1a-4c55-9a1e-6d1f2f3a4b5c-cda_lot-review", "cda_lot-review", "0b6f3f6e-3c1a-4c55-9a1e-6d1f2f3a4b5c"},
+		{"task-1", "notice", ""},         // the old form, or another caller's ID
+		{"task-1notice", "notice", ""},   // no separator
+		{"-notice", "notice", ""},        // no task ID before it
+		{"task-1-notice", "receipt", ""}, // another workflow's suffix
+	} {
+		if got := priorFlowID(ClientStartRequest{FlowID: tc.flowID, WorkflowID: tc.workflowID}); got != tc.want {
+			t.Errorf("priorFlowID(%q, %q) = %q, want %q", tc.flowID, tc.workflowID, got, tc.want)
+		}
+	}
+}
+
 // A failed start leaves the flow recorded with its owner, so the caller's retry starts it.
 // A failed record starts nothing.
 func TestClientHandlerFailures(t *testing.T) {

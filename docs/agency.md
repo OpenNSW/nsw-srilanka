@@ -114,7 +114,12 @@ leaves those out. The list is for display only; the screens and buttons follow t
 
 1. TNSW calls `POST /api/v1/internal/cases/{caseId}/flows` with
    `{workflowId, flowId, input, callbackToken, attributes}`. `caseId` is the consignment's
-   id, and `attributes` the case's (see [Cases](#cases)), when it has any.
+   id, and `attributes` the case's (see [Cases](#cases)), when it has any. `flowId` is
+   `<taskId>-<workflowId>`: one TNSW task can start several of the agency's workflows,
+   such as a payment check and then the officer's review, each as its own flow. TNSW
+   used to send the task ID alone, so when no flow is recorded under `<taskId>-<workflowId>`,
+   a flow recorded under `<taskId>` for the same case and workflow is taken to be the same
+   one, and a dispatch retried across the change resumes it instead of starting a second.
 2. The caller must be a client the catalog maps, and `flows.clients` must list
    `workflowId` for it. Anything else is a `404 flow not found`, as for a flow that
    does not exist, and the reason is logged.

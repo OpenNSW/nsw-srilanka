@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/OpenNSW/core/artifact"
@@ -55,6 +56,12 @@ type StartRequest struct {
 	// that can be asked twice for the same flow (a redelivered event) passes a stable ID
 	// instead, so the repeat is recognised.
 	WorkflowID string
+	// PriorWorkflowID, if set, is an ID an earlier version of the caller named the same
+	// flow by. When no flow is recorded under WorkflowID, a flow recorded under this one
+	// for the same case and template is the flow asked for, and is resumed instead of
+	// starting another. One recorded for another case or template is not, and a new flow
+	// starts under WorkflowID.
+	PriorWorkflowID string
 	// Vars seeds the workflow variables. They are recorded with the flow, so a retried
 	// start runs with the first request's variables.
 	Vars map[string]any
@@ -137,6 +144,15 @@ func (s *Service) StartFlow(ctx context.Context, req StartRequest) (*Flow, error
 		case !errors.Is(err, ErrFlowNotFound):
 			return nil, fmt.Errorf("caseflow: failed to read flow: %w", err)
 		}
+		f, err = s.priorFlow(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if f != nil {
+			slog.InfoContext(ctx, "caseflow: resuming the flow recorded under its prior ID",
+				"workflowId", newFlow.WorkflowID, "priorWorkflowId", f.WorkflowID, "caseId", req.CaseID)
+			return s.resume(ctx, req, f, nil)
+		}
 	}
 
 	// A new flow runs on the current version. Its template is checked before anything is
@@ -162,6 +178,24 @@ func (s *Service) StartFlow(ctx context.Context, req StartRequest) (*Flow, error
 		return s.resume(ctx, req, f, nil)
 	}
 	return s.resume(ctx, req, f, &def)
+}
+
+// priorFlow returns the flow recorded under req.PriorWorkflowID if it is for req's case and
+// template, and nil if there is none or it is for another.
+func (s *Service) priorFlow(ctx context.Context, req StartRequest) (*Flow, error) {
+	if req.PriorWorkflowID == "" || req.PriorWorkflowID == req.WorkflowID {
+		return nil, nil
+	}
+	f, err := s.repo.Get(ctx, req.PriorWorkflowID)
+	switch {
+	case errors.Is(err, ErrFlowNotFound):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("caseflow: failed to read flow: %w", err)
+	case f.CaseID != req.CaseID || f.TemplateID != req.TemplateID:
+		return nil, nil
+	}
+	return f, nil
 }
 
 // resume starts the recorded flow f unless it has already started. def is f's definition

@@ -102,7 +102,7 @@ func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
 	assert.Equal(t, "/api/v1/internal/cases/case-1/flows", call.path)
 	assert.Equal(t, map[string]any{
 		"workflowId":    "review",
-		"flowId":        reviewTaskID,
+		"flowId":        reviewTaskID + "-review",
 		"callbackToken": ownToken(t),
 		"input":         map[string]any{"field": "v1"},
 	}, call.body)
@@ -132,6 +132,57 @@ func TestExternalReview_DispatchNeeds(t *testing.T) {
 			assert.Empty(t, svc.calls())
 		})
 	}
+}
+
+func TestDispatchFlowID(t *testing.T) {
+	assert.Equal(t, reviewTaskID+"-cda_lot_adjustment_review", dispatchFlowID(reviewTaskID, "cda_lot_adjustment_review"))
+}
+
+// A task that starts two of the other side's workflows, such as a payment check and then
+// the officer's review, starts each as its own flow.
+func TestExternalReview_FlowIDPerWorkflow(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
+
+	for _, workflowID := range []string{"cda_payment_confirm", "cda_lot_adjustment_review"} {
+		ctx := reviewContext(map[string]any{"submission": map[string]any{}})
+		cfg := fmt.Sprintf(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": %q}`, workflowID)
+		require.ErrorIs(t, p.Execute(ctx, json.RawMessage(cfg)), ErrSuspended)
+	}
+
+	calls := svc.calls()
+	require.Len(t, calls, 2)
+	assert.Equal(t, reviewTaskID+"-cda_payment_confirm", calls[0].body["flowId"])
+	assert.Equal(t, reviewTaskID+"-cda_lot_adjustment_review", calls[1].body["flowId"])
+}
+
+// A retried dispatch names the same flow, so the other side takes it for a retry.
+func TestExternalReview_RetryKeepsFlowID(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
+	cfg := json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "review"}`)
+
+	for range 2 {
+		require.ErrorIs(t, p.Execute(reviewContext(map[string]any{"submission": map[string]any{}}), cfg), ErrSuspended)
+	}
+
+	calls := svc.calls()
+	require.Len(t, calls, 2)
+	assert.Equal(t, calls[0].body["flowId"], calls[1].body["flowId"])
+}
+
+// A workflow with a "/" can't name a flow on the other side, which no retry changes.
+func TestExternalReview_RefusesWorkflowWithSlash(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, tokenFor, noCaseAttributes{})
+	ctx := reviewContext(map[string]any{"submission": map[string]any{}})
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/internal/cases/{caseId}/flows", "service_workflow_id": "a/b"}`))
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrSuspended)
+	assert.True(t, plugins.IsPermanent(err))
+	assert.Empty(t, svc.calls())
 }
 
 // The case ID is escaped into its path segment.

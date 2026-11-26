@@ -102,7 +102,7 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	// It is recorded with the flow, so a flow that is recorded is owned, and a retry of a
 	// failed start finds both.
 	f, err := h.flows.StartFlow(ctx, StartRequest{
-		CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, Vars: vars, Owner: h.list.Owner,
+		CaseID: caseID, TemplateID: flow.ID, WorkflowID: req.FlowID, PriorWorkflowID: priorFlowID(req), Vars: vars, Owner: h.list.Owner,
 		Case: caseInfo(req.Attributes, h.list.CaseColumns),
 	})
 	if err != nil {
@@ -117,6 +117,24 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.JSON(w, http.StatusOK, f)
+}
+
+// priorFlowSep joins the caller's task ID and the workflow in the flow ID TNSW sends
+// (dispatchFlowID in internal/tasks/plugins).
+const priorFlowSep = "-"
+
+// priorFlowID is the ID TNSW named req's flow by before it added the workflow to the flow
+// ID ("<taskId>-<workflowId>", from "<taskId>"), or "" when req's flow ID is not in that
+// form. A dispatch TNSW started before the change and retries after it then resumes the
+// flow it started, rather than starting a second.
+//
+// TODO(#1316): remove once no TNSW task dispatched before the change is still open.
+func priorFlowID(req ClientStartRequest) string {
+	prior, ok := strings.CutSuffix(req.FlowID, priorFlowSep+req.WorkflowID)
+	if !ok || prior == "" {
+		return ""
+	}
+	return prior
 }
 
 // allowed returns the listed flow workflowID names if the calling client may start it. It

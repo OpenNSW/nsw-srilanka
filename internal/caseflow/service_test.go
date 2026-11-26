@@ -16,9 +16,9 @@ import (
 
 // newArtifacts has two manifests; v2, the current one, points export at a new file, drops
 // legacy, and has notice's task read by reviewer before officer, where v1 has it read by
-// officer alone. Notice has one task. In v2, pair has two, unread one whose template has
-// no read.roles, stranger one read by a role the catalog lacks, and orphan one whose
-// template the manifest lacks.
+// officer alone. Notice has one task. In v2, receipt has one too, pair has two, unread
+// one whose template has no read.roles, stranger one read by a role the catalog lacks,
+// and orphan one whose template the manifest lacks.
 func newArtifacts() *artifact.Set {
 	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
 		"export.json":         []byte(`{"id":"export","name":"Export v1","nodes":[],"edges":[]}`),
@@ -26,6 +26,7 @@ func newArtifacts() *artifact.Set {
 		"notice.json":         []byte(`{"id":"notice","nodes":[` + taskNode("review", "notice-review") + `],"edges":[]}`),
 		"notice-review.json":  []byte(`{"id":"notice-review","read":{"roles":["officer"]}}`),
 		"notice-review2.json": []byte(`{"id":"notice-review","read":{"roles":["reviewer","officer"]}}`),
+		"receipt.json":        []byte(`{"id":"receipt","nodes":[` + taskNode("review", "notice-review") + `],"edges":[]}`),
 		"legacy.json":         []byte(`{"id":"legacy","nodes":[],"edges":[]}`),
 		"pair.json":           []byte(`{"id":"pair","nodes":[` + taskNode("a", "notice-review") + `,` + taskNode("b", "notice-review") + `],"edges":[]}`),
 		"unread.json":         []byte(`{"id":"unread","nodes":[` + taskNode("look", "unread-look") + `],"edges":[]}`),
@@ -42,6 +43,7 @@ func newArtifacts() *artifact.Set {
 			{"id":"export","kind":"workflow","path":"export_v2.json"},
 			{"id":"notice","kind":"workflow","path":"notice.json"},
 			{"id":"notice-review","kind":"task_template","path":"notice-review2.json"},
+			{"id":"receipt","kind":"workflow","path":"receipt.json"},
 			{"id":"pair","kind":"workflow","path":"pair.json"},
 			{"id":"unread","kind":"workflow","path":"unread.json"},
 			{"id":"unread-look","kind":"task_template","path":"unread-look.json"},
