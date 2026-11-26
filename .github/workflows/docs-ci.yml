@@ -73,7 +73,8 @@ jobs:
 
       - name: Run lychee
         env:
-          # Raises GitHub's rate limit for the github.com links.
+          # When a github.com link fails, lychee checks through the GitHub API
+          # whether its repository exists.
           GITHUB_TOKEN: ${{ github.token }}
         run: make linkcheck
 
