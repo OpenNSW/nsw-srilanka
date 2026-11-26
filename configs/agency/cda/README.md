@@ -65,15 +65,32 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 CDA for this deployment, on the `CDA API` resource server
 (`https://api.cda.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                              | Client               | Grant                                                                                                                    |
-| ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                       |
-| Admin `cda_admin`                   | `OGA_PORTAL_APP_CDA` | `CDA Admin` role (via `CDA Admins`): `consignment:adminread`/`adminwrite`, `profile:read`                                |
-| TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `workflow:inject`, and `task:write` to reply on CDA's parked steps, which its catalog maps `tnsw` to |
-| CDA's decision callback and storage | `CDA_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` on TNSW, which maps `cda` to it in its catalog, and `storage:read`/`write`           |
+| Caller                                     | Client               | Grant                                                                                                                                                 |
+| ------------------------------------------ | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Officer `cda_officer`                      | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `consignment:read`, `task:*`, `profile:read`, `storage:*`                                                    |
+| Staff `cda_application_reviewer`           | `OGA_PORTAL_APP_CDA` | `CDA Application Reviewing Officer` role (via `CDA Application Reviewing Officers`): the `CDA Officer` scopes                                         |
+| Staff `cda_application_reviewer_in_lieu`   | `OGA_PORTAL_APP_CDA` | `CDA Application Reviewing Officer (In Lieu)` role (via `CDA Application Reviewing Officers (In Lieu)`): the `CDA Officer` scopes                     |
+| Staff `cda_payment_officer`                | `OGA_PORTAL_APP_CDA` | `CDA Payment Confirming Officer` role (via `CDA Payment Confirming Officers`): the `CDA Officer` scopes                                               |
+| Staff `cda_technical_support_officer`      | `OGA_PORTAL_APP_CDA` | `CDA Technical Support Officer` role (via `CDA Technical Support Officers`): the `CDA Officer` scopes                                                 |
+| Staff `cda_certificate_authorizer`         | `OGA_PORTAL_APP_CDA` | `CDA Quality Certificate Authorizing Officer` role (via `CDA Quality Certificate Authorizing Officers`): the `CDA Officer` scopes                     |
+| Staff `cda_certificate_authorizer_in_lieu` | `OGA_PORTAL_APP_CDA` | `CDA Quality Certificate Authorizing Officer (In Lieu)` role (via `CDA Quality Certificate Authorizing Officers (In Lieu)`): the `CDA Officer` scopes |
+| Staff `cda_processing_senior_officer`      | `OGA_PORTAL_APP_CDA` | `CDA Processing Division Senior Officer` role (via `CDA Processing Division Senior Officers`): the `CDA Officer` scopes                               |
+| Staff `cda_marketing_senior_officer`       | `OGA_PORTAL_APP_CDA` | `CDA Marketing Division Senior Officer` role (via `CDA Marketing Division Senior Officers`): the `CDA Officer` scopes                                 |
+| Staff `cda_asycuda_officer`                | `OGA_PORTAL_APP_CDA` | `CDA ASYCUDA Green Check Officer` role (via `CDA ASYCUDA Green Check Officers`): the `CDA Officer` scopes                                             |
+| Staff `cda_asycuda_officer_in_lieu`        | `OGA_PORTAL_APP_CDA` | `CDA ASYCUDA Green Check Officer (In Lieu)` role (via `CDA ASYCUDA Green Check Officers (In Lieu)`): the `CDA Officer` scopes                         |
+| Admin `cda_admin`                          | `OGA_PORTAL_APP_CDA` | `CDA Admin` role (via `CDA Admins`): `consignment:adminread`/`adminwrite`, `profile:read`                                                             |
+| TNSW injecting and replying                | `NSW_TO_CDA`         | `NswToCdaM2M` role: `workflow:inject`, and `task:write` to reply on CDA's parked steps, which its catalog maps `tnsw` to                              |
+| CDA's decision callback and storage        | `CDA_TO_NSW`         | `AGENCY_TO_TNSW` role: `task:write` on TNSW, which maps `cda` to it in its catalog, and `storage:read`/`write`                                        |
 
 `CDA_TO_NSW` and the roles that grant it the NSW API are in TNSW's OU, in
 [`idp/bootstrap/15-tnsw-agency-clients.yaml`](../../../idp/bootstrap/15-tnsw-agency-clients.yaml).
+
+An officer standing in for another (the matrix's "in lieu of" roles) has a role of their
+own, named after the role they stand in for with "(In Lieu)" appended, so CDA can limit
+it separately. Each grants what the matrix gives that stand-in: the Quality Certificate
+Authorizing Officer (In Lieu) and the Application Reviewing Officer (In Lieu) act on the
+review tasks and may view the ASYCUDA green check, and the ASYCUDA Green Check Officer
+(In Lieu) acts on the green check and may view the review tasks.
 
 TNSW's `config.yaml` services entry `cda` requests `workflow:inject` and `task:write` with
 `resource=https://api.cda.nsw-agency.local` (see `configs/config*.example.yaml`).
