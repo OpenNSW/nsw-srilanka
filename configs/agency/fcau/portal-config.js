@@ -18,6 +18,18 @@ window.__APP_CONFIG__ = {
       title: 'FCAU Officer',
       description: 'Reviews and completes the tasks the FCAU receives from the National Single Window.',
     },
+    'FCAU Director': {
+      title: 'FCAU Director',
+      description: 'Views the FCAU health certificate tasks and what officers submitted on them.',
+    },
+    'FCAU Assistant Director': {
+      title: 'FCAU Assistant Director',
+      description: 'Views the FCAU health certificate tasks and what officers submitted on them.',
+    },
+    'FCAU Food and Drugs Inspector': {
+      title: 'FCAU Food and Drugs Inspector',
+      description: 'Reviews applications, inspects samples and warehouses, records lab results and issues FCAU health certificates.',
+    },
     'FCAU Admin': {
       title: 'FCAU Admin',
       description: 'Views any case and its workflows, and resolves or force-parks their nodes.',

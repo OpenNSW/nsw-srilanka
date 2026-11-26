@@ -143,6 +143,84 @@ name: FCAU Admins
 description: FCAU admins group
 ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
 ---
+# File: FCAU_Director.yaml
+resource_type: role
+id: 4a91b1a9-46b5-4a04-98c5-aa2a4171ad5e
+name: FCAU Director
+description: Role for FCAU directors, who view FCAU tasks in the FCAU deployment
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+permissions:
+  - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: e2501fbf-7fe9-4957-bb44-62e4e9a4697d
+    type: group
+---
+# File: FCAU_Directors.yaml
+resource_type: group
+id: e2501fbf-7fe9-4957-bb44-62e4e9a4697d
+name: FCAU Directors
+description: FCAU directors group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+---
+# File: FCAU_Assistant_Director.yaml
+resource_type: role
+id: 35484a2d-c160-4800-8349-6f211832dcd5
+name: FCAU Assistant Director
+description: Role for FCAU assistant directors, who view FCAU tasks in the FCAU deployment
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+permissions:
+  - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: 75794581-0501-45fd-b795-548be7dc9ffa
+    type: group
+---
+# File: FCAU_Assistant_Directors.yaml
+resource_type: group
+id: 75794581-0501-45fd-b795-548be7dc9ffa
+name: FCAU Assistant Directors
+description: FCAU assistant directors group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+---
+# File: FCAU_Food_and_Drugs_Inspector.yaml
+resource_type: role
+id: 26f39204-37bf-464b-80c3-979d93ede2ce
+name: FCAU Food and Drugs Inspector
+description: Role for FCAU food and drugs inspectors, who work FCAU tasks in the FCAU deployment
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+permissions:
+  - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
+    permissions:
+      - consignment:read
+      - profile:read
+      - storage:read
+      - storage:write
+      - task:read
+      - task:write
+assignments:
+  - id: d1430f23-f447-4b45-8048-11c05f2bfe9a
+    type: group
+---
+# File: FCAU_Food_and_Drugs_Inspectors.yaml
+resource_type: group
+id: d1430f23-f447-4b45-8048-11c05f2bfe9a
+name: FCAU Food and Drugs Inspectors
+description: FCAU food and drugs inspectors group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+---
 # File: FCAUPortalApp.yaml
 resource_type: application
 id: 01a13912-e300-7527-9d25-4b9affd20283

@@ -284,6 +284,48 @@ attributes:
 credentials:
   password: "{{ .SAMPLE_USER_PASSWORD }}"
 ---
+# File: fcau_director.yaml
+resource_type: user
+id: 6200ad49-b2d1-4ceb-9ec9-3abf59af0c70
+type: Government_User
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+attributes:
+  email: "fcau_director@government.dev"
+  family_name: "Director"
+  given_name: "FCAU"
+  phone_number: "+94771234603"
+  username: "fcau_director"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: fcau_assistant_director.yaml
+resource_type: user
+id: c54a893f-71bd-474f-bdc3-5280069fa781
+type: Government_User
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+attributes:
+  email: "fcau_assistant_director@government.dev"
+  family_name: "Assistant Director"
+  given_name: "FCAU"
+  phone_number: "+94771234604"
+  username: "fcau_assistant_director"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: fcau_food_drugs_inspector.yaml
+resource_type: user
+id: f00f0963-e28d-48ab-b79e-dc165bb68b7e
+type: Government_User
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+attributes:
+  email: "fcau_food_drugs_inspector@government.dev"
+  family_name: "Food and Drugs Inspector"
+  given_name: "FCAU"
+  phone_number: "+94771234605"
+  username: "fcau_food_drugs_inspector"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
 # File: CHA.yaml
 resource_type: group
 id: 01a13912-d495-7400-b5bc-541433e05751
@@ -448,4 +490,34 @@ description: NPPO officers group
 ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
 members:
   - id: ec4bc14f-40d2-4432-ab75-ed5c8527259d
+    type: user
+---
+# File: FCAU_Directors.yaml
+resource_type: group
+id: e2501fbf-7fe9-4957-bb44-62e4e9a4697d
+name: FCAU Directors
+description: FCAU directors group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+members:
+  - id: 6200ad49-b2d1-4ceb-9ec9-3abf59af0c70
+    type: user
+---
+# File: FCAU_Assistant_Directors.yaml
+resource_type: group
+id: 75794581-0501-45fd-b795-548be7dc9ffa
+name: FCAU Assistant Directors
+description: FCAU assistant directors group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+members:
+  - id: c54a893f-71bd-474f-bdc3-5280069fa781
+    type: user
+---
+# File: FCAU_Food_and_Drugs_Inspectors.yaml
+resource_type: group
+id: d1430f23-f447-4b45-8048-11c05f2bfe9a
+name: FCAU Food and Drugs Inspectors
+description: FCAU food and drugs inspectors group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+members:
+  - id: f00f0963-e28d-48ab-b79e-dc165bb68b7e
     type: user
