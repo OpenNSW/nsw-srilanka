@@ -43,8 +43,8 @@ func NewPaymentPlugin(paymentService payment.Service) *PaymentPlugin {
 
 type paymentConfig struct {
 	// OrgID and ServiceID name the payee the fee is paid to. Each payment
-	// method maps a payee to its own account ids under "payees" in
-	// the server config's payment section, so a fee never carries a gateway's ids, and only
+	// method maps a payee to its own account ids under "payees" in the server
+	// config's payment section, so a fee never carries a gateway's ids, and only
 	// the methods that map the payee can collect it.
 	OrgID     string          `json:"org_id"`
 	ServiceID string          `json:"service_id"`

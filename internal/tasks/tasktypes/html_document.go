@@ -186,8 +186,9 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 // in {{ staticdata "<id>" "1" .port }}. Published manifests never change, so
 // the resolver accepts that form and ignores the version: the manifest that
 // holds such a template lists the static data at the version it names.
-// So, whenever all the inflight tasks of a manifest version that has a template with a staticdata call have finished,
-// we can deprecate the backward compatiability below by allowing only two arguments: the static_data id and the value.
+// Once every in-flight task of a manifest version whose template calls
+// staticdata with a version has finished, the resolver can accept only two
+// arguments: the static data id and the value.
 func (p *HTMLDocumentGeneratorPlugin) resolveStaticData(ctx context.Context, manifestVersion int, args ...any) (any, error) {
 	if len(args) != 2 && len(args) != 3 {
 		return nil, fmt.Errorf("%w, got %d arguments", errStaticDataCall, len(args))

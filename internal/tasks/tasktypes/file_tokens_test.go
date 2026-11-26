@@ -129,8 +129,8 @@ func TestExternalReview_DoesNotPushMismatchedFileFields(t *testing.T) {
 	assert.Empty(t, *pushed)
 }
 
-// newReviewer stands up a reviewing service as the outbound service "reviewer", recording the
-// body of each push.
+// newReviewer stands up a reviewing service as the outbound service "reviewer",
+// recording the body of each push.
 func newReviewer(t *testing.T) (*remote.Manager, *[]map[string]any) {
 	t.Helper()
 	var pushed []map[string]any

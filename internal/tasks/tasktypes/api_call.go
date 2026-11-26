@@ -240,9 +240,9 @@ type apiCallConfig struct {
 	// The body is whatever the interpreter builds, whatever the method: HTTP
 	// discourages content on a GET but does not forbid it, so which calls carry
 	// one is the artifact's business rather than this plugin's. An interpreter
-	// driving a GET returns nil from BuildRequest, and the generic passthrough interpreter always builds one, so a
-	// GET configured on a plugin without its own interpreter will send the
-	// mapped inputs as a body.
+	// driving a GET returns nil from BuildRequest, and the generic passthrough
+	// interpreter always builds one, so a GET configured on a plugin without its
+	// own interpreter will send the mapped inputs as a body.
 	Method      string `json:"method,omitempty"`
 	ResultField string `json:"result_field,omitempty"` // record the accepted flag under this key
 

@@ -1,4 +1,4 @@
-// Package payment adapts core/payment to the refid registry.
+// Package payment adapts core/payment to the refid registry and the task engine.
 //
 // It issues the references payers pay against, from the refid formats in the
 // server config. RefGenerator implements core/payment's ReferenceGenerator: a

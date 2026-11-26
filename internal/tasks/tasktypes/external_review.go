@@ -31,9 +31,10 @@ type CaseAttributes interface {
 }
 
 // NewExternalReviewPlugin builds a plugin that POSTs the applicant's submitted
-// form to the configured service+path, starting the other side's review flow. The
-// files in it are sent as tokens for the reviewer, issued through files, and the attributes of
-// the dispatch's case, read from cases, are sent with each flow it starts.
+// form to the configured service+path, starting the other side's review flow.
+// The files in it are sent as tokens for the reviewer, issued through files, and
+// the attributes of the dispatch's case, read from cases, are sent with each flow
+// it starts.
 // manager and cases must be non-nil, and files either zero or complete.
 func NewExternalReviewPlugin(manager *remote.Manager, files FileTokens, cases CaseAttributes) *ExternalReviewPlugin {
 	if manager == nil {

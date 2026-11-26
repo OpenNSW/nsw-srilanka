@@ -149,8 +149,8 @@ func TestExternalReview_EscapesTheCaseID(t *testing.T) {
 	assert.Equal(t, "/api/v1/internal/cases/a%2Fb/flows", calls[0].path)
 }
 
-// caseAttributesStub answers CaseAttributes with attrs or err, and records the case IDs it
-// reads.
+// caseAttributesStub answers CaseAttributes with attrs or err, and records the
+// case IDs it reads.
 type caseAttributesStub struct {
 	attrs map[string]any
 	err   error

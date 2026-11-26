@@ -31,15 +31,17 @@ type RemoteFetcher interface {
 //	 "plugin_properties": {"service_id": "port", "source_input": "payment_slip_url",
 //	   "mime_type": "application/pdf", "filename": "payment-slip.pdf"}}
 //
-// A service that hands out its documents as signed links that expire means
-// an applicant who opens one later finds nothing, and the document never reaches
+// A service may hand out its documents as signed links that expire, so an
+// applicant who opens one later finds nothing, and the document never reaches
 // this deployment. This step downloads it while the link is good and stores it,
 // and the render config links the stored copy.
 //
 // The URL is fetched through the service's own client, so the download goes only
-// to that service's host, with its credentials. A source that is a base64 data:
-// URI, as some services send an image such as a barcode, carries the document inline, so it is
-// decoded instead, and stored only when its type is mime_type.
+// to that service's host, with its credentials.
+//
+// A source that is a base64 data: URI, as a service may send an image such as
+// a barcode, carries the document inline, so it is decoded instead, and stored
+// only when its type is mime_type.
 //
 // The stored file's metadata is written to <output_namespace> as {key, name,
 // mime_type, size}, as HTML_DOCUMENT_GENERATOR writes it. Nothing is written when
