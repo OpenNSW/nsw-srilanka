@@ -973,6 +973,33 @@ func TestHandleCompleteTaskStep_AuditsFileDenial(t *testing.T) {
 	assertAuditDigest(t, recs[0].Message, encodedEnvelope("submit", map[string]any{"invoice": alicesRef}))
 }
 
+func TestHandleCompleteTaskStep_AuditsFileResolveFailure(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	var calls int
+	h := &HTTPHandler{
+		Store:           pendingFileTask(),
+		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{}, &calls), fixedRenderConfig(fileTaskRenderConfig)),
+		MaxRequestBytes: 1024,
+		Audit:           client,
+	}
+	body, err := json.Marshal(map[string]any{"command": "submit", "payload": map[string]any{"invoice": "ref1"}})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", strings.NewReader(string(body)))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-1")
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+	rec := httptest.NewRecorder()
+
+	h.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "file_resolve_failed", recs[0].Metadata["error"])
+	assert.Equal(t, http.StatusInternalServerError, recs[0].Metadata["status"])
+}
+
 func TestHandleCompleteTaskStep_AuditsStaleStepWithCommand(t *testing.T) {
 	client, capture := nswaudit.NewWithCapture()
 	var calls int
@@ -1166,6 +1193,21 @@ func TestHandleCompleteTaskStep_AuditsParseFailures(t *testing.T) {
 		recs := capture.Records()
 		require.Len(t, recs, 1)
 		assertAuditDigest(t, recs[0].Message, first)
+	})
+
+	t.Run("a draft parse failure is marked as a draft", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{MaxRequestBytes: 1024, Audit: client}
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-1/draft",
+			strings.NewReader(`{"payload":{}}{"extra":true}`))
+		req.SetPathValue("id", testTaskID)
+		req.SetPathValue("stepId", "step-1")
+		rec := httptest.NewRecorder()
+		h.HandleSaveDraft(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, true, recs[0].Metadata["draft"])
 	})
 
 	t.Run("reserved command key stays in the digest", func(t *testing.T) {

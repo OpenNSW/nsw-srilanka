@@ -317,7 +317,7 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, ok := h.decodeEnvelope(w, r, true, "taskId", taskID, "stepId", stepID)
+	req, ok := h.decodeEnvelope(w, r, "taskId", taskID, "stepId", stepID, "draft", true)
 	if !ok {
 		return
 	}
@@ -332,10 +332,10 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		payload = make(map[string]any)
 	}
 	attrs := []any{"taskId", taskID, "stepId", stepID, "draft", true}
-	// Marked as a draft save so the payload schema extension knows a draft by the
-	// route it came through, not by the command core sets for it.
 	err := h.resolveFiles(r.Context(), taskID, stepID, payload)
 	if err == nil {
+		// Marked as a draft save so the payload schema extension knows a draft by the
+		// route it came through, not by the command core sets for it.
 		err = h.Manager.SaveDraft(payloadschema.WithDraft(r.Context()), taskID, stepID, payload)
 	}
 	h.writeCompletion(w, r, err, req.digest, attrs...)
@@ -346,7 +346,7 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 // plus the envelope digest taken before that key is added. On a bad request it
 // writes the error response and returns false. logAttrs name the step in the log lines.
 func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, logAttrs ...any) (map[string]any, any, bool) {
-	req, ok := h.decodeEnvelope(w, r, false, logAttrs...)
+	req, ok := h.decodeEnvelope(w, r, logAttrs...)
 	if !ok {
 		return nil, nil, false
 	}
@@ -370,11 +370,11 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 
 // decodeEnvelope reads the {command, payload} envelope the completion and draft
 // routes take: one JSON value within the size limit, whose payload does not set
-// the reserved "__command" key. draft is true on the draft route. On a bad
-// request it writes the error response and returns false. logAttrs name the
-// step in the log lines. On success, req.digest is the size and SHA-256 of the
-// envelope as encoding/json encodes it. A body that does not decode has none.
-func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, draft bool, logAttrs ...any) (completeTaskStepRequest, bool) {
+// the reserved "__command" key. On a bad request it writes the error response
+// and returns false. logAttrs name the step in the log lines. On success,
+// req.digest is the size and SHA-256 of the envelope as encoding/json encodes
+// it. A body that does not decode has none.
+func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, logAttrs ...any) (completeTaskStepRequest, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
 
 	ctx := r.Context()
@@ -385,9 +385,6 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, dra
 		meta := taskAuditMeta(status, message, logAttrs...)
 		if req.Command != "" {
 			meta["command"] = req.Command
-		}
-		if draft {
-			meta["draft"] = true
 		}
 		h.auditTaskUpdate(ctx, attrString(logAttrs, "taskId"), true, meta, digest)
 		httputil.Error(w, r, status, message)
