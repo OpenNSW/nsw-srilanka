@@ -476,9 +476,11 @@ func (h *HTTPHandler) resolveFiles(ctx context.Context, taskID, stepID string, p
 func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, err error, digest any, logAttrs ...any) {
 	ctx := r.Context()
 	taskID := attrString(logAttrs, "taskId")
-	stepID := attrString(logAttrs, "stepId")
 	finish := func(status int, failure bool, code string) {
 		h.auditTaskUpdate(ctx, taskID, failure, taskAuditMeta(status, code, logAttrs...), digest)
+	}
+	if h.writeResolveFailure(w, r, err, taskID, attrString(logAttrs, "stepId"), finish) {
+		return
 	}
 
 	switch {
@@ -513,6 +515,17 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 		slog.WarnContext(r.Context(), "tasks: draft for a step that takes none", append(logAttrs, "error", err)...)
 		finish(http.StatusBadRequest, true, "draft_not_enabled")
 		httputil.Error(w, r, http.StatusBadRequest, errDraftNotEnabled)
+	default:
+		finish(http.StatusInternalServerError, true, "complete_failed")
+		httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, logAttrs...)
+	}
+}
+
+// writeResolveFailure answers an error from resolveFiles: the status, the log
+// line, and the audit record. False when err is not one of those.
+func (h *HTTPHandler) writeResolveFailure(w http.ResponseWriter, r *http.Request, err error, taskID, stepID string, finish func(int, bool, string)) bool {
+	ctx := r.Context()
+	switch {
 	case errors.Is(err, store.ErrTaskNotFound):
 		finish(http.StatusNotFound, true, "task_not_found")
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
@@ -542,9 +555,9 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 		finish(http.StatusInternalServerError, true, "file_resolve_failed")
 		httputil.InternalServerError(w, r, "tasks: failed to resolve file references", err, "taskId", taskID, "stepId", stepID)
 	default:
-		finish(http.StatusInternalServerError, true, "complete_failed")
-		httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, logAttrs...)
+		return false
 	}
+	return true
 }
 
 func (h *HTTPHandler) auditTaskUpdate(ctx context.Context, taskID string, failure bool, meta map[string]any, digest any) {
