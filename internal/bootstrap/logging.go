@@ -18,12 +18,10 @@ import (
 // the correlationId returned in error responses matches the traceId written
 // to server logs. Must be called before any request is served.
 //
-// Plain slog records are stamped category=system (see systemlog.StampCategory)
-// and never carry request bodies. Audit records do not use this default logger:
-// Bootstrap points LogSink at the OTLP handler when telemetry starts (before
-// workers), and task draft/submit audits carry the request envelope's byte
-// size and SHA-256 in the audit message field. Call logAuditExportStatus once
-// that path is known.
+// Plain slog records are stamped category=system (see systemlog.StampCategory).
+// Audit records do not use this default logger. Bootstrap points LogSink at
+// the OTLP handler when telemetry starts (before workers). Call
+// logAuditExportStatus once that path is known.
 func ConfigureLogging(cfg *config.Config) {
 	configureLogging(cfg, os.Stdout)
 }
