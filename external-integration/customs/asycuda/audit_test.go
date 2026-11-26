@@ -252,6 +252,7 @@ func TestSLCEHandler_AuditMarksAHeldCallback(t *testing.T) {
 func TestSLCEHandler_AuditRetryOutcome(t *testing.T) {
 	for name, tc := range map[string]struct {
 		retried     []error // what each retry returns; the last repeats
+		panics      bool    // every retry panics instead
 		window      time.Duration
 		wantStatus  nswaudit.Status
 		wantOutcome string
@@ -268,6 +269,11 @@ func TestSLCEHandler_AuditRetryOutcome(t *testing.T) {
 			wantStatus: nswaudit.StatusFailure, wantOutcome: "refused", wantCode: "callback_retry_refused",
 			wantTries: func(n int) bool { return n == 2 },
 		},
+		"panicked": {
+			panics: true, window: time.Minute,
+			wantStatus: nswaudit.StatusFailure, wantOutcome: "failed", wantCode: "callback_retry_panicked",
+			wantTries: func(n int) bool { return n == 1 },
+		},
 		"given up": {
 			retried: []error{cusdec.ErrCusdecNotFoundByRef}, window: 30 * time.Millisecond,
 			wantStatus: nswaudit.StatusFailure, wantOutcome: "gave_up", wantCode: "callback_retry_exhausted",
@@ -277,6 +283,9 @@ func TestSLCEHandler_AuditRetryOutcome(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cs := new(mockCusdecService)
 			cs.On("ProcessCancellation", mock.Anything, mock.Anything).Return(cusdec.ErrCusdecNotFoundByRef).Once()
+			if tc.panics {
+				cs.On("ProcessCancellation", mock.Anything, mock.Anything).Panic("boom")
+			}
 			for i, err := range tc.retried {
 				call := cs.On("ProcessCancellation", mock.Anything, mock.Anything).Return(err)
 				if i < len(tc.retried)-1 {

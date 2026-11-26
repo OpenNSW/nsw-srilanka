@@ -3,6 +3,7 @@ package asycuda
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -57,8 +58,9 @@ func (h *Handler) auditCallback(ctx context.Context, body []byte, status int, he
 }
 
 // auditRetryOutcome records how a callback held for retry ended after attempts
-// tries: applied (err nil), refused as one no retry can fix, or given up when the
-// retry window closed. The record shares the delivery's actor and trace.
+// tries: applied (err nil), failed when an attempt panicked, refused as one no
+// retry can fix, or given up when the retry window closed. The record shares the
+// delivery's actor and trace.
 func (h *Handler) auditRetryOutcome(ctx context.Context, cb Callback, attempts int, err error) {
 	// The delivery was audited only for a known caller; its retries carry the same context.
 	if _, known := authn.FromContext(ctx); !known || h.auditor == nil {
@@ -69,6 +71,10 @@ func (h *Handler) auditRetryOutcome(ctx context.Context, cb Callback, attempts i
 	switch {
 	case err == nil:
 		e.Metadata["retryOutcome"] = "applied"
+	case errors.Is(err, errRetryPanicked):
+		// A panic is a fault in this service, not in the callback.
+		e.Metadata["retryOutcome"] = "failed"
+		e.Metadata["error_code"] = "callback_retry_panicked"
 	case isPermanent(err):
 		e.Metadata["retryOutcome"] = "refused"
 		e.Metadata["error_code"] = "callback_retry_refused"
