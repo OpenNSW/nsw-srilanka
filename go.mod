@@ -24,7 +24,7 @@ require (
 	github.com/OpenNSW/core/staticdata v0.0.0-20261119094345-8e4e7a003f80
 	github.com/OpenNSW/core/storage v0.5.0
 	github.com/OpenNSW/core/temporal v0.1.0
-	github.com/OpenNSW/core/trace v0.2.0
+	github.com/OpenNSW/core/trace v0.2.1-0.20261125115812-12be546a8f1f
 	github.com/OpenNSW/core/uiprojector v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0

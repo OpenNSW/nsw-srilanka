@@ -2,14 +2,12 @@ package telemetry
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/OpenNSW/core/trace"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -24,7 +22,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
-	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -102,9 +99,6 @@ func Start(ctx context.Context, cfg Config) (*Provider, error) {
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(traceExp),
 		sdktrace.WithResource(res),
-		// Server spans use the request correlation id as their trace id when
-		// that id is a W3C trace id, so a log's traceId finds the span.
-		sdktrace.WithIDGenerator(correlationIDGenerator{}),
 	)
 	lp := sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(logExp)),
@@ -146,7 +140,8 @@ func (p *Provider) Handler(operation string, next http.Handler) http.Handler {
 	})
 	// A public endpoint starts a new root span and only links an incoming
 	// traceparent. Otherwise a caller can parent the span or set sampled=0
-	// and drop it, and that trace id replaces the correlation id.
+	// and drop it; TraceMiddleware would then adopt that remote TraceID as
+	// the server correlation id.
 	// otelhttp v0.72 has WithPublicEndpointFn, not WithPublicEndpoint.
 	opts := []otelhttp.Option{
 		otelhttp.WithMeterProvider(p.mp),
@@ -171,28 +166,6 @@ func (p *Provider) Handler(operation string, next http.Handler) http.Handler {
 		}
 		instrumented.ServeHTTP(w, r)
 	})
-}
-
-// correlationIDGenerator copies trace.GetTraceID onto new root spans. A
-// non-hex correlation id cannot be a W3C trace id, so those spans stay random.
-type correlationIDGenerator struct{}
-
-func (correlationIDGenerator) NewIDs(ctx context.Context) (oteltrace.TraceID, oteltrace.SpanID) {
-	var tid oteltrace.TraceID
-	if parsed, err := oteltrace.TraceIDFromHex(trace.GetTraceID(ctx)); err == nil && parsed.IsValid() {
-		tid = parsed
-	} else {
-		_, _ = rand.Read(tid[:])
-	}
-	var sid oteltrace.SpanID
-	_, _ = rand.Read(sid[:])
-	return tid, sid
-}
-
-func (correlationIDGenerator) NewSpanID(context.Context, oteltrace.TraceID) oteltrace.SpanID {
-	var sid oteltrace.SpanID
-	_, _ = rand.Read(sid[:])
-	return sid
 }
 
 // SlogHandler returns an slog handler that exports records over OTLP, or nil

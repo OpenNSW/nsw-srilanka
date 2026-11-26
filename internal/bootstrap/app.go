@@ -614,17 +614,19 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// System log reads slog.Default (process stream, and OTLP when export
-	// is on from the early configureLogging). It sits inside trace so the
-	// line carries the trace id, and outside CORS so a preflight is logged
-	// too. CaptureRoute next to the mux records Pattern for Middleware:
-	// otelhttp copies the request before ServeMux sets it. Authentication
-	// attaches the principal on a child request; the log reads it back from
-	// authn.RequestCaller. 401/403 also emit a sparse category=security line.
+	// TraceSlot sits outside systemlog so the request log still sees the
+	// correlation id after TraceMiddleware (inside otelhttp) fills the slot.
+	// systemlog sits outside CORS so a preflight is logged too. otelhttp
+	// wraps TraceMiddleware so the server span exists before the correlation
+	// id is taken from it. CaptureRoute next to the mux records Pattern for
+	// Middleware: otelhttp copies the request before ServeMux sets it.
+	// Authentication attaches the principal on a child request; the log
+	// reads it back from authn.RequestCaller. 401/403 also emit a sparse
+	// category=security line.
 	for _, name := range unwiredAudit {
 		slog.Warn(name + " audit is not wired: service has no WithAuditor")
 	}
-	handler := trace.TraceMiddleware(systemlog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", systemlog.CaptureRoute(mux)))))
+	handler := trace.TraceSlotMiddleware(systemlog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", trace.TraceMiddleware(systemlog.CaptureRoute(mux))))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {

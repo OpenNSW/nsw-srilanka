@@ -42,8 +42,8 @@ github.com/OpenNSW/core/storage v0.5.0 h1:dLFztXW8jKBnqt+4jUSCdFltW/GBCzNX4RPRl2
 github.com/OpenNSW/core/storage v0.5.0/go.mod h1:ZBWInmdTpu6E5Hgdu4r0UO0lq8r9CI4c59NtiT94wls=
 github.com/OpenNSW/core/temporal v0.1.0 h1:/wFL05TyuZpnz0rOsg30eY3viXixMrfh+zDXA+DtvXA=
 github.com/OpenNSW/core/temporal v0.1.0/go.mod h1:ikXldXu6p4ugoxdNVqIa1iHxk7a9WYH6S+OZIttD8Ak=
-github.com/OpenNSW/core/trace v0.2.0 h1:C0ngf3m03oySzYvdpQNG+D+dsGs9+n5zWugoyMmWnlg=
-github.com/OpenNSW/core/trace v0.2.0/go.mod h1:b3qhByzXWqepa+5NOYpqIZILwv4OuhACLHCh/eRdWRo=
+github.com/OpenNSW/core/trace v0.2.1-0.20261125115812-12be546a8f1f h1:QBWtMqGJuWONlBrXKlEvx8NCtAX9UlV2ePTJcDzo2Wk=
+github.com/OpenNSW/core/trace v0.2.1-0.20261125115812-12be546a8f1f/go.mod h1:nFLAxXcvlUJZ46PWTv1iELSqEMGt4CG4avOm9ElpwtI=
 github.com/OpenNSW/core/uiprojector v0.3.0 h1:TRp0+TCcq+9eGMU0KPf0a2idHVE/xjVoFgy5Nf/pqZM=
 github.com/OpenNSW/core/uiprojector v0.3.0/go.mod h1:wWmdAkD71gPcDwaPyH/9BY0IbbqWFXoR/UkgssSxwh0=
 github.com/aws/aws-sdk-go-v2 v1.48.0 h1:tFU7EJVm7MfyaXLsXdYTZ0Vd6vwt9OljCyqq0gqk0Mc=

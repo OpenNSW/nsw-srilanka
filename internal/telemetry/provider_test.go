@@ -158,12 +158,9 @@ func TestHandlerDropsServerAddressFromHost(t *testing.T) {
 	}
 }
 
-func TestHandlerUsesCorrelationIDDespiteTraceparent(t *testing.T) {
+func TestHandlerUsesServerTraceIDDespiteTraceparent(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSyncer(exp),
-		sdktrace.WithIDGenerator(correlationIDGenerator{}),
-	)
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
 	t.Cleanup(func() { _ = tp.Shutdown(t.Context()) })
 	p := &Provider{
 		mp:       sdkmetric.NewMeterProvider(),
@@ -172,27 +169,31 @@ func TestHandlerUsesCorrelationIDDespiteTraceparent(t *testing.T) {
 		shutdown: func(context.Context) error { return nil },
 	}
 
+	var handlerTraceID, handlerClientID string
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/tasks", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /api/v1/tasks", func(w http.ResponseWriter, r *http.Request) {
+		handlerTraceID = trace.GetTraceID(r.Context())
+		handlerClientID = trace.GetClientRequestID(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
-	h := p.Handler("tnsw-api", mux)
+	// otelhttp outside TraceMiddleware so the span TraceID becomes the
+	// server correlation id; caller X-Trace-ID stays clientRequestId only.
+	h := p.Handler("tnsw-api", trace.TraceMiddleware(mux))
 
 	const (
-		correlationID = "ba06a9e9121683fe4b08a16cc00a3f59"
+		clientHeader  = "client-chosen-not-a-span-id"
 		remoteTraceID = "11111111111111111111111111111111"
 		remoteSpanID  = "2222222222222222"
 	)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	// sampled=0 and a different trace id. A public endpoint must still record
-	// a root span under the correlation id, and only link the incoming span.
-	// The default propagator ignores traceparent, so extract it here.
+	// a root span (not the remote id), and only link the incoming span.
 	req.Header.Set("traceparent", "00-"+remoteTraceID+"-"+remoteSpanID+"-00")
+	req.Header.Set("X-Trace-ID", clientHeader)
 	ctx := propagation.TraceContext{}.Extract(req.Context(), propagation.HeaderCarrier(req.Header))
-	req = req.WithContext(trace.ContextWithTraceID(ctx, correlationID))
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req.WithContext(ctx))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -200,8 +201,9 @@ func TestHandlerUsesCorrelationIDDespiteTraceparent(t *testing.T) {
 	if len(spans) != 1 {
 		t.Fatalf("spans = %d, want 1", len(spans))
 	}
-	if got := spans[0].SpanContext.TraceID().String(); got != correlationID {
-		t.Fatalf("trace id = %s, want %s", got, correlationID)
+	spanID := spans[0].SpanContext.TraceID().String()
+	if spanID == remoteTraceID {
+		t.Fatalf("trace id = %s, must not adopt remote traceparent", spanID)
 	}
 	if spans[0].Parent.IsValid() {
 		t.Fatalf("parent = %s, want none", spans[0].Parent.TraceID())
@@ -215,6 +217,18 @@ func TestHandlerUsesCorrelationIDDespiteTraceparent(t *testing.T) {
 	}
 	if got := link.SpanID().String(); got != remoteSpanID {
 		t.Fatalf("link span id = %s, want %s", got, remoteSpanID)
+	}
+	if handlerTraceID != spanID {
+		t.Fatalf("handler trace ID = %q, want span %q", handlerTraceID, spanID)
+	}
+	if handlerClientID != clientHeader {
+		t.Fatalf("clientRequestId = %q, want %q", handlerClientID, clientHeader)
+	}
+	if rec.Header().Get("X-Trace-ID") != spanID {
+		t.Fatalf("response X-Trace-ID = %q, want %q", rec.Header().Get("X-Trace-ID"), spanID)
+	}
+	if rec.Header().Get("X-Trace-ID") == clientHeader {
+		t.Fatal("response X-Trace-ID must not echo the client header")
 	}
 }
 
@@ -251,7 +265,7 @@ func TestHandlerHealthProbesKeepMetricsWithoutSpans(t *testing.T) {
 			req.Header.Set("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
 			ctx := propagation.TraceContext{}.Extract(req.Context(), propagation.HeaderCarrier(req.Header))
 			rec := httptest.NewRecorder()
-			trace.TraceMiddleware(p.Handler("tnsw-api", mux)).ServeHTTP(rec, req.WithContext(ctx))
+			trace.TraceSlotMiddleware(p.Handler("tnsw-api", trace.TraceMiddleware(mux))).ServeHTTP(rec, req.WithContext(ctx))
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
 			}
