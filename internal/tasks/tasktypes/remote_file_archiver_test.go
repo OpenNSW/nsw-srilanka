@@ -38,9 +38,9 @@ func pdfResponse(status int, body string) *remote.RawResponse {
 	}
 }
 
-const archiveConfig = `{"service_id": "slpa", "source_input": "payment_slip_url", "mime_type": "application/pdf", "filename": "slpa-payment-slip.pdf"}`
+const archiveConfig = `{"service_id": "port", "source_input": "payment_slip_url", "mime_type": "application/pdf", "filename": "payment-slip.pdf"}`
 
-const slipURL = "https://slpacargoapi.slpa.lk/pdf/payment-slip/26213643263442?signature=a8f1fc80"
+const slipURL = "https://files.example.com/pdf/payment-slip/26213643263442?signature=a8f1fc80"
 
 func archiveCtx(source any) plugins.PluginContext {
 	inputs := map[string]any{}
@@ -63,26 +63,26 @@ func TestRemoteFileArchiver_DownloadsAndStoresTheSource(t *testing.T) {
 
 	require.NoError(t, p.Execute(ctx, json.RawMessage(archiveConfig)))
 
-	assert.Equal(t, "slpa", fetcher.serviceID, "the download goes through the service's own client")
+	assert.Equal(t, "port", fetcher.serviceID, "the download goes through the service's own client")
 	assert.Equal(t, http.MethodGet, fetcher.req.Method)
 	assert.Equal(t, slipURL, fetcher.req.Path, "the signed link is fetched as sent")
 	assert.Equal(t, "%PDF-1.7 slip", string(files.content))
-	assert.Equal(t, "slpa-payment-slip.pdf", files.filename)
+	assert.Equal(t, "payment-slip.pdf", files.filename)
 	assert.Equal(t, "application/pdf", files.mime, "stored as the configured type, whatever the service labels it")
 	assert.Equal(t, map[string]any{
 		"key":       "0f8e7c1a-0000-4000-8000-000000000001.html",
-		"name":      "slpa-payment-slip.pdf",
+		"name":      "payment-slip.pdf",
 		"mime_type": "application/pdf",
 		"size":      int64(len("%PDF-1.7 slip")),
 	}, ctx.Record.Data["payment_slip_file"])
 }
 
-const barcodeConfig = `{"service_id": "slpa", "source_input": "payment_slip_url", "mime_type": "image/png", "filename": "slpa-gate-pass-barcode.png"}`
+const barcodeConfig = `{"service_id": "port", "source_input": "payment_slip_url", "mime_type": "image/png", "filename": "gate-pass-barcode.png"}`
 
 func TestRemoteFileArchiver_DecodesAnInlineSource(t *testing.T) {
 	png := []byte("\x89PNG\r\n\x1a\nbarcode")
 	for name, source := range map[string]string{
-		"as SLPA sends it":       "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
+		"inline":                 "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
 		"in another letter case": "DATA:Image/PNG;BASE64," + base64.StdEncoding.EncodeToString(png),
 		"with a charset first":   "data:image/png;charset=utf-8;base64," + base64.StdEncoding.EncodeToString(png),
 	} {
@@ -94,7 +94,7 @@ func TestRemoteFileArchiver_DecodesAnInlineSource(t *testing.T) {
 
 			assert.Zero(t, fetcher.calls, "an inline document is not downloaded")
 			assert.Equal(t, png, files.content)
-			assert.Equal(t, "slpa-gate-pass-barcode.png", files.filename)
+			assert.Equal(t, "gate-pass-barcode.png", files.filename)
 			assert.Equal(t, "image/png", files.mime)
 			assert.Equal(t, int64(len(png)), ctx.Record.Data["payment_slip_file"].(map[string]any)["size"])
 		})
@@ -146,8 +146,8 @@ func TestRemoteFileArchiver_RecordsARefusedDownloadAndGoesOn(t *testing.T) {
 		resp *remote.RawResponse
 		want string
 	}{
-		"an expired link": {pdfResponse(http.StatusForbidden, "expired"), "slpa refused the download with status 403"},
-		"an empty answer": {pdfResponse(http.StatusOK, ""), "slpa sent an empty document"},
+		"an expired link": {pdfResponse(http.StatusForbidden, "expired"), "port refused the download with status 403"},
+		"an empty answer": {pdfResponse(http.StatusOK, ""), "port sent an empty document"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			files := &fakeSaver{}
@@ -155,7 +155,7 @@ func TestRemoteFileArchiver_RecordsARefusedDownloadAndGoesOn(t *testing.T) {
 
 			err := NewRemoteFileArchiverPlugin(&fakeFetcher{resp: tc.resp}, files).Execute(ctx, json.RawMessage(archiveConfig))
 
-			require.NoError(t, err, "the trader still has the service's own link, and a retry would be refused again")
+			require.NoError(t, err, "the applicant still has the service's own link, and a retry would be refused again")
 			assert.Zero(t, files.calls)
 			assert.Equal(t, map[string]any{"error": tc.want}, ctx.Record.Data["payment_slip_file"])
 		})

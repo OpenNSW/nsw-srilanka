@@ -13,7 +13,7 @@ import (
 )
 
 // TaskTypeRefIDGenerator generates reference IDs from the refid formats
-// configured in config.yaml.
+// in the server config.
 const TaskTypeRefIDGenerator = "REFID_GENERATOR"
 
 // RefIDGeneratorPlugin is a synchronous plugin that fills fields of a copy of

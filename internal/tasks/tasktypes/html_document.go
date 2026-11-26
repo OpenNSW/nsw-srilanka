@@ -54,7 +54,7 @@ var errStaticDataCall = errors.New("staticdata takes a static_data id and a valu
 // task's inputs, stores the document, and records where it went:
 //
 //	{"task_type": "HTML_DOCUMENT_GENERATOR", "output_namespace": "permit_doc",
-//	 "plugin_properties": {"template_id": "npqs-permit--html", "filename": "permit.html"}}
+//	 "plugin_properties": {"template_id": "permit--html", "filename": "permit.html"}}
 //
 // The node's input_mapping assembles everything the document prints into the
 // inputs — form submissions, reviewer decisions, a reference ID generated
@@ -63,7 +63,7 @@ var errStaticDataCall = errors.New("staticdata takes a static_data id and a valu
 // what it is given.
 //
 // A template names a code by its static_data row with the staticdata resolver:
-// {{ staticdata "customs-cusdec--port-of-entry-and-discharge" .port }}
+// {{ staticdata "declaration--port-of-entry" .port }}
 // prints the title of the row whose const is .port, in that artifact as the
 // manifest version the task started on lists it, the manifest version the
 // template itself comes from. An empty or missing value prints nothing, and a
@@ -186,8 +186,9 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 // in {{ staticdata "<id>" "1" .port }}. Published manifests never change, so
 // the resolver accepts that form and ignores the version: the manifest that
 // holds such a template lists the static data at the version it names.
-// So, whenever all the inflight tasks of a manifest version that has a template with a staticdata call have finished,
-// we can deprecate the backward compatiability below by allowing only two arguments: the static_data id and the value.
+// Once every in-flight task of a manifest version whose template calls
+// staticdata with a version has finished, the resolver can accept only two
+// arguments: the static data id and the value.
 func (p *HTMLDocumentGeneratorPlugin) resolveStaticData(ctx context.Context, manifestVersion int, args ...any) (any, error) {
 	if len(args) != 2 && len(args) != 3 {
 		return nil, fmt.Errorf("%w, got %d arguments", errStaticDataCall, len(args))

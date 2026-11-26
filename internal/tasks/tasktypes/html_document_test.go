@@ -126,7 +126,7 @@ func TestHTMLDocumentGenerator_ChangedInputsStoreNewDocument(t *testing.T) {
 	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
 	first := ctx.Record.Data["permit_doc"].(map[string]any)
 
-	// A workflow loop comes back to the step after the trader corrected the form.
+	// A workflow loop comes back to the step after the applicant corrected the form.
 	ctx.Inputs = permitInputs("Smith & Sons")
 	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
 	second := ctx.Record.Data["permit_doc"].(map[string]any)

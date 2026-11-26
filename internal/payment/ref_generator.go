@@ -1,7 +1,7 @@
-// Package payment adapts core/payment to this deployment.
+// Package payment adapts core/payment to the refid registry and the task engine.
 //
-// It issues the references payers pay against, from the refid formats in
-// config.yaml. RefGenerator implements core/payment's ReferenceGenerator: a
+// It issues the references payers pay against, from the refid formats in the
+// server config. RefGenerator implements core/payment's ReferenceGenerator: a
 // checkout takes the fee's own format when its metadata names one
 // (ReferenceMetadata), and the default format otherwise. TaskCompleter is the
 // task completer the payment service settles a payment step through.
@@ -16,12 +16,10 @@ import (
 	"github.com/OpenNSW/core/refid"
 )
 
-// The default payment reference format, for fees without a format of their
-// own. config.yaml defines it in its refid section.
-const (
-	DefaultReferenceIssuer = "TNSW"
-	DefaultReferenceIDType = "payment_ref"
-)
+// DefaultReferenceIDType is the id_type of the default payment reference
+// format, for fees without a format of their own. The deployment names the
+// format's issuer (NewRefGenerator), and its refid config defines the format.
+const DefaultReferenceIDType = "payment_ref"
 
 // Checkout metadata keys that carry a fee's reference format: the format's
 // issuer and id_type, and one key per param, named metadataKeyParamPrefix plus
@@ -46,18 +44,22 @@ func ReferenceMetadata(issuer, idType string, params map[string]string) map[stri
 
 // RefGenerator issues payment references from the refid registry: in the format
 // a checkout's metadata names (ReferenceMetadata), and in the default format
-// (DefaultReferenceIssuer, DefaultReferenceIDType) for a checkout that names
-// none.
+// (its default issuer, DefaultReferenceIDType) for a checkout that names none.
 type RefGenerator struct {
-	refIDs refid.Registry
+	refIDs        refid.Registry
+	defaultIssuer string
 }
 
-// NewRefGenerator builds the generator. refIDs must be non-nil.
-func NewRefGenerator(refIDs refid.Registry) *RefGenerator {
+// NewRefGenerator builds the generator. refIDs must be non-nil, and
+// defaultIssuer, the issuer of the default format, non-empty.
+func NewRefGenerator(refIDs refid.Registry, defaultIssuer string) *RefGenerator {
 	if refIDs == nil {
 		panic("refIDs is nil")
 	}
-	return &RefGenerator{refIDs: refIDs}
+	if defaultIssuer == "" {
+		panic("defaultIssuer is empty")
+	}
+	return &RefGenerator{refIDs: refIDs, defaultIssuer: defaultIssuer}
 }
 
 // GenerateReference implements corepayment.ReferenceGenerator.
@@ -65,7 +67,7 @@ func (g *RefGenerator) GenerateReference(ctx context.Context, req corepayment.Cr
 	issuer, idType := req.Metadata[metadataKeyIssuer], req.Metadata[metadataKeyIDType]
 	switch {
 	case issuer == "" && idType == "":
-		issuer, idType = DefaultReferenceIssuer, DefaultReferenceIDType
+		issuer, idType = g.defaultIssuer, DefaultReferenceIDType
 	case issuer == "" || idType == "":
 		return "", fmt.Errorf("payment reference: the checkout names %s=%q and %s=%q; a format needs both",
 			metadataKeyIssuer, issuer, metadataKeyIDType, idType)

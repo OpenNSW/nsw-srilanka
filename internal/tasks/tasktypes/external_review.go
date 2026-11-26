@@ -16,12 +16,11 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 )
 
-// ExternalReviewPlugin is our custom replacement for the generic
-// generic_external_review plugin. It starts the review flow on the OGA's side, on the
-// same case, and parks until the OGA calls back.
+// ExternalReviewPlugin starts a review flow on the reviewing service's side, on
+// the same case, and parks until the reviewer calls back.
 type ExternalReviewPlugin struct {
 	client *dispatchHelper
-	files  OGAFiles
+	files  FileTokens
 	cases  CaseAttributes
 }
 
@@ -31,12 +30,13 @@ type CaseAttributes interface {
 	CaseAttributes(ctx context.Context, caseID string) (map[string]any, error)
 }
 
-// NewExternalReviewPlugin builds a plugin that POSTs the trader's submitted
-// form to the configured service+path, starting the other side's review flow. The
-// files in it are sent as tokens for the OGA, issued through files, and the attributes of
-// the dispatch's case, read from cases, are sent with each flow it starts.
+// NewExternalReviewPlugin builds a plugin that POSTs the applicant's submitted
+// form to the configured service+path, starting the other side's review flow.
+// The files in it are sent as tokens for the reviewer, issued through files, and
+// the attributes of the dispatch's case, read from cases, are sent with each flow
+// it starts.
 // manager and cases must be non-nil, and files either zero or complete.
-func NewExternalReviewPlugin(manager *remote.Manager, files OGAFiles, cases CaseAttributes) *ExternalReviewPlugin {
+func NewExternalReviewPlugin(manager *remote.Manager, files FileTokens, cases CaseAttributes) *ExternalReviewPlugin {
 	if manager == nil {
 		panic("manager is nil")
 	}
@@ -61,7 +61,7 @@ type externalReviewConfig struct {
 	// ServiceWorkflowID is the workflow the other side starts for the review, as its
 	// flows.clients lists it. Required only to dispatch.
 	ServiceWorkflowID string `json:"service_workflow_id,omitempty"`
-	// ReplyCommand is the command a reply carries, e.g. "submit" for a trader's
+	// ReplyCommand is the command a reply carries, e.g. "submit" for an applicant's
 	// resubmission or "needs_more_info" for an officer asking for one. Required
 	// only to reply.
 	ReplyCommand string `json:"reply_command,omitempty"`
@@ -147,7 +147,7 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 	path := strings.ReplaceAll(cfg.Path, casePathParam, url.PathEscape(ctx.Record.CaseID))
 
 	// Convention: if input_mapping placed a value under the reserved key
-	// "submission", that value is the wire shape OGA sees — write any
+	// "submission", that value is the wire shape the reviewer sees — write any
 	// additional context directly into a nested "submission.<field>" path
 	// in the node's own input_mapping (input_mapping's destination side
 	// supports dot-paths natively). Otherwise the whole inputs bag is sent
@@ -158,7 +158,7 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 		data, root = submission, "submission"
 	}
 	// The task's declared file fields are rooted at its data, which holds the
-	// inputs; the OGA gets tokens for the ones it is sent.
+	// inputs; the reviewer gets tokens for the ones it is sent.
 	data, err := p.files.tokenize(ctx.Context, *ctx.Record, root, data, cfg.ServiceID)
 	if err != nil {
 		return "", nil, fmt.Errorf("external_review: %w", err)

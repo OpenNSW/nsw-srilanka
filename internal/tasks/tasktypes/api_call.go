@@ -142,7 +142,7 @@ func queryFor(interp Interpreter, inputs map[string]any) url.Values {
 //
 // A placeholder with no input is an error rather than an empty segment: the
 // alternative is calling a different URL than the one the artifact declared,
-// which a service can only answer with a 404 the trader cannot act on.
+// which a service can only answer with a 404 the applicant cannot act on.
 func expandPath(path string, inputs map[string]any) (string, error) {
 	var missing []string
 	var b strings.Builder
@@ -240,10 +240,9 @@ type apiCallConfig struct {
 	// The body is whatever the interpreter builds, whatever the method: HTTP
 	// discourages content on a GET but does not forbid it, so which calls carry
 	// one is the artifact's business rather than this plugin's. An interpreter
-	// driving a GET returns nil from BuildRequest — see the SLPA consolidation
-	// lookup — and the generic passthrough interpreter always builds one, so a
-	// GET configured on a plugin without its own interpreter will send the
-	// mapped inputs as a body.
+	// driving a GET returns nil from BuildRequest, and the generic passthrough
+	// interpreter always builds one, so a GET configured on a plugin without its
+	// own interpreter will send the mapped inputs as a body.
 	Method      string `json:"method,omitempty"`
 	ResultField string `json:"result_field,omitempty"` // record the accepted flag under this key
 
@@ -254,7 +253,7 @@ type apiCallConfig struct {
 	// flow moves straight on to a step that waits for them, so the "with the
 	// agency" panel covers the whole span. A call that comes straight back to
 	// the step it was made from — a validity or pricing check, say — is not
-	// that. Reporting it as queued would show the trader the waiting panel for
+	// that. Reporting it as queued would show the applicant the waiting panel for
 	// a moment, and, because the portal keys a zone on task state, remount the
 	// form under them and reseed it from what was last saved, losing whatever
 	// they had typed since.
@@ -329,7 +328,7 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 
 // callMultipart assembles and sends a multipart/form-data submission. A
 // failure to assemble the body is returned rather than sent, so the
-// interpreter reports it to the trader through the same path as a rejection —
+// interpreter reports it to the applicant through the same path as a rejection —
 // nothing reaches the service in that case.
 func (p *APICallPlugin) callMultipart(ctx pluginContext, mp MultipartInterpreter, path string, cfg apiCallConfig, resp *map[string]any) error {
 	parts, err := mp.BuildParts(ctx.Context, ctx.Inputs)

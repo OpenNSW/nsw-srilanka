@@ -59,7 +59,7 @@ func (p *NotificationPlugin) Execute(ctx pluginContext, configRaw json.RawMessag
 	}
 
 	// Recipient comes from the workflow inputs only (input_mapping) — it's the
-	// per-consignment trader phone/email, never a static config value.
+	// per-case applicant phone/email, never a static config value.
 	raw, exists := ctx.Inputs["to"]
 	if !exists {
 		return inputError(errors.New(`notification: recipient input "to" is missing`))

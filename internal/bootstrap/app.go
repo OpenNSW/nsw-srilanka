@@ -200,7 +200,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
-	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
+	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs, paymentReferenceIssuer))
 	// Built before payment and storage are handed to the task stack. Workers
 	// can emit events as soon as those services exist, so the auditor has to
 	// be attached here rather than after the task manager starts. Telemetry
@@ -297,9 +297,9 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// OGAs are sent file tokens issued to the machine client each calls back
 	// as. An agency doesn't own its files: what it stores are TNSW's tokens,
 	// which it sends back to TNSW as they are.
-	var ogaFiles tasktypes.OGAFiles
+	var fileTokens tasktypes.FileTokens
 	if !cfg.Storage.IsProxy() {
-		ogaFiles = tasktypes.OGAFiles{
+		fileTokens = tasktypes.FileTokens{
 			ClientFor: func(serviceID string) (string, bool) {
 				clientID, ok := globalCatalog.Clients[serviceID]
 				return clientID, ok
@@ -321,7 +321,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// attributes EXTERNAL_REVIEW sends, of which only the keys consignment lists.
 	flowRepo := caseflow.NewRepository(sqlDB)
 	sharedAttrs := caseflow.SharedAttributes{Repo: flowRepo, Keys: consignment.SharedCaseAttributes}
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, sharedAttrs, artifacts, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, fileTokens, sharedAttrs, artifacts, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -674,6 +674,11 @@ func newHTTPServer(cfg config.ServerConfig, handler http.Handler) *http.Server {
 	}
 }
 
+// paymentReferenceIssuer is the issuer of the default payment reference format,
+// TNSW/payment_ref, which the refid section of the server config defines. A fee
+// without a reference format of its own is issued one in it.
+const paymentReferenceIssuer = "TNSW"
+
 // parentWorkflowQueue is the Temporal task queue the macro/parent workflow
 // runner polls.
 const parentWorkflowQueue = "INTERPRETER_TASK_QUEUE"
@@ -984,14 +989,14 @@ func (s registryStaticData) Title(ctx context.Context, manifestVersion int, id, 
 // tasktypes and core's taskflow/plugins. registerFlowPlugins installs the ones
 // that need a store or source only the application has, and taskplugins the
 // Sri Lankan ones.
-func registerTaskTypes(reg *plugins.Registry, mgr *remote.Manager, paymentService payment.Service, ogaFiles tasktypes.OGAFiles, cases tasktypes.CaseAttributes) error {
+func registerTaskTypes(reg *plugins.Registry, mgr *remote.Manager, paymentService payment.Service, fileTokens tasktypes.FileTokens, cases tasktypes.CaseAttributes) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
 	}{
 		{tasktypes.TaskTypeUserInput, plugins.NewUserInputPlugin()},
 		{tasktypes.TaskTypeValueWriter, tasktypes.NewValueWriterPlugin()},
-		{tasktypes.TaskTypeExternalReview, tasktypes.NewExternalReviewPlugin(mgr, ogaFiles, cases)},
+		{tasktypes.TaskTypeExternalReview, tasktypes.NewExternalReviewPlugin(mgr, fileTokens, cases)},
 		{tasktypes.TaskTypePayment, tasktypes.NewPaymentPlugin(paymentService)},
 		{tasktypes.TaskTypeAPICall, plugins.NewAPICallPlugin(plugins.DefaultHTTPDispatcher)},
 		{tasktypes.TaskTypeAuthAPICall, tasktypes.NewAPICallPlugin(mgr)},
@@ -1063,7 +1068,7 @@ func initTask(
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
-	ogaFiles tasktypes.OGAFiles,
+	fileTokens tasktypes.FileTokens,
 	caseAttrs tasktypes.CaseAttributes,
 	artifacts *artifact.Set,
 	globalCatalog *catalog.Catalog,
@@ -1074,7 +1079,7 @@ func initTask(
 	pluginsRegistry := plugins.NewRegistry()
 	declarations := cusdec.NewDeclarationRepository(db)
 	dispatchNotes := cdn.NewDispatchNoteRepository(db)
-	if err := registerTaskTypes(pluginsRegistry, remoteManager, paymentService, ogaFiles, caseAttrs); err != nil {
+	if err := registerTaskTypes(pluginsRegistry, remoteManager, paymentService, fileTokens, caseAttrs); err != nil {
 		return nil, nil, err
 	}
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, storageService, taskplugins.CustomsSubmissions{

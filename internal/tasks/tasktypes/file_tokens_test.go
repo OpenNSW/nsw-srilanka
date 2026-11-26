@@ -19,9 +19,9 @@ import (
 )
 
 // tokenFor stands in for file tokens: "<client>/<value>".
-var tokenFor = OGAFiles{
+var tokenFor = FileTokens{
 	ClientFor: func(serviceID string) (string, bool) {
-		clientID, ok := map[string]string{"cda": "CDA_TO_NSW"}[serviceID]
+		clientID, ok := map[string]string{"reviewer": "REVIEWER_CLIENT"}[serviceID]
 		return clientID, ok
 	},
 	IssueForClient: func(clientID, value string) (string, error) {
@@ -39,7 +39,7 @@ func fixedRenderConfig(renderConfig string) func(context.Context, store.TaskReco
 }
 
 // withRenderConfig is f resolving every task's render config to renderConfig.
-func withRenderConfig(f OGAFiles, renderConfig string) OGAFiles {
+func withRenderConfig(f FileTokens, renderConfig string) FileTokens {
 	f.RenderConfigOf = fixedRenderConfig(renderConfig)
 	return f
 }
@@ -62,35 +62,35 @@ func reviewInputs(t *testing.T) map[string]any {
 	return in
 }
 
-func TestOGAFiles_TokenizeSendsTokens(t *testing.T) {
+func TestFileTokens_TokenizeSendsTokens(t *testing.T) {
 	in := reviewInputs(t)
 
-	sent, err := withRenderConfig(tokenFor, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", in["submission"], "cda")
+	sent, err := withRenderConfig(tokenFor, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", in["submission"], "reviewer")
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]any{
-		"invoice":   "CDA_TO_NSW/k-invoice",
-		"documents": []any{map[string]any{"file": "CDA_TO_NSW/k-doc", "name": "packing list"}},
+		"invoice":   "REVIEWER_CLIENT/k-invoice",
+		"documents": []any{map[string]any{"file": "REVIEWER_CLIENT/k-doc", "name": "packing list"}},
 		"exporter":  "ACME",
 	}, sent)
 	assert.Equal(t, reviewInputs(t), in, "what is sent must be a copy: the task keeps its stored values")
 }
 
-func TestOGAFiles_TokenizeWholeInputs(t *testing.T) {
+func TestFileTokens_TokenizeWholeInputs(t *testing.T) {
 	in := reviewInputs(t)
 
-	sent, err := withRenderConfig(tokenFor, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "", in, "cda")
+	sent, err := withRenderConfig(tokenFor, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "", in, "reviewer")
 	require.NoError(t, err)
-	assert.Equal(t, "CDA_TO_NSW/k-invoice", sent.(map[string]any)["submission"].(map[string]any)["invoice"])
+	assert.Equal(t, "REVIEWER_CLIENT/k-invoice", sent.(map[string]any)["submission"].(map[string]any)["invoice"])
 }
 
 // With no client to issue a token to, a file is not sent at all.
-func TestOGAFiles_TokenizeFailsClosedWithoutAClient(t *testing.T) {
+func TestFileTokens_TokenizeFailsClosedWithoutAClient(t *testing.T) {
 	_, err := withRenderConfig(tokenFor, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", reviewInputs(t)["submission"], "efc")
 	assert.ErrorContains(t, err, `"efc"`)
 }
 
-func TestOGAFiles_TokenizeWithoutFilesToSend(t *testing.T) {
+func TestFileTokens_TokenizeWithoutFilesToSend(t *testing.T) {
 	in := reviewInputs(t)
 	for name, renderConfig := range map[string]string{
 		"no files declared":        `{"id":"x:render"}`,
@@ -104,34 +104,34 @@ func TestOGAFiles_TokenizeWithoutFilesToSend(t *testing.T) {
 	}
 }
 
-func TestOGAFiles_TokenizeErrors(t *testing.T) {
-	_, err := withRenderConfig(tokenFor, `{"files":["submission.docs[0]"]}`).tokenize(context.Background(), store.TaskRecord{}, "submission", map[string]any{}, "cda")
+func TestFileTokens_TokenizeErrors(t *testing.T) {
+	_, err := withRenderConfig(tokenFor, `{"files":["submission.docs[0]"]}`).tokenize(context.Background(), store.TaskRecord{}, "submission", map[string]any{}, "reviewer")
 	assert.Error(t, err, "a bad declaration")
 
 	failing := tokenFor
 	failing.IssueForClient = func(string, string) (string, error) { return "", errors.New("no keyset") }
-	_, err = withRenderConfig(failing, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", reviewInputs(t)["submission"], "cda")
+	_, err = withRenderConfig(failing, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", reviewInputs(t)["submission"], "reviewer")
 	assert.ErrorContains(t, err, "no keyset")
 }
 
 // A declared file field of another shape than declared is not pushed as it
-// is: the push fails, and nothing reaches the OGA.
+// is: the push fails, and nothing reaches the reviewer.
 func TestExternalReview_DoesNotPushMismatchedFileFields(t *testing.T) {
-	m, pushed := newOGA(t)
+	m, pushed := newReviewer(t)
 	p := NewExternalReviewPlugin(m, withRenderConfig(tokenFor, reviewRenderConfig), noCaseAttributes{})
 	in := reviewInputs(t)
 	in["submission"].(map[string]any)["invoice"] = []any{"k-invoice", "k-other"}
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "case-1"}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","path":"/review","service_workflow_id":"cda-review"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"reviewer","path":"/review","service_workflow_id":"review"}`))
 
 	require.ErrorIs(t, err, filefields.ErrShape)
 	assert.Empty(t, *pushed)
 }
 
-// newOGA stands up an OGA portal as the outbound service "cda", recording the
-// body of each push.
-func newOGA(t *testing.T) (*remote.Manager, *[]map[string]any) {
+// newReviewer stands up a reviewing service as the outbound service "reviewer",
+// recording the body of each push.
+func newReviewer(t *testing.T) (*remote.Manager, *[]map[string]any) {
 	t.Helper()
 	var pushed []map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -144,85 +144,85 @@ func newOGA(t *testing.T) (*remote.Manager, *[]map[string]any) {
 	t.Cleanup(srv.Close)
 
 	m := remote.NewManager()
-	require.NoError(t, m.SetServices(remote.ServiceConfig{ID: "cda", URL: srv.URL}))
+	require.NoError(t, m.SetServices(remote.ServiceConfig{ID: "reviewer", URL: srv.URL}))
 	return m, &pushed
 }
 
 func TestExternalReview_PushesFileTokens(t *testing.T) {
-	m, pushed := newOGA(t)
+	m, pushed := newReviewer(t)
 	p := NewExternalReviewPlugin(m, withRenderConfig(tokenFor, reviewRenderConfig), noCaseAttributes{})
 	in := reviewInputs(t)
 	record := &store.TaskRecord{
 		TaskID:       uuid.NewString(),
 		ActiveStepID: uuid.NewString(),
-		CaseID:       "consignment-1",
+		CaseID:       "case-1",
 		Data:         reviewInputs(t),
 	}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","path":"/review","service_workflow_id":"cda-review"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"reviewer","path":"/review","service_workflow_id":"review"}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
 	require.Len(t, *pushed, 1)
 	data := (*pushed)[0]["input"].(map[string]any)
-	assert.Equal(t, "CDA_TO_NSW/k-invoice", data["invoice"])
+	assert.Equal(t, "REVIEWER_CLIENT/k-invoice", data["invoice"])
 	assert.Equal(t, reviewInputs(t), record.Data, "the task keeps its stored values")
 	assert.Equal(t, reviewInputs(t), in)
 }
 
 func TestExternalReview_DoesNotPushFilesWithoutAClient(t *testing.T) {
-	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, OGAFiles{
+	m, pushed := newReviewer(t)
+	p := NewExternalReviewPlugin(m, FileTokens{
 		RenderConfigOf: fixedRenderConfig(reviewRenderConfig),
 		ClientFor:      func(string) (string, bool) { return "", false },
 		IssueForClient: tokenFor.IssueForClient,
 	}, noCaseAttributes{})
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "case-1"}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: reviewInputs(t)}, json.RawMessage(`{"service_id":"cda","path":"/review","service_workflow_id":"cda-review"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: reviewInputs(t)}, json.RawMessage(`{"service_id":"reviewer","path":"/review","service_workflow_id":"review"}`))
 
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrSuspended)
 	assert.Empty(t, *pushed)
 }
 
-// A reply sends the step's inputs back to the OGA, so its declared files go as
-// tokens for the OGA's client too, and the task keeps its stored values.
+// A reply sends the step's inputs back to the reviewer, so its declared files go as
+// tokens for the reviewer's client too, and the task keeps its stored values.
 func TestExternalReview_RepliesWithFileTokens(t *testing.T) {
-	m, pushed := newOGA(t)
+	m, pushed := newReviewer(t)
 	p := NewExternalReviewPlugin(m, withRenderConfig(tokenFor, reviewRenderConfig), noCaseAttributes{})
 	in := reviewInputs(t)
 	in["replyToken"] = "tok_x"
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "case-1"}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"reviewer","reply_command":"submit"}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
 	require.Len(t, *pushed, 1)
 	payload := (*pushed)[0]["payload"].(map[string]any)
 	submission := payload["submission"].(map[string]any)
-	assert.Equal(t, "CDA_TO_NSW/k-invoice", submission["invoice"])
-	assert.Equal(t, "CDA_TO_NSW/k-doc", submission["documents"].([]any)[0].(map[string]any)["file"])
+	assert.Equal(t, "REVIEWER_CLIENT/k-invoice", submission["invoice"])
+	assert.Equal(t, "REVIEWER_CLIENT/k-doc", submission["documents"].([]any)[0].(map[string]any)["file"])
 	assert.NotContains(t, payload, "replyToken")
 	assert.Equal(t, "k-invoice", in["submission"].(map[string]any)["invoice"], "the task keeps its stored values")
 }
 
 // A reply with a payload input sends only that, so its declared files are the
-// ones under "payload", and they go as tokens for the OGA's client too.
+// ones under "payload", and they go as tokens for the reviewer's client too.
 func TestExternalReview_RepliesWithPayloadFileTokens(t *testing.T) {
-	m, pushed := newOGA(t)
+	m, pushed := newReviewer(t)
 	p := NewExternalReviewPlugin(m, withRenderConfig(tokenFor, `{"files": ["payload.invoice"]}`), noCaseAttributes{})
 	in := map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"invoice": "k-invoice", "feedback": "attach the invoice"},
 	}
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "case-1"}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"reviewer","reply_command":"submit"}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
 	require.Len(t, *pushed, 1)
 	payload := (*pushed)[0]["payload"].(map[string]any)
-	assert.Equal(t, "CDA_TO_NSW/k-invoice", payload["invoice"])
+	assert.Equal(t, "REVIEWER_CLIENT/k-invoice", payload["invoice"])
 	assert.Equal(t, "attach the invoice", payload["feedback"])
 	assert.Equal(t, "k-invoice", in["payload"].(map[string]any)["invoice"], "the task keeps its stored values")
 }
@@ -230,28 +230,28 @@ func TestExternalReview_RepliesWithPayloadFileTokens(t *testing.T) {
 // A reply that would send a file to a service with no client fails rather than
 // send it.
 func TestExternalReview_DoesNotReplyWithFilesWithoutAClient(t *testing.T) {
-	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, OGAFiles{
+	m, pushed := newReviewer(t)
+	p := NewExternalReviewPlugin(m, FileTokens{
 		RenderConfigOf: fixedRenderConfig(reviewRenderConfig),
 		ClientFor:      func(string) (string, bool) { return "", false },
 		IssueForClient: tokenFor.IssueForClient,
 	}, noCaseAttributes{})
 	in := reviewInputs(t)
 	in["replyToken"] = "tok_x"
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "consignment-1"}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), CaseID: "case-1"}
 
-	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"reviewer","reply_command":"submit"}`))
 
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrSuspended)
 	assert.Empty(t, *pushed)
 }
 
-// An agency doesn't own its files: its stored values are TNSW's tokens, which
-// it sends back to TNSW as they are, with no client of its own to issue for.
-func TestOGAFiles_ZeroSendsStoredValues(t *testing.T) {
+// A deployment that doesn't own its files stores the owner's tokens, which it
+// sends back to the owner as they are, with no client of its own to issue for.
+func TestFileTokens_ZeroSendsStoredValues(t *testing.T) {
 	in := reviewInputs(t)
-	sent, err := withRenderConfig(OGAFiles{}, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", in["submission"], "tnsw")
+	sent, err := withRenderConfig(FileTokens{}, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", in["submission"], "origin")
 	require.NoError(t, err)
 	assert.Equal(t, reviewInputs(t)["submission"], sent)
 }

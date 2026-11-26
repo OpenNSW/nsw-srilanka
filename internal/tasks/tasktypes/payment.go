@@ -12,7 +12,7 @@ import (
 
 	"github.com/OpenNSW/core/payment"
 	coreplugins "github.com/OpenNSW/core/taskflow/plugins"
-	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
+	paymentref "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/shopspring/decimal"
 )
 
@@ -24,9 +24,10 @@ type PaymentPlugin struct {
 }
 
 // referenceLifetime is how long a payment reference stays payable: a year, so the
-// trader is not held to paying it within a day. A reference that never expired
+// applicant is not held to paying it within a day. A reference that never expired
 // would also never pick up a change to the fee it was issued for, so this is a
-// stopgap until checkouts follow such changes (#899).
+// stopgap until checkouts follow such changes.
+// TODO(OpenNSW/nsw-srilanka#899): follow fee changes and drop the lifetime.
 const referenceLifetime = 365 * 24 * time.Hour
 
 // NewPaymentPlugin builds the PAYMENT plugin, which opens checkouts through
@@ -42,8 +43,8 @@ func NewPaymentPlugin(paymentService payment.Service) *PaymentPlugin {
 
 type paymentConfig struct {
 	// OrgID and ServiceID name the payee the fee is paid to. Each payment
-	// method maps a payee to its own account ids under "payees" in
-	// config.yaml's payment section, so a fee never carries a gateway's ids, and only
+	// method maps a payee to its own account ids under "payees" in the server
+	// config's payment section, so a fee never carries a gateway's ids, and only
 	// the methods that map the payee can collect it.
 	OrgID     string          `json:"org_id"`
 	ServiceID string          `json:"service_id"`
@@ -52,7 +53,7 @@ type paymentConfig struct {
 
 	// Reference names the refid format of the fee's payment reference, the
 	// reference the payer pays against. A fee without one takes the default
-	// format; see nswpayment.RefGenerator.
+	// format; see paymentref.RefGenerator.
 	Reference *paymentReferenceConfig `json:"reference,omitempty"`
 }
 
@@ -118,10 +119,10 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 
 	// 4. Create the checkout session via core/payment. The selected gateway is
 	// passed as GatewayID; the service takes the reference from
-	// nswpayment.RefGenerator, in the fee's format, and (for instruction-flow
+	// paymentref.RefGenerator, in the fee's format, and (for instruction-flow
 	// gateways) returns the instructions to display. A method that does not
 	// map the payee surfaces here as payment.ErrPayeeNotMapped, before anything
-	// is persisted, naming the payee to add to config.yaml's payment section.
+	// is persisted, naming the payee to add to the server config's payment section.
 	// The settlement completes exactly this step: the payment service hands the
 	// token back to the task manager when the webhook arrives.
 	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
@@ -170,14 +171,14 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		ctx.Record.Data[ctx.OutputNamespace] = pData
 	}
 
-	// Suspend the workflow until LankaPay/webhook callback arrives
+	// Suspend the workflow until the payment gateway's webhook arrives
 	return ErrSuspended
 }
 
 // buildPaymentMetadata assembles the metadata persisted with the transaction:
 // the task it pays for and the method it was opened with, for correlation, and
 // the fee's reference format (referenceMetadata, from paymentReferenceMetadata),
-// which nswpayment.RefGenerator reads.
+// which paymentref.RefGenerator reads.
 func buildPaymentMetadata(taskID, selectedMethod string, referenceMetadata map[string]string) map[string]string {
 	metadata := make(map[string]string, len(referenceMetadata)+2)
 	maps.Copy(metadata, referenceMetadata)
@@ -195,7 +196,7 @@ func selectPaymentMethod(selected string, methods []payment.GatewayInfo) (string
 		ids = append(ids, m.ID)
 	}
 	if len(ids) == 0 {
-		return "", configError(errors.New("no payment method can pay this payee; map it under payment.methods[].payees in config.yaml"))
+		return "", configError(errors.New("no payment method can pay this payee; map it under payment.methods[].payees in the server config"))
 	}
 	if selected != "" {
 		if !slices.Contains(ids, selected) {
@@ -210,7 +211,7 @@ func selectPaymentMethod(selected string, methods []payment.GatewayInfo) (string
 }
 
 // paymentReferenceMetadata resolves a fee's reference format into the checkout
-// metadata nswpayment.RefGenerator reads: its issuer and id_type, its params read
+// metadata paymentref.RefGenerator reads: its issuer and id_type, its params read
 // through their pointers into inputs, and its fixed values. A fee without a
 // format adds no keys, so its checkout takes the default format.
 func paymentReferenceMetadata(inputs map[string]any, cfg *paymentReferenceConfig) (map[string]string, error) {
@@ -246,7 +247,7 @@ func paymentReferenceMetadata(inputs map[string]any, cfg *paymentReferenceConfig
 	for name, value := range cfg.Values {
 		params[name] = value
 	}
-	return nswpayment.ReferenceMetadata(cfg.Issuer, cfg.IDType, params), nil
+	return paymentref.ReferenceMetadata(cfg.Issuer, cfg.IDType, params), nil
 }
 
 // Decides the amount to charge for a task. If the workflow input "amount" is

@@ -26,7 +26,7 @@ func (stubCaseAttributes) CaseAttributes(context.Context, string) (map[string]an
 func TestRegisterTaskTypes_InstallsTheGenericTaskTypes(t *testing.T) {
 	reg := plugins.NewRegistry()
 
-	require.NoError(t, registerTaskTypes(reg, remote.NewManager(), stubPaymentService{}, tasktypes.OGAFiles{}, stubCaseAttributes{}))
+	require.NoError(t, registerTaskTypes(reg, remote.NewManager(), stubPaymentService{}, tasktypes.FileTokens{}, stubCaseAttributes{}))
 
 	for _, taskType := range []string{
 		tasktypes.TaskTypeUserInput,
@@ -45,7 +45,7 @@ func TestRegisterTaskTypes_FailsWhenATaskTypeIsTaken(t *testing.T) {
 	reg := plugins.NewRegistry()
 	require.NoError(t, reg.Register(tasktypes.TaskTypePayment, tasktypes.NewValueWriterPlugin()))
 
-	err := registerTaskTypes(reg, remote.NewManager(), stubPaymentService{}, tasktypes.OGAFiles{}, stubCaseAttributes{})
+	err := registerTaskTypes(reg, remote.NewManager(), stubPaymentService{}, tasktypes.FileTokens{}, stubCaseAttributes{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "register PAYMENT")

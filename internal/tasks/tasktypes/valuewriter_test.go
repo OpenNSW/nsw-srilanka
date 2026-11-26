@@ -31,51 +31,51 @@ func written(t *testing.T, ctx plugins.PluginContext) map[string]any {
 	return out
 }
 
-// blendSheets is the SLTB case: one CusDec for the application, whose
-// reference every blend sheet carries.
-func blendSheets() map[string]any {
+// lineItems is an application with one declaration, whose reference
+// every line item carries.
+func lineItems() map[string]any {
 	return map[string]any{
-		"cusdec": map[string]any{"registration_no": "90000001", "year": "2026"},
+		"declaration": map[string]any{"registration_no": "90000001", "year": "2026"},
 		"userform": map[string]any{
-			"blendsheet_data": []any{
-				map[string]any{"blend_no": "26/1911", "cusdec_number": "CBEX1 2026 E 68735"},
-				map[string]any{"blend_no": "26/1912"},
+			"line_items": []any{
+				map[string]any{"item_no": "26/1911", "declaration_number": "OFC1 2026 E 68735"},
+				map[string]any{"item_no": "26/1912"},
 			},
-			"cusdec_draft": map[string]any{"identification": map[string]any{"officeCode": "CBEX1"}},
+			"declaration_draft": map[string]any{"identification": map[string]any{"officeCode": "OFC1"}},
 		},
 	}
 }
 
-const blendSheetWrites = `{"writes": [
-	{"each": "/userform/blendsheet_data", "path": "0/cusdec_number",
-	 "template": "TNSW {year} E {registration_no}",
-	 "params": {"year": "/cusdec/year", "registration_no": "/cusdec/registration_no"}},
-	{"path": "/userform/cusdec_draft/identification/registrationNumber", "from": "/cusdec/registration_no"}
+const lineItemWrites = `{"writes": [
+	{"each": "/userform/line_items", "path": "0/declaration_number",
+	 "template": "ACME {year} E {registration_no}",
+	 "params": {"year": "/declaration/year", "registration_no": "/declaration/registration_no"}},
+	{"path": "/userform/declaration_draft/identification/registrationNumber", "from": "/declaration/registration_no"}
 ]}`
 
 func TestValueWriter_WritesEveryElementAndOneField(t *testing.T) {
-	ctx := valueWriterCtx(blendSheets())
+	ctx := valueWriterCtx(lineItems())
 
-	require.NoError(t, execValueWriter(ctx, blendSheetWrites))
+	require.NoError(t, execValueWriter(ctx, lineItemWrites))
 
 	form := written(t, ctx)["userform"].(map[string]any)
-	for i, item := range form["blendsheet_data"].([]any) {
-		assert.Equal(t, "TNSW 2026 E 90000001", item.(map[string]any)["cusdec_number"], "blend sheet %d", i)
+	for i, item := range form["line_items"].([]any) {
+		assert.Equal(t, "ACME 2026 E 90000001", item.(map[string]any)["declaration_number"], "line item %d", i)
 	}
-	assert.Equal(t, "26/1911", form["blendsheet_data"].([]any)[0].(map[string]any)["blend_no"], "other fields are carried through")
-	identification := form["cusdec_draft"].(map[string]any)["identification"].(map[string]any)
+	assert.Equal(t, "26/1911", form["line_items"].([]any)[0].(map[string]any)["item_no"], "other fields are carried through")
+	identification := form["declaration_draft"].(map[string]any)["identification"].(map[string]any)
 	assert.Equal(t, "90000001", identification["registrationNumber"])
-	assert.Equal(t, "CBEX1", identification["officeCode"])
+	assert.Equal(t, "OFC1", identification["officeCode"])
 }
 
 func TestValueWriter_LeavesInputsAlone(t *testing.T) {
-	inputs := blendSheets()
+	inputs := lineItems()
 	ctx := valueWriterCtx(inputs)
 
-	require.NoError(t, execValueWriter(ctx, blendSheetWrites))
+	require.NoError(t, execValueWriter(ctx, lineItemWrites))
 
-	first := inputs["userform"].(map[string]any)["blendsheet_data"].([]any)[0].(map[string]any)
-	assert.Equal(t, "CBEX1 2026 E 68735", first["cusdec_number"])
+	first := inputs["userform"].(map[string]any)["line_items"].([]any)[0].(map[string]any)
+	assert.Equal(t, "OFC1 2026 E 68735", first["declaration_number"])
 }
 
 func TestValueWriter_FromCopiesAnyValue(t *testing.T) {
@@ -126,10 +126,10 @@ func TestValueWriter_MissingOrEmptyArrayWritesNothing(t *testing.T) {
 
 func TestValueWriter_MissingSourceFails(t *testing.T) {
 	for name, props := range map[string]string{
-		"from":           `{"writes": [{"path": "/ref", "from": "/cusdec/registration_no"}]}`,
-		"template param": `{"writes": [{"path": "/ref", "template": "TNSW {year}", "params": {"year": "/cusdec/year"}}]}`,
+		"from":           `{"writes": [{"path": "/ref", "from": "/declaration/registration_no"}]}`,
+		"template param": `{"writes": [{"path": "/ref", "template": "ACME {year}", "params": {"year": "/declaration/year"}}]}`,
 	} {
-		ctx := valueWriterCtx(map[string]any{"cusdec": map[string]any{}})
+		ctx := valueWriterCtx(map[string]any{"declaration": map[string]any{}})
 
 		err := execValueWriter(ctx, props)
 

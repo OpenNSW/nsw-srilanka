@@ -154,9 +154,9 @@ func TestRefIDGenerator_SingleID(t *testing.T) {
 	ctx := refIDCtx(nil)
 
 	require.NoError(t, execRefIDs(t, &fakeRefIDs{}, ctx,
-		`{"ids": [{"path": "/reference_id", "issuer": "ACME", "id_type": "consignment_ref"}]}`))
+		`{"ids": [{"path": "/reference_id", "issuer": "ACME", "id_type": "case_ref"}]}`))
 
-	assert.Equal(t, map[string]any{"reference_id": "ACME/consignment_ref/1"}, ctx.Record.Data["refid"])
+	assert.Equal(t, map[string]any{"reference_id": "ACME/case_ref/1"}, ctx.Record.Data["refid"])
 }
 
 func TestRefIDGenerator_FillsRootAndEachElement(t *testing.T) {
@@ -272,7 +272,7 @@ func TestRefIDGenerator_NoParamsWithoutParamsMap(t *testing.T) {
 	ctx := refIDCtx(map[string]any{"portCode": "CMB"})
 
 	require.NoError(t, execRefIDs(t, reg, ctx,
-		`{"ids": [{"path": "/reference_id", "issuer": "ACME", "id_type": "consignment_ref"}]}`))
+		`{"ids": [{"path": "/reference_id", "issuer": "ACME", "id_type": "case_ref"}]}`))
 
 	assert.Empty(t, reg.calls[0].params, "inputs are never passed as params implicitly")
 }
