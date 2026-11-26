@@ -1,4 +1,4 @@
-package plugins
+package tasktypes
 
 import (
 	"encoding/json"
@@ -29,8 +29,12 @@ type PaymentPlugin struct {
 // stopgap until checkouts follow such changes (#899).
 const referenceLifetime = 365 * 24 * time.Hour
 
-// NewPaymentPlugin creates a new PaymentPlugin.
+// NewPaymentPlugin builds the PAYMENT plugin, which opens checkouts through
+// paymentService. paymentService must be non-nil.
 func NewPaymentPlugin(paymentService payment.Service) *PaymentPlugin {
+	if paymentService == nil {
+		panic("paymentService is nil")
+	}
 	return &PaymentPlugin{
 		paymentService: paymentService,
 	}

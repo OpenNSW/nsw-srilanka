@@ -1,4 +1,4 @@
-package plugins
+package tasktypes
 
 import (
 	"context"
@@ -484,4 +484,8 @@ func TestDecimalFromAny_KeepsFloatPrecision(t *testing.T) {
 	if got.String() != "4500.567" {
 		t.Fatalf("decimalFromAny(4500.567) = %s, want 4500.567", got.String())
 	}
+}
+
+func TestNewPaymentPlugin_NilServicePanics(t *testing.T) {
+	assert.Panics(t, func() { NewPaymentPlugin(nil) })
 }

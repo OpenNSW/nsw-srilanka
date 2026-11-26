@@ -1,4 +1,4 @@
-package plugins
+package tasktypes
 
 import (
 	"context"
@@ -49,4 +49,9 @@ func TestRecordDispatch_StopsWhenTheStepIsCancelled(t *testing.T) {
 	recordDispatch(ctx, rec, "task-1", "case-1", "wf-1", nil, []time.Duration{time.Hour})
 
 	assert.Equal(t, 1, rec.calls, "a cancelled step does not wait out the backoff")
+}
+
+func TestNewAPICallPlugin_NilManagerPanics(t *testing.T) {
+	assert.Panics(t, func() { NewAPICallPlugin(nil) })
+	assert.Panics(t, func() { NewAPICallPluginWithInterpreter(nil, passthroughInterpreter{}) })
 }
