@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Ability } from '@/hooks/useCan'
-import { firstPermittedPath, permittedNav, type NavItem, type NavItemOrGroup } from '@/navigation/navItems'
+import {
+  NAV_STRUCTURE,
+  firstPermittedPath,
+  homePath,
+  isNavGroup,
+  permittedNav,
+  type NavItem,
+  type NavItemOrGroup,
+} from '@/navigation/navItems'
 
 // config.js sets this in the app; @/constants reads it as it loads.
 vi.hoisted(() => {
@@ -44,5 +52,26 @@ describe('firstPermittedPath', () => {
 
   it('is null when the user may open none', () => {
     expect(firstPermittedPath(structure, granting('task.view'))).toBeNull()
+  })
+})
+
+describe('homePath', () => {
+  it('is the admin dashboard for an admin, even one who may open other destinations', () => {
+    expect(homePath(structure, granting('admin.view'))).toBe('/admin')
+    expect(homePath(structure, granting('consignment.view', 'admin.view'))).toBe('/admin')
+  })
+
+  it('is the first permitted destination for anyone else', () => {
+    expect(homePath(structure, granting('consignment.view'))).toBe('/consignments')
+    expect(homePath(structure, granting('task.view'))).toBeNull()
+  })
+})
+
+describe('NAV_STRUCTURE', () => {
+  it('leaves the admin dashboard out of the nav, even for an admin', () => {
+    const paths = permittedNav(NAV_STRUCTURE, granting('consignment.view', 'admin.view')).flatMap((item) =>
+      isNavGroup(item) ? item.items.map((child) => child.route.path) : [item.route.path],
+    )
+    expect(paths).toEqual(['/consignments'])
   })
 })

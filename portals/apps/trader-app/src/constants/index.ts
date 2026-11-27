@@ -21,6 +21,8 @@ const ADMIN_CONSIGNMENTS_PATH = isAgencyMode ? '/admin/cases' : '/admin/consignm
 
 export const ROUTES = {
   HOME: '/',
+  // The admin dashboard: the same path in TNSW and an agency.
+  ADMIN: '/admin',
   CONSIGNMENTS: CONSIGNMENTS_PATH,
   CONSIGNMENT_DETAIL: (id: string) => `${CONSIGNMENTS_PATH}/${id}`,
   TASK_FORM: (consignmentId: string, taskId: string) => `${CONSIGNMENTS_PATH}/${consignmentId}/tasks/${taskId}`,
