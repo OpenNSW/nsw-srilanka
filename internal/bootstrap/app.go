@@ -999,7 +999,6 @@ func registerTaskTypes(reg *plugins.Registry, mgr *remote.Manager, paymentServic
 		{tasktypes.TaskTypeValueWriter, tasktypes.NewValueWriterPlugin()},
 		{tasktypes.TaskTypeExternalReview, tasktypes.NewExternalReviewPlugin(mgr, fileTokens, cases)},
 		{tasktypes.TaskTypePayment, tasktypes.NewPaymentPlugin(paymentService)},
-		{tasktypes.TaskTypeAPICall, plugins.NewAPICallPlugin(plugins.DefaultHTTPDispatcher)},
 		{tasktypes.TaskTypeAuthAPICall, tasktypes.NewAPICallPlugin(mgr)},
 	}
 

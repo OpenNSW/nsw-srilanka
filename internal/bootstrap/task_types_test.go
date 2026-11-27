@@ -33,7 +33,6 @@ func TestRegisterTaskTypes_InstallsTheGenericTaskTypes(t *testing.T) {
 		tasktypes.TaskTypeValueWriter,
 		tasktypes.TaskTypeExternalReview,
 		tasktypes.TaskTypePayment,
-		tasktypes.TaskTypeAPICall,
 		tasktypes.TaskTypeAuthAPICall,
 	} {
 		_, ok := reg.Get(taskType)
