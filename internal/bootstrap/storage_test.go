@@ -26,6 +26,7 @@ import (
 	"github.com/OpenNSW/core/platform/storage/fileaccess"
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
+	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 	"github.com/stretchr/testify/assert"
@@ -137,7 +138,10 @@ func sha256Hex(v string) string {
 }
 
 func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
-	const auth = "Basic dGVzdDp0ZXN0"
+	const (
+		auth        = "Basic dGVzdDp0ZXN0"
+		testTraceID = "storage-audit-trace"
+	)
 	collector := newOTLPLogCollector(t)
 
 	prevDefault := slog.Default()
@@ -157,6 +161,17 @@ func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
 		Headers:     map[string]string{"Authorization": auth},
 	})
 	require.NoError(t, err)
+	var shutdownOnce sync.Once
+	shutdownTelemetry := func() error {
+		var shutdownErr error
+		shutdownOnce.Do(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			shutdownErr = p.Shutdown(ctx)
+		})
+		return shutdownErr
+	}
+	t.Cleanup(func() { _ = shutdownTelemetry() })
 
 	appCfg := &config.Config{Server: config.ServerConfig{LogLevel: slog.LevelError}}
 	var process bytes.Buffer
@@ -170,9 +185,14 @@ func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
 	bob := &authn.Principal{Kind: authn.KindUser, IDPUserID: "bob"}
 	agency := &authn.Principal{Kind: authn.KindClient, ClientID: "NPQS_TO_NSW"}
 
-	// User upload prepare.
-	uploadReq := httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(`{"filename":"invoice.pdf","mime_type":"application/pdf","size":12}`))
-	uploadReq = uploadReq.WithContext(authn.ContextWithPrincipal(uploadReq.Context(), alice))
+	withCaller := func(req *http.Request, principal *authn.Principal) *http.Request {
+		ctx := authn.ContextWithPrincipal(req.Context(), principal)
+		ctx = trace.ContextWithTraceID(ctx, testTraceID)
+		return req.WithContext(ctx)
+	}
+
+	// User upload prepare (allowed and refused).
+	uploadReq := withCaller(httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(`{"filename":"invoice.pdf","mime_type":"application/pdf","size":12}`)), alice)
 	uploadRec := httptest.NewRecorder()
 	h.Upload(uploadRec, uploadReq)
 	require.Equal(t, http.StatusOK, uploadRec.Code, uploadRec.Body.String())
@@ -183,9 +203,13 @@ func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
 	require.NoError(t, json.Unmarshal(uploadRec.Body.Bytes(), &uploadResp))
 	userRefSHA := sha256Hex(uploadResp.Key)
 
+	refusedUploadReq := withCaller(httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(`{"filename":"notes.txt","mime_type":"text/plain","size":10}`)), alice)
+	refusedUploadRec := httptest.NewRecorder()
+	h.Upload(refusedUploadRec, refusedUploadReq)
+	require.Equal(t, http.StatusUnsupportedMediaType, refusedUploadRec.Code, refusedUploadRec.Body.String())
+
 	// Machine upload prepare.
-	machineReq := httptest.NewRequest(http.MethodPost, "/api/v1/internal/storage", strings.NewReader(`{"filename":"cert.html","mime_type":"text/html","size":24}`))
-	machineReq = machineReq.WithContext(authn.ContextWithPrincipal(machineReq.Context(), agency))
+	machineReq := withCaller(httptest.NewRequest(http.MethodPost, "/api/v1/internal/storage", strings.NewReader(`{"filename":"cert.html","mime_type":"text/html","size":24}`)), agency)
 	machineRec := httptest.NewRecorder()
 	h.InternalUpload(machineRec, machineReq)
 	require.Equal(t, http.StatusOK, machineRec.Code, machineRec.Body.String())
@@ -200,7 +224,7 @@ func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
 	callDownload := func(principal *authn.Principal, ref string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/storage/"+url.PathEscape(ref), nil)
 		req.SetPathValue("key", ref)
-		req = req.WithContext(authn.ContextWithPrincipal(req.Context(), principal))
+		req = withCaller(req, principal)
 		rec := httptest.NewRecorder()
 		h.Download(rec, req)
 		return rec
@@ -209,32 +233,44 @@ func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, callDownload(bob, readRef).Code)
 
 	recs := capture.Records()
-	require.Len(t, recs, 4)
+	require.Len(t, recs, 5)
 	assert.Equal(t, nswaudit.EventStorage, recs[0].EventType)
 	assert.Equal(t, nswaudit.ActionPresignUpload, recs[0].Action)
 	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, nswaudit.ActorMember, recs[0].ActorType)
+	assert.Equal(t, "alice", recs[0].ActorID)
+	assert.Equal(t, testTraceID, recs[0].TraceID)
 	assert.NotEmpty(t, recs[0].TargetID)
+	assert.NotEqual(t, uploadResp.Key, recs[0].TargetID)
+	assert.Equal(t, "application/pdf", recs[0].Metadata["mime_type"])
+	assert.Equal(t, int64(12), recs[0].Metadata["size"])
+	assert.Equal(t, ".pdf", recs[0].Metadata["extension"])
 	assert.Equal(t, userRefSHA, recs[0].Metadata["reference_sha256"])
 
 	assert.Equal(t, nswaudit.ActionPresignUpload, recs[1].Action)
-	assert.Equal(t, nswaudit.StatusSuccess, recs[1].Status)
-	assert.Equal(t, "NPQS_TO_NSW", recs[1].ActorID)
+	assert.Equal(t, nswaudit.StatusFailure, recs[1].Status)
+	assert.Empty(t, recs[1].TargetID)
+	assert.Equal(t, "content_type_not_allowed", recs[1].Metadata["reason"])
 
-	assert.Equal(t, nswaudit.ActionRead, recs[2].Action)
+	assert.Equal(t, nswaudit.ActionPresignUpload, recs[2].Action)
 	assert.Equal(t, nswaudit.StatusSuccess, recs[2].Status)
-	assert.Equal(t, saved.Key, recs[2].TargetID)
-	assert.Equal(t, readRefSHA, recs[2].Metadata["reference_sha256"])
+	assert.Equal(t, nswaudit.ActorService, recs[2].ActorType)
+	assert.Equal(t, "NPQS_TO_NSW", recs[2].ActorID)
 
 	assert.Equal(t, nswaudit.ActionRead, recs[3].Action)
-	assert.Equal(t, nswaudit.StatusFailure, recs[3].Status)
-	assert.Empty(t, recs[3].TargetID)
-	assert.Equal(t, "not_yours", recs[3].Metadata["reason"])
+	assert.Equal(t, nswaudit.StatusSuccess, recs[3].Status)
+	assert.Equal(t, saved.Key, recs[3].TargetID)
+	assert.Equal(t, readRefSHA, recs[3].Metadata["reference_sha256"])
+	assert.NotEmpty(t, recs[3].Metadata["expires_at"])
+
+	assert.Equal(t, nswaudit.ActionRead, recs[4].Action)
+	assert.Equal(t, nswaudit.StatusFailure, recs[4].Status)
+	assert.Empty(t, recs[4].TargetID)
+	assert.Equal(t, "not_yours", recs[4].Metadata["reason"])
 
 	// Flush OTLP logs and verify the audit records reached the collector even
 	// at error log level, without leaking into the process log.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	require.NoError(t, p.Shutdown(ctx))
+	require.NoError(t, shutdownTelemetry())
 
 	got, gotPath, gotAuth := collector.snapshot()
 	require.Equal(t, "/api/default/v1/logs", gotPath)
@@ -244,9 +280,11 @@ func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
 		"PRESIGN_UPLOAD",
 		"READ",
 		"STORAGE_OBJECT",
+		testTraceID,
 		saved.Key,
 		userRefSHA,
 		readRefSHA,
+		"content_type_not_allowed",
 		"not_yours",
 	} {
 		assert.Contains(t, string(got), want)
