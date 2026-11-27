@@ -75,7 +75,14 @@ export function ConsignmentSearchCard({
               aria-describedby={helperId}
             />
           </div>
-          <Button type="submit" size="3" className="w-full sm:w-auto" disabled={!trimmed} loading={pending}>
+          <Button
+            type="submit"
+            size="3"
+            className="w-full sm:w-auto"
+            disabled={!trimmed || pending}
+            loading={pending}
+            aria-busy={pending || undefined}
+          >
             <MagnifyingGlassIcon />
             {pending ? 'Searching…' : 'Search'}
           </Button>

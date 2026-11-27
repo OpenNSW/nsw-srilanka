@@ -56,10 +56,15 @@ function makeStatus(workflowId: string): EngineStatus {
   return { workflow_id: workflowId, status: 'RUNNING', nodes: [], audit_trail: [] }
 }
 
+// /admin stands in for the admin dashboard, which the back button returns to.
 function renderScreen(path: string, pattern = PATTERN) {
-  const router = createMemoryRouter([{ path: pattern, element: <AdminConsignmentEngineStatusScreen /> }], {
-    initialEntries: [path],
-  })
+  const router = createMemoryRouter(
+    [
+      { path: pattern, element: <AdminConsignmentEngineStatusScreen /> },
+      { path: '/admin', element: <p>Dashboard</p> },
+    ],
+    { initialEntries: [path] },
+  )
   render(
     <Theme>
       <RouterProvider router={router} />
@@ -84,6 +89,35 @@ describe('AdminConsignmentEngineStatusScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Flow wf-c-1' })).toBeTruthy()
     expect(mockGetConsignment).toHaveBeenCalledWith('c-1', expect.any(AbortSignal))
     expect(mockGetStatus).toHaveBeenCalledWith('wf-c-1', expect.any(AbortSignal))
+  })
+
+  it('goes back to the admin search from the debugger', async () => {
+    mockGetConsignment.mockResolvedValue(makeConsignment('c-1'))
+    mockGetStatus.mockResolvedValue(makeStatus('wf-c-1'))
+
+    const router = renderScreen('/admin/consignments/c-1')
+    expect(await screen.findByText('Shipment c-1')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Back to search' }))
+    expect(await screen.findByText('Dashboard')).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/admin')
+  })
+
+  it('offers the way back to the admin search when the consignment is not found', async () => {
+    mockGetConsignment.mockResolvedValueOnce(null)
+    const router = renderScreen('/admin/consignments/missing')
+    expect(await screen.findByText('Consignment not found')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Back to search' }))
+    expect(await screen.findByText('Dashboard')).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/admin')
+  })
+
+  it('offers the way back to the admin search when the load fails', async () => {
+    mockGetConsignment.mockRejectedValueOnce(new Error('network down'))
+    renderScreen('/admin/consignments/c-1')
+    expect(await screen.findByText('Failed to load consignment')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to search' }).getAttribute('href')).toBe('/admin')
   })
 
   it('asks for an ID when the route has none', () => {
