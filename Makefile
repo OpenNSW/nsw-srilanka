@@ -21,9 +21,10 @@ endef
 # Lazy (=) so `docker compose config` runs only when `make deps` is invoked.
 ALL_SERVICES  = $(subst $(NL), ,$(shell $(COMPOSE) config --services))
 DEPS_SERVICES = $(filter-out $(APP_SERVICES),$(ALL_SERVICES))
-# Migrator version for `make migration`, read straight out of the Dockerfile's
-# ARG so the two cannot drift apart. Lazy (=, not :=) so the sed runs only when
-# `make migration` expands it, not on every make invocation.
+# Migrator package and version for `make migration`, read straight out of the
+# Dockerfile's ARGs so the two cannot drift apart. Lazy (=, not :=) so the sed
+# runs only when `make migration` expands them, not on every make invocation.
+MIGRATE_PACKAGE = $(shell sed -n 's/^ARG MIGRATE_PACKAGE=//p' Dockerfile)
 MIGRATE_VERSION = $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
 
 .DEFAULT_GOAL := help
@@ -80,7 +81,7 @@ test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api c
 	go test -v -count=1 -timeout 240s ./test/e2e/...
 
 # ---------------------------------------------------------------------------
-# Migrations (uses the OpenNSW/agency migrate tool; generate needs no database)
+# Migrations (uses the OpenNSW/tools migrator; generate needs no database)
 # ---------------------------------------------------------------------------
 
 .PHONY: migration
@@ -90,7 +91,7 @@ migration: export GOWORK = off
 migration: export CONFIG_PATH = /dev/null
 migration: ## Scaffold a new migration file: make migration name=<description>
 	@test -n "$(name)" || { echo "Usage: make migration name=<description>  (e.g. make migration name=add_users_table)"; exit 1; }
-	@go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
+	@go run $(MIGRATE_PACKAGE)@$(MIGRATE_VERSION) generate $(name)
 
 # ---------------------------------------------------------------------------
 # Lifecycle

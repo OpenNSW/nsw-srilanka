@@ -90,7 +90,7 @@ right image per node — no `nodeSelector` on `kubernetes.io/arch` is needed.
 ### Migration Job
 
 The migration Job (`migration.enabled: true`) is a component of its own. It
-runs the external OpenNSW/agency migrator's binary, not this backend's code,
+runs the external OpenNSW/tools migrator's binary, not this backend's code,
 and shares no configuration with the backend:
 
 - `migration.config` is the migrator's `config.yaml`. It reads only `db` (the
@@ -282,6 +282,16 @@ frontend:
     logoUrl: /branding/logo.png
     logoUrlDark: /branding/logo-dark.png # optional
 ```
+
+### Backend memory
+
+`values.yaml` sets no `resources`. The backend holds a task submission in
+memory at several times its size, up to `backend.config.server.maxRequestBytes`
+per request, so the example gives it a memory request and limit, and sets
+`GOMEMLIMIT` in `backend.env` a little under the limit so the Go runtime
+collects garbage harder before the container reaches it. Size both from what
+the backend uses in your environment. Two or more replicas
+(`backend.replicaCount`) keep the API up while one restarts.
 
 ### Health checks
 
