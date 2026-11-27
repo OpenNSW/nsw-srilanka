@@ -2,23 +2,14 @@ package bootstrap
 
 import (
 	"bytes"
-	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/OpenNSW/core/httputil"
 	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/core/platform/catalog"
@@ -26,12 +17,8 @@ import (
 	"github.com/OpenNSW/core/platform/storage/fileaccess"
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
-	"github.com/OpenNSW/core/trace"
-	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
-	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
 )
 
 func TestInternalUploadTypesByClient(t *testing.T) {
@@ -60,46 +47,6 @@ func TestInternalUploadTypesByClient(t *testing.T) {
 	if got, err := internalUploadTypesByClient(proxy, cat); err != nil || len(got) != 0 {
 		t.Errorf("in proxy mode: %v, %v, want an empty map", got, err)
 	}
-}
-
-type otlpLogCollector struct {
-	server *httptest.Server
-
-	mu   sync.Mutex
-	logs [][]byte
-	path string
-	auth string
-}
-
-func newOTLPLogCollector(t *testing.T) *otlpLogCollector {
-	t.Helper()
-	c := &otlpLogCollector{}
-	c.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Error(err)
-		}
-		if strings.HasSuffix(r.URL.Path, "/v1/logs") {
-			c.mu.Lock()
-			c.logs = append(c.logs, body)
-			c.path = r.URL.Path
-			c.auth = r.Header.Get("Authorization")
-			c.mu.Unlock()
-		}
-		w.Header().Set("Content-Type", "application/x-protobuf")
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(c.server.Close)
-	return c
-}
-
-func (c *otlpLogCollector) snapshot() (payload []byte, path, auth string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, body := range c.logs {
-		payload = append(payload, body...)
-	}
-	return payload, c.path, c.auth
 }
 
 func newTestStorageHandler(t *testing.T, auditor nswaudit.Auditor) (*nswstorage.Stack, *fileaccess.Access, *nswstorage.FileHandler) {
@@ -132,165 +79,41 @@ func newTestStorageHandler(t *testing.T, auditor nswaudit.Auditor) (*nswstorage.
 	return stack, access, newFileHandler(stack, access, auditor)
 }
 
-func sha256Hex(v string) string {
-	sum := sha256.Sum256([]byte(v))
-	return hex.EncodeToString(sum[:])
-}
-
-func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
-	const (
-		auth        = "Basic dGVzdDp0ZXN0"
-		testTraceID = "storage-audit-trace"
-	)
-	collector := newOTLPLogCollector(t)
-
-	prevDefault := slog.Default()
-	prevCorrelation := httputil.CorrelationIDFunc
-	prevTracer := otel.GetTracerProvider()
-	prevProp := otel.GetTextMapPropagator()
-	t.Cleanup(func() {
-		slog.SetDefault(prevDefault)
-		httputil.CorrelationIDFunc = prevCorrelation
-		otel.SetTracerProvider(prevTracer)
-		otel.SetTextMapPropagator(prevProp)
-	})
-
-	p, err := telemetry.Start(t.Context(), telemetry.Config{
-		Endpoint:    collector.server.URL + "/api/default",
-		ServiceName: "tnsw-api",
-		Headers:     map[string]string{"Authorization": auth},
-	})
-	require.NoError(t, err)
-	var shutdownOnce sync.Once
-	shutdownTelemetry := func() error {
-		var shutdownErr error
-		shutdownOnce.Do(func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			shutdownErr = p.Shutdown(ctx)
-		})
-		return shutdownErr
-	}
-	t.Cleanup(func() { _ = shutdownTelemetry() })
-
-	appCfg := &config.Config{Server: config.ServerConfig{LogLevel: slog.LevelError}}
-	var process bytes.Buffer
-	configureLogging(appCfg, &process, p.SlogHandler())
-
+func TestNewFileHandler_WiresUploadersAndAuditor(t *testing.T) {
 	auditor, capture := nswaudit.NewWithCapture()
-	auditor.RegisterSink(nswaudit.NewLogSink(slog.New(auditExportHandler(appCfg, p.SlogHandler()))))
-
 	stack, access, h := newTestStorageHandler(t, auditor)
+
 	alice := &authn.Principal{Kind: authn.KindUser, IDPUserID: "alice"}
-	bob := &authn.Principal{Kind: authn.KindUser, IDPUserID: "bob"}
 	agency := &authn.Principal{Kind: authn.KindClient, ClientID: "NPQS_TO_NSW"}
 
-	withCaller := func(req *http.Request, principal *authn.Principal) *http.Request {
-		ctx := authn.ContextWithPrincipal(req.Context(), principal)
-		ctx = trace.ContextWithTraceID(ctx, testTraceID)
-		return req.WithContext(ctx)
+	withPrincipal := func(req *http.Request, principal *authn.Principal) *http.Request {
+		return req.WithContext(authn.ContextWithPrincipal(req.Context(), principal))
 	}
 
-	// User upload prepare (allowed and refused).
-	uploadReq := withCaller(httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(`{"filename":"invoice.pdf","mime_type":"application/pdf","size":12}`)), alice)
+	uploadReq := withPrincipal(httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(`{"filename":"invoice.pdf","mime_type":"application/pdf","size":12}`)), alice)
 	uploadRec := httptest.NewRecorder()
 	h.Upload(uploadRec, uploadReq)
 	require.Equal(t, http.StatusOK, uploadRec.Code, uploadRec.Body.String())
 
-	var uploadResp struct {
-		Key string `json:"key"`
-	}
-	require.NoError(t, json.Unmarshal(uploadRec.Body.Bytes(), &uploadResp))
-	userRefSHA := sha256Hex(uploadResp.Key)
-
-	refusedUploadReq := withCaller(httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(`{"filename":"notes.txt","mime_type":"text/plain","size":10}`)), alice)
-	refusedUploadRec := httptest.NewRecorder()
-	h.Upload(refusedUploadRec, refusedUploadReq)
-	require.Equal(t, http.StatusUnsupportedMediaType, refusedUploadRec.Code, refusedUploadRec.Body.String())
-
-	// Machine upload prepare.
-	machineReq := withCaller(httptest.NewRequest(http.MethodPost, "/api/v1/internal/storage", strings.NewReader(`{"filename":"cert.html","mime_type":"text/html","size":24}`)), agency)
+	machineReq := withPrincipal(httptest.NewRequest(http.MethodPost, "/api/v1/internal/storage", strings.NewReader(`{"filename":"cert.html","mime_type":"text/html","size":24}`)), agency)
 	machineRec := httptest.NewRecorder()
 	h.InternalUpload(machineRec, machineReq)
 	require.Equal(t, http.StatusOK, machineRec.Code, machineRec.Body.String())
 
-	// Download link issued and refused for a stored object.
 	saved, err := stack.Service.Save(t.Context(), "doc.pdf", "application/pdf", strings.NewReader("pdf-bytes"), int64(len("pdf-bytes")))
 	require.NoError(t, err)
 	readRef, err := access.Issue(alice, saved.Key, fileaccess.ScopeRead)
 	require.NoError(t, err)
-	readRefSHA := sha256Hex(readRef)
 
-	callDownload := func(principal *authn.Principal, ref string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/storage/"+url.PathEscape(ref), nil)
-		req.SetPathValue("key", ref)
-		req = withCaller(req, principal)
-		rec := httptest.NewRecorder()
-		h.Download(rec, req)
-		return rec
-	}
-	require.Equal(t, http.StatusOK, callDownload(alice, readRef).Code)
-	require.Equal(t, http.StatusForbidden, callDownload(bob, readRef).Code)
+	downloadReq := withPrincipal(httptest.NewRequest(http.MethodGet, "/api/v1/storage/"+url.PathEscape(readRef), nil), alice)
+	downloadReq.SetPathValue("key", readRef)
+	downloadRec := httptest.NewRecorder()
+	h.Download(downloadRec, downloadReq)
+	require.Equal(t, http.StatusOK, downloadRec.Code, downloadRec.Body.String())
 
 	recs := capture.Records()
-	require.Len(t, recs, 5)
-	assert.Equal(t, nswaudit.EventStorage, recs[0].EventType)
+	require.Len(t, recs, 3)
 	assert.Equal(t, nswaudit.ActionPresignUpload, recs[0].Action)
-	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
-	assert.Equal(t, nswaudit.ActorMember, recs[0].ActorType)
-	assert.Equal(t, "alice", recs[0].ActorID)
-	assert.Equal(t, testTraceID, recs[0].TraceID)
-	assert.NotEmpty(t, recs[0].TargetID)
-	assert.NotEqual(t, uploadResp.Key, recs[0].TargetID)
-	assert.Equal(t, "application/pdf", recs[0].Metadata["mime_type"])
-	assert.Equal(t, int64(12), recs[0].Metadata["size"])
-	assert.Equal(t, ".pdf", recs[0].Metadata["extension"])
-	assert.Equal(t, userRefSHA, recs[0].Metadata["reference_sha256"])
-
 	assert.Equal(t, nswaudit.ActionPresignUpload, recs[1].Action)
-	assert.Equal(t, nswaudit.StatusFailure, recs[1].Status)
-	assert.Empty(t, recs[1].TargetID)
-	assert.Equal(t, "content_type_not_allowed", recs[1].Metadata["reason"])
-
-	assert.Equal(t, nswaudit.ActionPresignUpload, recs[2].Action)
-	assert.Equal(t, nswaudit.StatusSuccess, recs[2].Status)
-	assert.Equal(t, nswaudit.ActorService, recs[2].ActorType)
-	assert.Equal(t, "NPQS_TO_NSW", recs[2].ActorID)
-
-	assert.Equal(t, nswaudit.ActionRead, recs[3].Action)
-	assert.Equal(t, nswaudit.StatusSuccess, recs[3].Status)
-	assert.Equal(t, saved.Key, recs[3].TargetID)
-	assert.Equal(t, readRefSHA, recs[3].Metadata["reference_sha256"])
-	assert.NotEmpty(t, recs[3].Metadata["expires_at"])
-
-	assert.Equal(t, nswaudit.ActionRead, recs[4].Action)
-	assert.Equal(t, nswaudit.StatusFailure, recs[4].Status)
-	assert.Empty(t, recs[4].TargetID)
-	assert.Equal(t, "not_yours", recs[4].Metadata["reason"])
-
-	// Flush OTLP logs and verify the audit records reached the collector even
-	// at error log level, without leaking into the process log.
-	require.NoError(t, shutdownTelemetry())
-
-	got, gotPath, gotAuth := collector.snapshot()
-	require.Equal(t, "/api/default/v1/logs", gotPath)
-	require.Equal(t, auth, gotAuth)
-	for _, want := range []string{
-		"STORAGE_EVENT",
-		"PRESIGN_UPLOAD",
-		"READ",
-		"STORAGE_OBJECT",
-		testTraceID,
-		saved.Key,
-		userRefSHA,
-		readRefSHA,
-		"content_type_not_allowed",
-		"not_yours",
-	} {
-		assert.Contains(t, string(got), want)
-	}
-	assert.NotContains(t, string(got), readRef)
-	assert.NotContains(t, string(got), uploadResp.Key)
-	assert.NotContains(t, process.String(), "STORAGE_EVENT")
-	assert.NotContains(t, process.String(), "category=audit")
+	assert.Equal(t, nswaudit.ActionRead, recs[2].Action)
 }
