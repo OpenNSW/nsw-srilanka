@@ -1,10 +1,14 @@
 package tasks
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,6 +30,29 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// encodedEnvelope is encoding/json's encoding of a decoded {command, payload} envelope.
+func encodedEnvelope(command string, payload map[string]any) string {
+	raw, err := json.Marshal(completeTaskStepRequest{Command: command, Payload: payload})
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
+}
+
+// assertAuditDigest checks that message is the size and SHA-256 of encoded,
+// computed here from those bytes.
+func assertAuditDigest(t *testing.T, message json.RawMessage, encoded string) {
+	t.Helper()
+	sum := sha256.Sum256([]byte(encoded))
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(message, &got))
+	assert.Equal(t, map[string]any{
+		"bytes":  float64(len(encoded)),
+		"sha256": hex.EncodeToString(sum[:]),
+	}, got)
+	assert.NotContains(t, string(message), "payload")
+}
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
@@ -144,6 +171,7 @@ func TestHandleCompleteTaskStep_AuditParseFailure(t *testing.T) {
 	assert.Equal(t, "task-123", recs[0].TargetID)
 	assert.Equal(t, http.StatusBadRequest, recs[0].Metadata["status"])
 	assert.Equal(t, "step-1", recs[0].Metadata["stepId"])
+	assert.Empty(t, recs[0].Message, "malformed JSON has no envelope to digest")
 }
 
 func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
@@ -152,7 +180,7 @@ func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
 	t.Run("draft", func(t *testing.T) {
 		client, capture := nswaudit.NewWithCapture()
 		h := &HTTPHandler{Audit: client}
-		h.writeCompletion(httptest.NewRecorder(), req, nil, "taskId", "t1", "stepId", "s1", "draft", true)
+		h.writeCompletion(httptest.NewRecorder(), req, nil, nil, "taskId", "t1", "stepId", "s1", "draft", true)
 		recs := capture.Records()
 		require.Len(t, recs, 1)
 		assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
@@ -166,7 +194,7 @@ func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
 		client, capture := nswaudit.NewWithCapture()
 		h := &HTTPHandler{Audit: client}
-		h.writeCompletion(httptest.NewRecorder(), req, payloadschema.ErrInvalidPayload, "taskId", "t1", "stepId", "s1", "command", "submit")
+		h.writeCompletion(httptest.NewRecorder(), req, payloadschema.ErrInvalidPayload, nil, "taskId", "t1", "stepId", "s1", "command", "submit")
 		recs := capture.Records()
 		require.Len(t, recs, 1)
 		assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
@@ -178,7 +206,7 @@ func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
 	t.Run("draft not enabled", func(t *testing.T) {
 		client, capture := nswaudit.NewWithCapture()
 		h := &HTTPHandler{Audit: client}
-		h.writeCompletion(httptest.NewRecorder(), req, orchestrator.ErrDraftNotEnabled, "taskId", "t1", "stepId", "s1", "draft", true)
+		h.writeCompletion(httptest.NewRecorder(), req, orchestrator.ErrDraftNotEnabled, nil, "taskId", "t1", "stepId", "s1", "draft", true)
 		recs := capture.Records()
 		require.Len(t, recs, 1)
 		assert.Equal(t, "draft_not_enabled", recs[0].Metadata["error"])
@@ -942,6 +970,34 @@ func TestHandleCompleteTaskStep_AuditsFileDenial(t *testing.T) {
 	assert.Equal(t, "file_not_yours", recs[0].Metadata["error"])
 	assert.Equal(t, http.StatusForbidden, recs[0].Metadata["status"])
 	assert.Equal(t, "submit", recs[0].Metadata["command"])
+	assertAuditDigest(t, recs[0].Message, encodedEnvelope("submit", map[string]any{"invoice": alicesRef}))
+}
+
+func TestHandleCompleteTaskStep_AuditsFileResolveFailure(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	var calls int
+	h := &HTTPHandler{
+		Store:           pendingFileTask(),
+		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{}, &calls), fixedRenderConfig(fileTaskRenderConfig)),
+		MaxRequestBytes: 1024,
+		Audit:           client,
+	}
+	body, err := json.Marshal(map[string]any{"command": "submit", "payload": map[string]any{"invoice": "ref1"}})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", strings.NewReader(string(body)))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-1")
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+	rec := httptest.NewRecorder()
+
+	h.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "file_resolve_failed", recs[0].Metadata["error"])
+	assert.Equal(t, http.StatusInternalServerError, recs[0].Metadata["status"])
 }
 
 func TestHandleCompleteTaskStep_AuditsStaleStepWithCommand(t *testing.T) {
@@ -970,6 +1026,7 @@ func TestHandleCompleteTaskStep_AuditsStaleStepWithCommand(t *testing.T) {
 	assert.Equal(t, "stale_step", recs[0].Metadata["error"])
 	assert.Equal(t, "step-0", recs[0].Metadata["stepId"])
 	assert.Equal(t, "submit", recs[0].Metadata["command"])
+	assertAuditDigest(t, recs[0].Message, encodedEnvelope("submit", map[string]any{}))
 }
 
 func TestHandleSaveDraft_AuditsStaleStepAsDraft(t *testing.T) {
@@ -998,6 +1055,194 @@ func TestHandleSaveDraft_AuditsStaleStepAsDraft(t *testing.T) {
 	assert.Equal(t, true, recs[0].Metadata["draft"])
 	_, hasCommand := recs[0].Metadata["command"]
 	assert.False(t, hasCommand)
+	assertAuditDigest(t, recs[0].Message, encodedEnvelope("", map[string]any{}))
+}
+
+func TestEnvelopeDigest_HashesLiteralEncoding(t *testing.T) {
+	const raw = `{"command":"submit","payload":{"note":"hi"}}`
+	client, _ := nswaudit.NewWithCapture()
+	h := &HTTPHandler{Audit: client}
+	var req completeTaskStepRequest
+	require.NoError(t, json.Unmarshal([]byte(raw), &req))
+
+	got, ok := h.envelopeDigest(req).(map[string]any)
+	require.True(t, ok)
+	sum := sha256.Sum256([]byte(raw))
+	assert.Equal(t, len(raw), got["bytes"])
+	assert.Equal(t, hex.EncodeToString(sum[:]), got["sha256"])
+}
+
+func TestEnvelopeDigest_SkippedWhenAuditNil(t *testing.T) {
+	h := &HTTPHandler{}
+	assert.Nil(t, h.envelopeDigest(completeTaskStepRequest{Command: "submit", Payload: map[string]any{"n": 1}}))
+}
+
+func TestEnvelopeDigest_MarshalFailure(t *testing.T) {
+	client, _ := nswaudit.NewWithCapture()
+	h := &HTTPHandler{Audit: client}
+	got := h.envelopeDigest(map[string]any{"bad": make(chan int)})
+	assert.Equal(t, map[string]any{"error": "payload not recorded"}, got)
+}
+
+func TestHandleSaveDraft_AuditsWhenCommandPresent(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	h := &HTTPHandler{MaxRequestBytes: 1024, Audit: client, Store: pendingFileTask()}
+	const body = `{"command":"submit","payload":{"note":"x"}}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-0/draft", strings.NewReader(body))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-0")
+	rec := httptest.NewRecorder()
+	h.HandleSaveDraft(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, true, recs[0].Metadata["draft"])
+	assert.Equal(t, "submit", recs[0].Metadata["command"])
+	assertAuditDigest(t, recs[0].Message, body)
+	saved := encodedEnvelope("", map[string]any{"note": "x"})
+	assert.NotEqual(t, body, saved)
+	sum := sha256.Sum256([]byte(saved))
+	assert.NotContains(t, string(recs[0].Message), hex.EncodeToString(sum[:]))
+}
+
+func TestHandleCompleteTaskStep_AuditsSuccessDigest(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	h, _, _ := draftValidationFixture(t)
+	h.Audit = client
+	const secret = "pii-should-not-reach-system-logs"
+	body := `{"command":"submit","payload":{"reference":"R-1","name":"Alice","note":"` + secret + `"}}`
+
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	rec := callStep(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", body, h.HandleCompleteTaskStep)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, "submit", recs[0].Metadata["command"])
+	assertAuditDigest(t, recs[0].Message, encodedEnvelope("submit", map[string]any{
+		"reference": "R-1", "name": "Alice", "note": secret,
+	}))
+	assert.NotContains(t, logBuf.String(), secret)
+	assert.NotContains(t, string(recs[0].Message), secret)
+}
+
+func TestHandleSaveDraft_AuditsSuccessDigest(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	h, _, _ := draftValidationFixture(t)
+	h.Audit = client
+	body := `{"payload":{"reference":"R-1","note":"half done"}}`
+
+	rec := callStep(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-1/draft", body, h.HandleSaveDraft)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, true, recs[0].Metadata["draft"])
+	assertAuditDigest(t, recs[0].Message, encodedEnvelope("", map[string]any{
+		"reference": "R-1", "note": "half done",
+	}))
+}
+
+func TestHandleCompleteTaskStepByToken_AuditsSuccessDigest(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	h, db, _ := draftValidationFixture(t)
+	h.Audit = client
+	const taskID = "6aad0417-9a6d-4407-9509-2e51d8fcae99"
+	const stepID = "ca7ed707-1dba-43ca-94bf-10eddf00df3c"
+	db.record.TaskID = taskID
+	db.record.ActiveStepID = stepID
+	token, err := callbacktoken.Encode(taskID, stepID)
+	require.NoError(t, err)
+	body := `{"command":"submit","payload":{"reference":"R-1","name":"Alice"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/"+token, strings.NewReader(body))
+	req.SetPathValue("token", token)
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+	rec := httptest.NewRecorder()
+
+	h.HandleCompleteTaskStepByToken(rec, req)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, taskID, recs[0].TargetID)
+	assertAuditDigest(t, recs[0].Message, encodedEnvelope("submit", map[string]any{
+		"reference": "R-1", "name": "Alice",
+	}))
+}
+
+func TestHandleCompleteTaskStep_AuditsParseFailures(t *testing.T) {
+	t.Run("trailing data digests the first value", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{MaxRequestBytes: 1024, Audit: client}
+		const first = `{"command":"submit","payload":{"note":"x"}}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1",
+			strings.NewReader(first+`{"extra":true}`))
+		req.SetPathValue("id", testTaskID)
+		req.SetPathValue("stepId", "step-1")
+		rec := httptest.NewRecorder()
+		h.HandleCompleteTaskStep(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assertAuditDigest(t, recs[0].Message, first)
+	})
+
+	t.Run("a draft parse failure is marked as a draft", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{MaxRequestBytes: 1024, Audit: client}
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-1/draft",
+			strings.NewReader(`{"payload":{}}{"extra":true}`))
+		req.SetPathValue("id", testTaskID)
+		req.SetPathValue("stepId", "step-1")
+		rec := httptest.NewRecorder()
+		h.HandleSaveDraft(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, true, recs[0].Metadata["draft"])
+	})
+
+	t.Run("reserved command key stays in the digest", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{MaxRequestBytes: 1024, Audit: client}
+		const body = `{"command":"submit","payload":{"__command":"x","note":"y"}}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1",
+			strings.NewReader(body))
+		req.SetPathValue("id", testTaskID)
+		req.SetPathValue("stepId", "step-1")
+		rec := httptest.NewRecorder()
+		h.HandleCompleteTaskStep(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assertAuditDigest(t, recs[0].Message, body)
+		without := encodedEnvelope("submit", map[string]any{"note": "y"})
+		sum := sha256.Sum256([]byte(without))
+		assert.NotContains(t, string(recs[0].Message), hex.EncodeToString(sum[:]))
+	})
+
+	t.Run("a payload that is not an object has no digest", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{MaxRequestBytes: 1024, Audit: client}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1",
+			strings.NewReader(`{"command":"submit","payload":"x"}`))
+		req.SetPathValue("id", testTaskID)
+		req.SetPathValue("stepId", "step-1")
+		rec := httptest.NewRecorder()
+		h.HandleCompleteTaskStep(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Empty(t, recs[0].Message)
+	})
 }
 
 func TestResolveFiles_StoresTheValues(t *testing.T) {
@@ -1009,9 +1254,9 @@ func TestResolveFiles_StoresTheValues(t *testing.T) {
 	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("alice")))
 	payload := map[string]any{"invoice": ref, "__command": "submit"}
 
-	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload, []any{"taskId", testTaskID, "stepId", "step-1", "command", payload["__command"]})
+	err := h.resolveFiles(req.Context(), testTaskID, "step-1", payload)
 
-	require.True(t, ok)
+	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)
 }
 
@@ -1069,7 +1314,7 @@ func TestWriteCompletion_DraftNotEnabledIsABadRequest(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/", nil)
 
-	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrDraftNotEnabled, "x"))
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrDraftNotEnabled, "x"), nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), errDraftNotEnabled)
@@ -1081,7 +1326,7 @@ func TestWriteCompletion_StepNotGuardedIsForbidden(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 
-	(&HTTPHandler{Audit: client}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, "x"), "taskId", "t1", "stepId", "s1")
+	(&HTTPHandler{Audit: client}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, "x"), nil, "taskId", "t1", "stepId", "s1")
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), errForbiddenTaskAction)
@@ -1099,7 +1344,7 @@ func TestWriteCompletion_InvalidPayloadIsABadRequest(t *testing.T) {
 		{Path: "/outcome", Message: "missing property"},
 	}}
 
-	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("PRE_RESUME extension %q failed: %w", "payload_schema", invalid))
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("PRE_RESUME extension %q failed: %w", "payload_schema", invalid), nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), errInvalidPayload)
