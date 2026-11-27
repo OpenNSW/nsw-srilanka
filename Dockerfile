@@ -50,10 +50,11 @@ RUN apk add --no-cache git
 WORKDIR /tmp-build
 RUN GOWORK=off go mod init migrate-build
 
-# The migrator's package and release, both overridable via --build-arg /
-# compose. OpenNSW/tools tags its releases migrator/vX.Y.Z; the version here
-# leaves out the migrator/ prefix, as `go get` does. Bump MIGRATE_VERSION to
-# adopt a newer release. The Makefile and the Migrations check read both lines.
+# The migrator's package and release. Both can be set with --build-arg, and
+# compose passes MIGRATE_VERSION through from the environment. OpenNSW/tools
+# tags its releases migrator/vX.Y.Z; the version here leaves out the migrator/
+# prefix, as `go get` does. Bump MIGRATE_VERSION to adopt a newer release. The
+# Makefile and the Migrations check read both lines.
 ARG MIGRATE_PACKAGE=github.com/OpenNSW/tools/migrator/cmd/migrate
 ARG MIGRATE_VERSION=v0.1.0
 
