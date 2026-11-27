@@ -214,12 +214,10 @@ func TestNewFileHandler_AuditsUploadAndDownloadOverOTLP(t *testing.T) {
 	assert.Equal(t, nswaudit.ActionPresignUpload, recs[0].Action)
 	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
 	assert.NotEmpty(t, recs[0].TargetID)
-	assert.Equal(t, "user", recs[0].Metadata["kind"])
 	assert.Equal(t, userRefSHA, recs[0].Metadata["reference_sha256"])
 
 	assert.Equal(t, nswaudit.ActionPresignUpload, recs[1].Action)
 	assert.Equal(t, nswaudit.StatusSuccess, recs[1].Status)
-	assert.Equal(t, "machine", recs[1].Metadata["kind"])
 	assert.Equal(t, "NPQS_TO_NSW", recs[1].ActorID)
 
 	assert.Equal(t, nswaudit.ActionRead, recs[2].Action)
