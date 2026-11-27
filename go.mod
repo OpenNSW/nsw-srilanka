@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/OpenNSW/core v0.0.0-20261119094345-8e4e7a003f80
+	github.com/OpenNSW/core v0.0.0-20261127100659-eece68cefc36
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea
 	github.com/OpenNSW/core/cors v0.1.0

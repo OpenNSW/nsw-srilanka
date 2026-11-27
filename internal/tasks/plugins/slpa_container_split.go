@@ -41,7 +41,7 @@ const maxContainersPerOrder = 200
 // identifies the company by.
 //
 // It is synchronous: it returns nil (not ErrSuspended) so the engine advances
-// immediately. Register it via trade.NewGenericExecutorPlugin.
+// immediately. Register it via plugins.NewComputePlugin.
 func SLPAContainerSplitBuilderFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error {
 	if ctx.Record == nil {
 		return fmt.Errorf("slpa_container_split_builder: task record is nil")
