@@ -23,8 +23,9 @@ type fakeScheduler struct {
 	held []Callback
 }
 
-func (f *fakeScheduler) schedule(_ context.Context, cb Callback) {
+func (f *fakeScheduler) schedule(_ context.Context, cb Callback) bool {
 	f.held = append(f.held, cb)
+	return true
 }
 
 // withHeld returns h holding its early callbacks in a fakeScheduler.
@@ -252,8 +253,8 @@ func TestCallbackRetries_GiveUpAfterTheWindow(t *testing.T) {
 	assert.Less(t, calls.Load(), int32(30))
 }
 
-// A redelivery while a callback is held joins its retry; a different callback
-// is retried on its own.
+// A redelivery while a callback is held joins its retry, and schedule reports
+// that it started none; a different callback is retried on its own.
 func TestCallbackRetries_OneRetryPerCallback(t *testing.T) {
 	release := make(chan struct{})
 	var calls atomic.Int32
@@ -262,14 +263,19 @@ func TestCallbackRetries_OneRetryPerCallback(t *testing.T) {
 		<-release
 		return nil
 	}, timing(time.Minute))
+	held := Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)}
 
-	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
-	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
-	retries.schedule(context.Background(), Callback{"CDN_CANCELLED", []byte(cdnCancelledPayload)})
+	assert.True(t, retries.schedule(context.Background(), held))
+	assert.False(t, retries.schedule(context.Background(), held))
+	assert.True(t, retries.schedule(context.Background(), Callback{"CDN_CANCELLED", []byte(cdnCancelledPayload)}))
 	close(release)
 	retries.wait()
 
 	assert.Equal(t, int32(2), calls.Load())
+	// Once its retry has ended, the same callback starts a new one.
+	assert.True(t, retries.schedule(context.Background(), held))
+	retries.wait()
+	assert.Equal(t, int32(3), calls.Load())
 }
 
 // A retry outlives the request that held it.
@@ -304,4 +310,60 @@ func TestCallbackRetries_RecoverAPanic(t *testing.T) {
 	retries.wait()
 
 	assert.Equal(t, int32(2), calls.Load())
+}
+
+// Each held callback reports how it ended once: the attempts it took, and nil
+// once applied or the error it was given up on.
+func TestCallbackRetries_ReportTheOutcome(t *testing.T) {
+	panics := func(context.Context, string, []byte) error { panic("boom") }
+	for name, tc := range map[string]struct {
+		apply         func(context.Context, string, []byte) error
+		window        time.Duration
+		wantErr       error
+		wantPermanent bool
+		minAttempts   int
+		maxAttempts   int
+	}{
+		"applied":               {apply: first(attempts(errEarly, nil)), window: time.Minute, minAttempts: 2, maxAttempts: 2},
+		"refused":               {apply: first(attempts(errEarly, cdn.ErrDispatchNoteNotFoundByEdgeID)), window: time.Minute, wantErr: cdn.ErrDispatchNoteNotFoundByEdgeID, wantPermanent: true, minAttempts: 2, maxAttempts: 2},
+		"given up":              {apply: first(attempts(errEarly)), window: 30 * time.Millisecond, wantErr: errEarly, minAttempts: 4, maxAttempts: 29},
+		"panicked":              {apply: panics, window: time.Minute, wantErr: errRetryPanicked, wantPermanent: true, minAttempts: 1, maxAttempts: 1},
+		"read failed then lost": {apply: first(attempts(errors.New("database down"), cdn.ErrCaseNotRecorded)), window: time.Minute, wantErr: cdn.ErrCaseNotRecorded, wantPermanent: true, minAttempts: 2, maxAttempts: 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var outcomes []struct {
+				cb       Callback
+				attempts int
+				err      error
+			}
+			retries := newCallbackRetries(tc.apply, timing(tc.window))
+			retries.outcome = func(_ context.Context, cb Callback, attempts int, err error) {
+				outcomes = append(outcomes, struct {
+					cb       Callback
+					attempts int
+					err      error
+				}{cb, attempts, err})
+			}
+			held := Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)}
+
+			retries.schedule(context.Background(), held)
+			retries.wait()
+
+			require.Len(t, outcomes, 1)
+			assert.Equal(t, held, outcomes[0].cb)
+			assert.GreaterOrEqual(t, outcomes[0].attempts, tc.minAttempts)
+			assert.LessOrEqual(t, outcomes[0].attempts, tc.maxAttempts)
+			if tc.wantErr == nil {
+				assert.NoError(t, outcomes[0].err)
+			} else {
+				assert.ErrorIs(t, outcomes[0].err, tc.wantErr)
+				assert.Equal(t, tc.wantPermanent, isPermanent(outcomes[0].err))
+			}
+		})
+	}
+}
+
+// first drops the call counter attempts returns alongside its function.
+func first(apply func(context.Context, string, []byte) error, _ *atomic.Int32) func(context.Context, string, []byte) error {
+	return apply
 }
