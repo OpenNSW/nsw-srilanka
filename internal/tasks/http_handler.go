@@ -253,9 +253,12 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	// Read before the call: core may strip system keys from the payload.
 	command, _ := payload[orchestrator.CommandVar].(string)
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", command}
-	err = h.resolveFiles(r.Context(), record, payload)
+	added, removed, err := h.resolveFiles(r.Context(), record, payload)
 	if err == nil {
 		err = h.Manager.CompleteTaskStep(r.Context(), taskID, stepID, payload)
+	}
+	if err == nil {
+		attrs = appendFileDiff(attrs, added, removed)
 	}
 	h.writeCompletion(w, r, err, digest, attrs...)
 }
@@ -298,9 +301,12 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	// Read before the call: core may strip system keys from the payload.
 	command, _ := payload[orchestrator.CommandVar].(string)
 	attrs := []any{"taskId", taskID, "stepId", stepID, "command", command}
-	err = h.resolveFiles(r.Context(), record, payload)
+	added, removed, err := h.resolveFiles(r.Context(), record, payload)
 	if err == nil {
 		err = h.Manager.CompleteTaskStepByToken(r.Context(), token, payload)
+	}
+	if err == nil {
+		attrs = appendFileDiff(attrs, added, removed)
 	}
 	h.writeCompletion(w, r, err, digest, attrs...)
 }
@@ -350,11 +356,14 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	if payload == nil {
 		payload = make(map[string]any)
 	}
-	err = h.resolveFiles(r.Context(), record, payload)
+	added, removed, err := h.resolveFiles(r.Context(), record, payload)
 	if err == nil {
 		// Marked as a draft save so the payload schema extension knows a draft by the
 		// route it came through, not by the command core sets for it.
 		err = h.Manager.SaveDraft(payloadschema.WithDraft(r.Context()), taskID, stepID, payload)
+	}
+	if err == nil {
+		attrs = appendFileDiff(attrs, added, removed)
 	}
 	h.writeCompletion(w, r, err, req.digest, attrs...)
 }
@@ -496,23 +505,24 @@ func (h *HTTPHandler) admitSubmitter(ctx context.Context, taskID, stepID string)
 }
 
 // resolveFiles replaces the file references in a submission for record's active
-// step with the stored values they stand for, so only those are stored. record
-// is the task admitSubmitter admitted. A file the caller cannot submit is
-// returned for writeCompletion to answer.
-func (h *HTTPHandler) resolveFiles(ctx context.Context, record store.TaskRecord, payload map[string]any) error {
+// step with the stored values they stand for, so only those are stored, and
+// returns the stored values added and removed relative to what the step last
+// stored. record is the task admitSubmitter admitted. A file the caller cannot
+// submit is returned for writeCompletion to answer.
+func (h *HTTPHandler) resolveFiles(ctx context.Context, record store.TaskRecord, payload map[string]any) (added, removed []string, err error) {
 	p, _ := authn.FromContext(ctx)
-	err := h.Files.FromCaller(ctx, record, payload, p)
+	added, removed, err = h.Files.FromCaller(ctx, record, payload, p)
 	switch {
 	case err == nil:
-		return nil
+		return added, removed, nil
 	case errors.Is(err, fileaccess.ErrInvalid),
 		errors.Is(err, fileaccess.ErrNotYours),
 		errors.Is(err, fileaccess.ErrScope),
 		errors.Is(err, fileaccess.ErrExpired),
 		errors.Is(err, filefields.ErrShape):
-		return err
+		return nil, nil, err
 	default:
-		return fmt.Errorf("%w: %w", errFileResolveFailed, err)
+		return nil, nil, fmt.Errorf("%w: %w", errFileResolveFailed, err)
 	}
 }
 
@@ -617,8 +627,10 @@ func (h *HTTPHandler) auditTaskUpdate(ctx context.Context, taskID string, failur
 	h.auditEvent(ctx, e)
 }
 
-// taskAuditMeta copies the step, command, and draft flag out of a slog-style
-// attr list. Empty command is omitted: a draft save has no command.
+// taskAuditMeta copies the step, command, draft flag, and any filesAdded /
+// filesRemoved out of a slog-style attr list. Empty command and empty file
+// lists are omitted: a draft save has no command, and an unchanged save has
+// no file diff. File lists are taken only on success (no errCode).
 func taskAuditMeta(status int, errCode string, logAttrs ...any) map[string]any {
 	meta := map[string]any{"status": status}
 	if cmd := attrString(logAttrs, "command"); cmd != "" {
@@ -632,8 +644,27 @@ func taskAuditMeta(status int, errCode string, logAttrs ...any) map[string]any {
 	}
 	if errCode != "" {
 		meta["error"] = errCode
+		return meta
+	}
+	if added := attrStrings(logAttrs, "filesAdded"); len(added) > 0 {
+		meta["filesAdded"] = added
+	}
+	if removed := attrStrings(logAttrs, "filesRemoved"); len(removed) > 0 {
+		meta["filesRemoved"] = removed
 	}
 	return meta
+}
+
+// appendFileDiff adds filesAdded and filesRemoved when either side changed.
+// Unchanged saves carry neither key.
+func appendFileDiff(attrs []any, added, removed []string) []any {
+	if len(added) > 0 {
+		attrs = append(attrs, "filesAdded", added)
+	}
+	if len(removed) > 0 {
+		attrs = append(attrs, "filesRemoved", removed)
+	}
+	return attrs
 }
 
 // envelopeDigest returns the size and SHA-256 of v as encoding/json encodes it.
@@ -693,6 +724,22 @@ func attrBool(attrs []any, key string) (bool, bool) {
 		return v, ok
 	}
 	return false, false
+}
+
+// attrStrings returns the []string value for key in a slog-style attr list.
+func attrStrings(attrs []any, key string) []string {
+	for i := 0; i+1 < len(attrs); i += 2 {
+		k, ok := attrs[i].(string)
+		if !ok || k != key {
+			continue
+		}
+		v, ok := attrs[i+1].([]string)
+		if !ok {
+			return nil
+		}
+		return v
+	}
+	return nil
 }
 
 // completeTaskStepRequest is the JSON envelope the completion routes accept:

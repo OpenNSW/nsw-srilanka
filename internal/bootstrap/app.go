@@ -477,7 +477,13 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
-	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), tasks.RenderConfigs(artifacts))
+	// In proxy mode the stored values in task data are sealed TNSW file tokens,
+	// so audit diffs record their SHA-256 digest instead of the raw tokens.
+	var taskFileOpts []tasks.FileBindingOption
+	if cfg.Storage.IsProxy() {
+		taskFileOpts = append(taskFileOpts, tasks.WithHashedAuditValues())
+	}
+	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), tasks.RenderConfigs(artifacts), taskFileOpts...)
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	logRequestLimit(cfg.Server)
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)

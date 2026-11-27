@@ -217,6 +217,40 @@ func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
 		assert.Equal(t, true, recs[0].Metadata["draft"])
 		assert.Equal(t, "s1", recs[0].Metadata["stepId"])
 	})
+
+	t.Run("success records added and removed files when present", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{Audit: client}
+		h.writeCompletion(httptest.NewRecorder(), req, nil, nil, appendFileDiff([]any{"taskId", "t1", "stepId", "s1", "command", "submit"}, []string{"k-new"}, []string{"k-old"})...)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+		assert.Equal(t, []string{"k-new"}, recs[0].Metadata["filesAdded"])
+		assert.Equal(t, []string{"k-old"}, recs[0].Metadata["filesRemoved"])
+	})
+
+	t.Run("success omits the empty side of a file diff", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{Audit: client}
+		h.writeCompletion(httptest.NewRecorder(), req, nil, nil, appendFileDiff([]any{"taskId", "t1", "stepId", "s1", "draft", true}, nil, []string{"k-old"})...)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+		assert.NotContains(t, recs[0].Metadata, "filesAdded")
+		assert.Equal(t, []string{"k-old"}, recs[0].Metadata["filesRemoved"])
+	})
+
+	// A failed save must not record the diff even if attrs somehow carry it.
+	t.Run("failure omits file diff attrs", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{Audit: client}
+		h.writeCompletion(httptest.NewRecorder(), req, payloadschema.ErrInvalidPayload, nil, "taskId", "t1", "stepId", "s1", "command", "submit", "filesAdded", []string{"k-new"}, "filesRemoved", []string{"k-old"})
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, "invalid_payload", recs[0].Metadata["error"])
+		assert.NotContains(t, recs[0].Metadata, "filesAdded")
+		assert.NotContains(t, recs[0].Metadata, "filesRemoved")
+	})
 }
 
 // --- HandleGetTask ---------------------------------------------------------
@@ -1267,16 +1301,140 @@ func TestHandleCompleteTaskStep_AuditsParseFailures(t *testing.T) {
 func TestResolveFiles_StoresTheValues(t *testing.T) {
 	refs := newFakeFileRefs()
 	ref, _ := refs.Issue(userPrincipal("alice"), "stored-invoice-key", readSubmit...)
+	newRef, _ := refs.Issue(userPrincipal("alice"), "new-invoice-key", readSubmit...)
 	var calls int
 	h := &HTTPHandler{Store: pendingFileTask(), Files: NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig))}
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("alice")))
 	payload := map[string]any{"invoice": ref, "__command": "submit"}
 
-	err := h.resolveFiles(req.Context(), pendingFileTask().record, payload)
+	record := pendingFileTask().record
+	added, removed, err := h.resolveFiles(req.Context(), record, payload)
 
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)
+	assert.Empty(t, added)
+	assert.Empty(t, removed)
+
+	replaced := map[string]any{"invoice": newRef, "__command": "submit"}
+	added, removed, err = h.resolveFiles(req.Context(), record, replaced)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"new-invoice-key"}, added)
+	assert.Equal(t, []string{"stored-invoice-key"}, removed)
+}
+
+// A successful draft that replaces a stored file records the keys on the UPDATE audit.
+func TestHandleSaveDraft_AuditsFileChanges(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	h, db, _ := draftValidationFixture(t)
+	h.Audit = client
+	refs := newFakeFileRefs()
+	var calls int
+	h.Files = NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig))
+	db.record.Data = map[string]any{"form": map[string]any{"reference": "R-1", "invoice": "stored-invoice-key"}}
+	newRef, err := refs.Issue(userPrincipal("bob"), "new-invoice-key", readSubmit...)
+	require.NoError(t, err)
+
+	rec := callStep(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-1/draft",
+		`{"payload":{"reference":"R-1","invoice":"`+newRef+`"}}`, h.HandleSaveDraft)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, true, recs[0].Metadata["draft"])
+	assert.Equal(t, []string{"new-invoice-key"}, recs[0].Metadata["filesAdded"])
+	assert.Equal(t, []string{"stored-invoice-key"}, recs[0].Metadata["filesRemoved"])
+	assert.Equal(t, "new-invoice-key", db.record.Data["form"].(map[string]any)["invoice"])
+}
+
+// A successful submission records file changes on the UPDATE audit; a rejected
+// submission omits them even when file references resolved cleanly.
+func TestHandleCompleteTaskStep_AuditsFileChanges(t *testing.T) {
+	t.Run("success records added and removed files", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h, db, _ := draftValidationFixture(t)
+		h.Audit = client
+		refs := newFakeFileRefs()
+		var calls int
+		h.Files = NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig))
+		db.record.Data = map[string]any{"form": map[string]any{"reference": "R-1", "invoice": "stored-invoice-key"}}
+		newRef, err := refs.Issue(userPrincipal("bob"), "new-invoice-key", readSubmit...)
+		require.NoError(t, err)
+
+		rec := callStep(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1",
+			`{"command":"submit","payload":{"reference":"R-1","name":"Alice","invoice":"`+newRef+`"}}`, h.HandleCompleteTaskStep)
+		require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+		assert.Equal(t, "submit", recs[0].Metadata["command"])
+		assert.NotContains(t, recs[0].Metadata, "draft")
+		assert.Equal(t, []string{"new-invoice-key"}, recs[0].Metadata["filesAdded"])
+		assert.Equal(t, []string{"stored-invoice-key"}, recs[0].Metadata["filesRemoved"])
+		assert.Equal(t, "new-invoice-key", db.record.Data["form"].(map[string]any)["invoice"])
+	})
+
+	t.Run("validation failure omits file changes", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h, db, _ := draftValidationFixture(t)
+		h.Audit = client
+		refs := newFakeFileRefs()
+		var calls int
+		h.Files = NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig))
+		db.record.Data = map[string]any{"form": map[string]any{"reference": "R-1", "invoice": "stored-invoice-key"}}
+		newRef, err := refs.Issue(userPrincipal("bob"), "new-invoice-key", readSubmit...)
+		require.NoError(t, err)
+
+		// Missing required "name" fails payload validation after resolveFiles computes the diff.
+		rec := callStep(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1",
+			`{"command":"submit","payload":{"reference":"R-1","invoice":"`+newRef+`"}}`, h.HandleCompleteTaskStep)
+		require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+		assert.Equal(t, "invalid_payload", recs[0].Metadata["error"])
+		assert.NotContains(t, recs[0].Metadata, "filesAdded")
+		assert.NotContains(t, recs[0].Metadata, "filesRemoved")
+	})
+}
+
+func TestHandleCompleteTaskStepByToken_AuditsFileChanges(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	h, db, _ := draftValidationFixture(t)
+	h.Audit = client
+	const taskID = "6aad0417-9a6d-4407-9509-2e51d8fcae99"
+	const stepID = "ca7ed707-1dba-43ca-94bf-10eddf00df3c"
+	db.record.TaskID = taskID
+	db.record.ActiveStepID = stepID
+	db.record.Data = map[string]any{"form": map[string]any{"reference": "R-1", "invoice": "stored-invoice-key"}}
+	refs := newFakeFileRefs()
+	var calls int
+	h.Files = NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(fileTaskRenderConfig))
+	newRef, err := refs.Issue(userPrincipal("bob"), "new-invoice-key", readSubmit...)
+	require.NoError(t, err)
+
+	token, err := callbacktoken.Encode(taskID, stepID)
+	require.NoError(t, err)
+	body := `{"command":"submit","payload":{"reference":"R-1","name":"Alice","invoice":"` + newRef + `"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/"+token, strings.NewReader(body))
+	req.SetPathValue("token", token)
+	req = asCaller(req, userPrincipal("bob"))
+	rec := httptest.NewRecorder()
+
+	h.HandleCompleteTaskStepByToken(rec, req)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, taskID, recs[0].TargetID)
+	assert.Equal(t, "submit", recs[0].Metadata["command"])
+	assert.Equal(t, []string{"new-invoice-key"}, recs[0].Metadata["filesAdded"])
+	assert.Equal(t, []string{"stored-invoice-key"}, recs[0].Metadata["filesRemoved"])
+	assert.Equal(t, "new-invoice-key", db.record.Data["form"].(map[string]any)["invoice"])
 }
 
 // --- HandleSaveDraft -------------------------------------------------------
