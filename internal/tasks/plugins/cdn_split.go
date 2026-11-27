@@ -29,7 +29,7 @@ const maxContainersPerDeclaration = 200
 // here rather than asking for it again means the two can never disagree.
 //
 // It is synchronous: it returns nil (not ErrSuspended) so the engine advances
-// immediately. Register it via trade.NewGenericExecutorPlugin.
+// immediately. Register it via plugins.NewComputePlugin.
 func CDNSplitBuilderFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error {
 	count, err := containerCount(ctx.Inputs)
 	if err != nil {

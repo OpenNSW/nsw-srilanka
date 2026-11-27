@@ -38,7 +38,7 @@ type hscodeSplitConfig struct {
 //
 // It is synchronous — it returns nil (not ErrSuspended) so the engine advances
 // immediately without waiting for any user or external action. Register it via
-// NewGenericExecutorPlugin.
+// plugins.NewComputePlugin.
 func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) error {
 	if len(config) == 0 {
 		return fmt.Errorf("hscode_split_builder: config is required")

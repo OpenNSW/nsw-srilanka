@@ -25,7 +25,7 @@ const TaskTypeSLPAConsolidationResolve = "SLPA_CONSOLIDATION_RESOLVE"
 // what the lookup recorded.
 //
 // It is synchronous: it returns nil (not ErrSuspended) so the engine advances
-// immediately. Register it via trade.NewGenericExecutorPlugin.
+// immediately. Register it via plugins.NewComputePlugin.
 func SLPAConsolidationResolveFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error {
 	if ctx.Record == nil {
 		return fmt.Errorf("slpa_consolidation_resolve: task record is nil")
