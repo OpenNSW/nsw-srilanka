@@ -8,6 +8,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/platform/taskauthz"
+	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/store"
 )
 
@@ -316,22 +317,23 @@ func TestExtension_MayActOnStep(t *testing.T) {
 		name       string
 		extensions []types.ExtensionConfig
 		want       bool
+		wantErr    error
 	}{
-		{"an authz extension that allows the caller", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule)}, true},
+		{name: "an authz extension that allows the caller", extensions: []types.ExtensionConfig{authz(types.PhasePreResume, traderRule)}, want: true},
 		// Core runs them all, so every one must allow the caller.
-		{"one of two authz extensions refuses", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule), authz(types.PhasePreResume, chaRule)}, false},
-		{"one that refuses", []types.ExtensionConfig{authz(types.PhasePreResume, chaRule)}, false},
-		// None of these checks who submits, so the task manager refuses the step.
-		{"an authz extension after the step resumes", []types.ExtensionConfig{authz(types.PhasePostResume, traderRule)}, false},
-		{"another extension", []types.ExtensionConfig{{ID: "audit", Phase: types.PhasePreResume, Properties: traderRule}}, false},
-		{"no extensions", nil, false},
+		{name: "one of two authz extensions refuses", extensions: []types.ExtensionConfig{authz(types.PhasePreResume, traderRule), authz(types.PhasePreResume, chaRule)}},
+		{name: "one that refuses", extensions: []types.ExtensionConfig{authz(types.PhasePreResume, chaRule)}},
+		// None of these checks who submits, so the task manager refuses the step as not guarded.
+		{name: "an authz extension after the step resumes", extensions: []types.ExtensionConfig{authz(types.PhasePostResume, traderRule)}, wantErr: orchestrator.ErrStepNotGuarded},
+		{name: "another extension", extensions: []types.ExtensionConfig{{ID: "audit", Phase: types.PhasePreResume, Properties: traderRule}}, wantErr: orchestrator.ErrStepNotGuarded},
+		{name: "no extensions", wantErr: orchestrator.ErrStepNotGuarded},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: "PENDING_USER"}
-			got, err := NewExtension(testCatalog()).MayActOnStep(context.Background(), record, trader, types.StepTemplate{Extensions: tc.extensions})
-			if err != nil {
-				t.Fatalf("MayActOnStep: %v", err)
+			got, err := NewExtension(testCatalog()).MayActOnStep(context.Background(), record, trader, types.StepTemplate{ID: "x", Extensions: tc.extensions})
+			if !errors.Is(err, tc.wantErr) || (tc.wantErr == nil && err != nil) {
+				t.Fatalf("MayActOnStep err = %v, want %v", err, tc.wantErr)
 			}
 			if got != tc.want {
 				t.Errorf("MayActOnStep = %v, want %v", got, tc.want)
