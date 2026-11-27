@@ -268,11 +268,13 @@ label.rt-Text {
 /* Primary buttons get a subtle gradient + tinted shadow instead of a flat
  * fill — only those in the theme's accent, which Radix marks with an empty
  * data-accent-color, so semantic color overrides (danger/success buttons)
- * are untouched. */
-.rt-BaseButton.rt-variant-solid[data-accent-color=''] {
+ * are untouched. A disabled one (Radix marks it data-disabled, loading ones
+ * included) keeps Radix's flat gray fill: the gradient is a background-image,
+ * which would cover that fill and leave it looking enabled. */
+.rt-BaseButton.rt-variant-solid[data-accent-color='']:not([data-disabled]) {
   background-image: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover)) !important;
   box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-primary) 55%, transparent) !important;
 }
-.rt-BaseButton.rt-variant-solid[data-accent-color='']:hover {
+.rt-BaseButton.rt-variant-solid[data-accent-color='']:not([data-disabled]):hover {
   background-image: linear-gradient(135deg, var(--color-primary-hover), var(--color-primary)) !important;
 }

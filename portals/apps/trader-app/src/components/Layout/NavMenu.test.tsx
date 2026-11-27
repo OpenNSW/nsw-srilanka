@@ -39,6 +39,7 @@ describe('NavMenu', () => {
   })
 
   it('lists nothing for a user granted none of its destinations', () => {
+    // An admin's landing page isn't a nav destination.
     auth.scope = 'openid consignment:adminread'
     const { container } = render(
       <MemoryRouter>

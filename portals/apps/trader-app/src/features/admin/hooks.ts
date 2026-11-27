@@ -101,3 +101,17 @@ export function useForcePark() {
 export function useResolveAdminIntervention() {
   return useMutation(resolveAdminIntervention)
 }
+
+export interface UseAdminConsignmentLookupResult {
+  // Resolves to the consignment (a case in agency mode), or null when there is none with that
+  // ID; rejects when the lookup fails.
+  lookup: (id: string) => Promise<AdminConsignmentDetail | null>
+  isPending: boolean
+}
+
+// A one-off lookup by ID, for the admin search to check an ID exists before opening the
+// debugger.
+export function useAdminConsignmentLookup(): UseAdminConsignmentLookupResult {
+  const { mutate, isPending } = useMutation((id: string) => fetchAdminDetail(id))
+  return { lookup: mutate, isPending }
+}

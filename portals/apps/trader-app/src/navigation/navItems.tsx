@@ -51,3 +51,12 @@ export function firstPermittedPath(structure: NavItemOrGroup[], can: (ability: A
   if (!first) return null
   return isNavGroup(first) ? first.items[0].route.path : first.route.path
 }
+
+// Where / sends a signed-in user: an admin always lands on the admin dashboard,
+// even with other abilities too; anyone else on the first destination they may
+// open. Null when there is none. The dashboard isn't a nav destination: login is
+// the way in.
+export function homePath(structure: NavItemOrGroup[], can: (ability: Ability) => boolean): string | null {
+  if (can(APP_ROUTES.admin.ability)) return APP_ROUTES.admin.path
+  return firstPermittedPath(structure, can)
+}

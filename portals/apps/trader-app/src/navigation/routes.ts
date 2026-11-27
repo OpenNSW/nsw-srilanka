@@ -13,6 +13,7 @@ export const APP_ROUTES = {
   consignments: { path: ROUTES.CONSIGNMENTS, ability: 'consignment.view' },
   consignmentDetail: { path: ROUTES.CONSIGNMENT_DETAIL_PATTERN, ability: 'consignment.view' },
   task: { path: ROUTES.TASK_FORM_PATTERN, ability: 'task.view' },
+  admin: { path: ROUTES.ADMIN, ability: 'admin.view' },
   adminConsignment: { path: ROUTES.ADMIN_CONSIGNMENT_PATTERN, ability: 'admin.view' },
   adminConsignmentView: { path: ROUTES.ADMIN_CONSIGNMENT_VIEW_PATTERN, ability: 'admin.view' },
 } as const satisfies Record<string, AppRoute>

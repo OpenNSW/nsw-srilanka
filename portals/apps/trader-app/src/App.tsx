@@ -10,6 +10,7 @@ import { CaseDetailScreen, CaseListScreen } from '@/features/case'
 import { isAgencyMode } from '@/features/case/mode'
 import { AdminConsignmentEngineStatusScreen } from '@/features/admin/screens/AdminConsignmentEngineStatusScreen.tsx'
 import { AdminConsignmentDetailScreen } from '@/features/admin/screens/AdminConsignmentDetailScreen.tsx'
+import { AdminDashboardScreen } from '@/features/admin/screens/AdminDashboardScreen.tsx'
 import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './screens/LoginScreen.tsx'
 import { ProfileProvider } from './services/ProfileContext'
@@ -19,7 +20,7 @@ import { useAuthContext } from './hooks/useAuthContext'
 import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
 import { AccessRestrictedScreen } from '@/screens/AccessRestrictedScreen'
 import { Can } from '@/components/Can'
-import { NAV_STRUCTURE, firstPermittedPath } from '@/navigation/navItems'
+import { NAV_STRUCTURE, homePath } from '@/navigation/navItems'
 import { APP_ROUTES, type AppRoute } from '@/navigation/routes'
 import { useAbilities } from '@/hooks/useCan'
 import { appConfig, displayName } from './config'
@@ -58,10 +59,11 @@ function restrictTo(route: AppRoute, screen: ReactNode) {
   )
 }
 
-// Sends / to the first nav destination the user may open.
+// Sends / to the admin dashboard for an admin, else to the first nav destination the user may
+// open (see homePath).
 function HomeRedirect() {
   const { can } = useAbilities()
-  const path = firstPermittedPath(NAV_STRUCTURE, can)
+  const path = homePath(NAV_STRUCTURE, can)
   return path ? <Navigate to={path} replace /> : <AccessRestrictedScreen />
 }
 
@@ -118,7 +120,8 @@ function App() {
               </UnsavedChangesGuard>,
             )}
           />
-          {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
+          <Route path={APP_ROUTES.admin.path} element={restrictTo(APP_ROUTES.admin, <AdminDashboardScreen />)} />
+          {/* Internal ops view, opened from the admin dashboard's search — see AdminConsignmentEngineStatusScreen. */}
           <Route
             path={APP_ROUTES.adminConsignment.path}
             element={restrictTo(APP_ROUTES.adminConsignment, <AdminConsignmentEngineStatusScreen />)}

@@ -1,6 +1,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useAdminConsignment, useEngineStatus, useForcePark, useResolveAdminIntervention } from '@/features/admin/hooks'
+import {
+  useAdminConsignment,
+  useAdminConsignmentLookup,
+  useEngineStatus,
+  useForcePark,
+  useResolveAdminIntervention,
+} from '@/features/admin/hooks'
 import {
   forceParkNode,
   getCaseForAdmin,
@@ -214,6 +220,69 @@ describe('admin actions', () => {
 
     await act(() => result.current.mutate('wf-1', 'step-1', request, 'workflow'))
     expect(mockResolve).toHaveBeenCalledWith('wf-1', 'step-1', request, 'workflow')
+    expect(result.current.isPending).toBe(false)
+  })
+})
+
+describe('useAdminConsignmentLookup', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('looks the consignment up through the admin endpoint', async () => {
+    mockGetConsignment.mockResolvedValue(makeConsignment('c-1'))
+    const { result } = renderHook(() => useAdminConsignmentLookup())
+
+    let found: AdminConsignmentDetail | null = null
+    await act(async () => {
+      found = await result.current.lookup('c-1')
+    })
+    expect(found).toEqual(makeConsignment('c-1'))
+    expect(mockGetConsignment).toHaveBeenCalledWith('c-1')
+    expect(mockGetCase).not.toHaveBeenCalled()
+  })
+
+  it('resolves to null when there is no such consignment', async () => {
+    mockGetConsignment.mockResolvedValue(null)
+    const { result } = renderHook(() => useAdminConsignmentLookup())
+
+    let found: AdminConsignmentDetail | null | undefined
+    await act(async () => {
+      found = await result.current.lookup('missing')
+    })
+    expect(found).toBeNull()
+  })
+
+  it('rejects when the lookup fails', async () => {
+    mockGetConsignment.mockRejectedValue(new Error('network down'))
+    const { result } = renderHook(() => useAdminConsignmentLookup())
+
+    await act(async () => {
+      await expect(result.current.lookup('c-1')).rejects.toThrow('network down')
+    })
+    expect(result.current.isPending).toBe(false)
+  })
+
+  it('is pending while the lookup runs', async () => {
+    let resolve!: (value: AdminConsignmentDetail | null) => void
+    mockGetConsignment.mockReturnValue(
+      new Promise((r) => {
+        resolve = r
+      }),
+    )
+    const { result } = renderHook(() => useAdminConsignmentLookup())
+    expect(result.current.isPending).toBe(false)
+
+    let lookup!: Promise<AdminConsignmentDetail | null>
+    act(() => {
+      lookup = result.current.lookup('c-1')
+    })
+    expect(result.current.isPending).toBe(true)
+
+    await act(async () => {
+      resolve(null)
+      await lookup
+    })
     expect(result.current.isPending).toBe(false)
   })
 })

@@ -1,5 +1,6 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, Text } from '@radix-ui/themes'
+import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { PageState } from '@portals/ui'
 import { useAdminConsignment } from '@/features/admin/hooks'
 import { formatDateTime } from '@/features/consignment/utils'
@@ -13,11 +14,13 @@ import { TradeFlowBadge } from '@/features/consignment/components/TradeFlowBadge
 // Internal ops view of a consignment or case: its flows, each with its raw engine state — the
 // same picture you'd otherwise need the Temporal UI for. Backend gates this behind the
 // ConsignmentAdminRead scope (see internal/workflowadmin.CaseService and
-// HandleGetWorkflowEngineStatus); reachable only by direct URL, not linked from
-// trader/CHA/officer navigation.
+// HandleGetWorkflowEngineStatus); opened from the admin dashboard's search (/admin), which a
+// back button returns to, and not linked from trader/CHA/officer navigation.
 //
 // The flow on screen is ?flow=<workflowId> (so a link can point at one), else the first flow,
 // which in TNSW is the export flow.
+const BACK_LABEL = 'Back to search'
+
 export function AdminConsignmentEngineStatusScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const { consignment, error, loading, refetch } = useAdminConsignment(consignmentId)
@@ -54,6 +57,14 @@ export function AdminConsignmentEngineStatusScreen() {
                   ? 'Failed to load case'
                   : 'Failed to load consignment'
             }
+            actions={
+              <Button variant="soft" color="gray" asChild>
+                <Link to={ROUTES.ADMIN}>
+                  <ArrowLeftIcon />
+                  {BACK_LABEL}
+                </Link>
+              </Button>
+            }
             onRetry={refetch}
           />
         </div>
@@ -69,6 +80,15 @@ export function AdminConsignmentEngineStatusScreen() {
 
   return (
     <div className="p-4 md:p-6">
+      <div className="mb-4">
+        <Button variant="ghost" color="gray" asChild>
+          <Link to={ROUTES.ADMIN}>
+            <ArrowLeftIcon />
+            {BACK_LABEL}
+          </Link>
+        </Button>
+      </div>
+
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold text-foreground">
           {isAgencyMode ? 'Case Debugger' : 'Consignment Debugger'}

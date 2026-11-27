@@ -1,6 +1,6 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { useAdminConsignment } from '@/features/admin/hooks'
+import { useAdminConsignment, useAdminConsignmentLookup } from '@/features/admin/hooks'
 import { getCaseForAdmin, getConsignmentForAdmin } from '@/features/admin/service'
 import type { AdminConsignmentDetail } from '@/features/admin/types'
 
@@ -24,6 +24,17 @@ describe('useAdminConsignment in an agency', () => {
 
     await waitFor(() => expect(result.current.consignment?.id).toBe('case-1'))
     expect(getCaseForAdmin).toHaveBeenCalledWith('case-1', expect.any(AbortSignal))
+    expect(getConsignmentForAdmin).not.toHaveBeenCalled()
+  })
+
+  it('looks a case up through the admin cases endpoint', async () => {
+    vi.mocked(getCaseForAdmin).mockResolvedValue(null)
+
+    const { result } = renderHook(() => useAdminConsignmentLookup())
+    await act(async () => {
+      await result.current.lookup('case-2')
+    })
+    expect(getCaseForAdmin).toHaveBeenCalledWith('case-2')
     expect(getConsignmentForAdmin).not.toHaveBeenCalled()
   })
 })
