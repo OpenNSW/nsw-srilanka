@@ -17,6 +17,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/testutil"
+	"github.com/OpenNSW/core/httputil"
 	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/core/platform/payloadschema"
@@ -77,8 +78,8 @@ func TestHandleCompleteTaskStep_RejectsOversizedBody(t *testing.T) {
 	if recorder.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("expected 413, got %d", recorder.Code)
 	}
-	if !strings.Contains(recorder.Body.String(), errRequestBodyTooLarge) {
-		t.Fatalf("expected error body to mention %q, got %s", errRequestBodyTooLarge, recorder.Body.String())
+	if !strings.Contains(recorder.Body.String(), httputil.MsgBodyTooLarge) {
+		t.Fatalf("expected error body to mention %q, got %s", httputil.MsgBodyTooLarge, recorder.Body.String())
 	}
 }
 
@@ -95,8 +96,78 @@ func TestHandleCompleteTaskStep_RejectsTrailingDataAfterJSON(t *testing.T) {
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", recorder.Code)
 	}
-	if !strings.Contains(recorder.Body.String(), errInvalidRequestBody) {
-		t.Fatalf("expected error body to mention %q, got %s", errInvalidRequestBody, recorder.Body.String())
+	if !strings.Contains(recorder.Body.String(), httputil.MsgInvalidBody) {
+		t.Fatalf("expected error body to mention %q, got %s", httputil.MsgInvalidBody, recorder.Body.String())
+	}
+}
+
+// The envelope ignores a field it does not declare and reads an empty body as an empty
+// envelope; anything after the JSON value, malformed JSON, the reserved key and a body over
+// the limit are refused. The size and hash are of the JSON value whenever it decoded, also
+// when what follows it is refused, and there are none when the value itself is refused or
+// the body is empty.
+func TestDecodeEnvelope(t *testing.T) {
+	const limit = 64
+	tests := map[string]struct {
+		body        string
+		wantCommand string
+		wantStatus  int
+		// wantDigest is the encoded envelope the size and hash are of; empty for none.
+		wantDigest string
+	}{
+		"envelope":       {body: `{"command":"approve","payload":{"key":"value"}}`, wantCommand: "approve", wantDigest: encodedEnvelope("approve", map[string]any{"key": "value"})},
+		"unknown field":  {body: `{"command":"approve","payload":{},"note":"x"}`, wantCommand: "approve", wantDigest: encodedEnvelope("approve", map[string]any{})},
+		"empty body":     {body: ``},
+		"at the limit":   {body: `{"command":"approve","payload":{"key":"` + strings.Repeat("v", limit-42) + `"}}`, wantCommand: "approve", wantDigest: encodedEnvelope("approve", map[string]any{"key": strings.Repeat("v", limit-42)})},
+		"over the limit": {body: `{"command":"approve","payload":{"key":"` + strings.Repeat("v", limit-41) + `"}}`, wantStatus: http.StatusRequestEntityTooLarge},
+		"trailing data":  {body: `{"command":"approve"}{"command":"escalate"}`, wantStatus: http.StatusBadRequest, wantDigest: encodedEnvelope("approve", nil)},
+		"trailing data over the limit": {
+			body:       `{"command":"approve"} {"command":"` + strings.Repeat("e", limit) + `"}`,
+			wantStatus: http.StatusRequestEntityTooLarge,
+			wantDigest: encodedEnvelope("approve", nil),
+		},
+		"malformed":    {body: `{"command":`, wantStatus: http.StatusBadRequest},
+		"wrong type":   {body: `{"command":"approve","payload":"x"}`, wantStatus: http.StatusBadRequest},
+		"reserved key": {body: `{"command":"approve","payload":{"__command":"escalate"}}`, wantStatus: http.StatusBadRequest, wantDigest: encodedEnvelope("approve", map[string]any{"__command": "escalate"})},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			client, capture := nswaudit.NewWithCapture()
+			handler := &HTTPHandler{MaxRequestBytes: limit, Audit: client}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/steps/step-1", strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+
+			env, ok := handler.decodeEnvelope(rec, req, "taskId", "123", "stepId", "step-1")
+
+			if tt.wantStatus == 0 {
+				require.True(t, ok, "body %s", rec.Body)
+				assert.Equal(t, tt.wantCommand, env.Command)
+				assert.Empty(t, capture.Records())
+				if tt.wantDigest == "" {
+					assert.Nil(t, env.digest)
+					return
+				}
+				digest, err := json.Marshal(env.digest)
+				require.NoError(t, err)
+				assertAuditDigest(t, digest, tt.wantDigest)
+				return
+			}
+			require.False(t, ok)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			want := httputil.MsgInvalidBody
+			if tt.wantStatus == http.StatusRequestEntityTooLarge {
+				want = httputil.MsgBodyTooLarge
+			}
+			assert.Contains(t, rec.Body.String(), want)
+			recs := capture.Records()
+			require.Len(t, recs, 1)
+			assert.Equal(t, tt.wantStatus, recs[0].Metadata["status"])
+			if tt.wantDigest == "" {
+				assert.Empty(t, recs[0].Message)
+				return
+			}
+			assertAuditDigest(t, recs[0].Message, tt.wantDigest)
+		})
 	}
 }
 

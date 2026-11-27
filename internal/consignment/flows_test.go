@@ -190,16 +190,30 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 		assert.Empty(t, flows.reqs)
 	})
 
+	// errorOf is the error message in w's body.
+	errorOf := func(t *testing.T, w *httptest.ResponseRecorder) string {
+		t.Helper()
+		var resp struct {
+			Error string `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		return resp.Error
+	}
+
+	// The 400 is the bare message: it does not name the field.
 	t.Run("unknown field", func(t *testing.T) {
-		svc, _, _ := newFlowsService(t)
+		svc, _, flows := newFlowsService(t)
 		w := call(t, svc, `{"templateId":"aux_flow","workflowId":"x"}`, uuid.NewString())
 		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, "invalid request body", errorOf(t, w))
+		assert.Empty(t, flows.reqs)
 	})
 
 	t.Run("trailing data", func(t *testing.T) {
 		svc, _, flows := newFlowsService(t)
 		w := call(t, svc, `{"templateId":"aux_flow"} {}`, uuid.NewString())
 		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, "invalid request body", errorOf(t, w))
 		assert.Empty(t, flows.reqs)
 	})
 
@@ -208,6 +222,7 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 		body := `{"templateId":"` + strings.Repeat("a", maxStartFlowRequestBytes) + `"}`
 		w := call(t, svc, body, uuid.NewString())
 		assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+		assert.Equal(t, "request body too large", errorOf(t, w))
 		assert.Empty(t, flows.reqs)
 	})
 }

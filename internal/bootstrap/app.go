@@ -396,6 +396,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		workflowadmin.NewService(parentRunner, task.Runner, tm, task.Store),
 		workflowadmin.NewCaseService(db, task.Store, flowService, artifacts),
 		auditor,
+		cfg.Server.MaxRequestBytes,
 	)
 
 	// -------------------------------------------------------------------
@@ -473,8 +474,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess,
-		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
+	fileHandler := newFileHandler(storageStack, fileAccess, auditor)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), tasks.RenderConfigs(artifacts))
@@ -596,7 +596,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// Mode-specific routes: TNSW's consignment, company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
-		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, withAuth, withScope)
+		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, cfg.Server.MaxRequestBytes, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,
