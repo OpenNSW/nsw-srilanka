@@ -23,8 +23,9 @@ type fakeScheduler struct {
 	held []Callback
 }
 
-func (f *fakeScheduler) schedule(_ context.Context, cb Callback) {
+func (f *fakeScheduler) schedule(_ context.Context, cb Callback) bool {
 	f.held = append(f.held, cb)
+	return true
 }
 
 // withHeld returns h holding its early callbacks in a fakeScheduler.
@@ -252,8 +253,8 @@ func TestCallbackRetries_GiveUpAfterTheWindow(t *testing.T) {
 	assert.Less(t, calls.Load(), int32(30))
 }
 
-// A redelivery while a callback is held joins its retry; a different callback
-// is retried on its own.
+// A redelivery while a callback is held joins its retry, and schedule reports
+// that it started none; a different callback is retried on its own.
 func TestCallbackRetries_OneRetryPerCallback(t *testing.T) {
 	release := make(chan struct{})
 	var calls atomic.Int32
@@ -262,14 +263,19 @@ func TestCallbackRetries_OneRetryPerCallback(t *testing.T) {
 		<-release
 		return nil
 	}, timing(time.Minute))
+	held := Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)}
 
-	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
-	retries.schedule(context.Background(), Callback{"CDN_ACKNOWLEDGED", []byte(cdnAcknowledgedPayload)})
-	retries.schedule(context.Background(), Callback{"CDN_CANCELLED", []byte(cdnCancelledPayload)})
+	assert.True(t, retries.schedule(context.Background(), held))
+	assert.False(t, retries.schedule(context.Background(), held))
+	assert.True(t, retries.schedule(context.Background(), Callback{"CDN_CANCELLED", []byte(cdnCancelledPayload)}))
 	close(release)
 	retries.wait()
 
 	assert.Equal(t, int32(2), calls.Load())
+	// Once its retry has ended, the same callback starts a new one.
+	assert.True(t, retries.schedule(context.Background(), held))
+	retries.wait()
+	assert.Equal(t, int32(3), calls.Load())
 }
 
 // A retry outlives the request that held it.

@@ -44,7 +44,9 @@ type Callback struct {
 
 // callbackScheduler holds a callback for retry.
 type callbackScheduler interface {
-	schedule(ctx context.Context, cb Callback)
+	// schedule reports whether this call started the retry: false when an
+	// identical callback is already pending and this one joined it.
+	schedule(ctx context.Context, cb Callback) bool
 }
 
 // callbackRetries retries each held callback in a goroutine of its own.
@@ -65,15 +67,16 @@ func newCallbackRetries(apply func(context.Context, string, []byte) error, timin
 	return &callbackRetries{apply: apply, timing: timing}
 }
 
-// schedule starts retrying cb. A callback is named by its body, so an identical
-// redelivery while it is pending joins that retry, while two different callbacks
-// for the same document are retried apart.
-func (c *callbackRetries) schedule(ctx context.Context, cb Callback) {
+// schedule starts retrying cb and reports whether it did. A callback is named by
+// its body, so an identical redelivery while it is pending joins that retry and
+// reports false, while two different callbacks for the same document are retried
+// apart.
+func (c *callbackRetries) schedule(ctx context.Context, cb Callback) bool {
 	sum := sha256.Sum256(cb.Body)
 	key := cb.EventType + " " + hex.EncodeToString(sum[:12])
 	if _, running := c.pending.LoadOrStore(key, struct{}{}); running {
 		slog.DebugContext(ctx, "slce: callback already held for retry", "callback", key)
-		return
+		return false
 	}
 	// The retries outlive the request, but keep its trace and log values.
 	ctx = context.WithoutCancel(ctx)
@@ -91,6 +94,7 @@ func (c *callbackRetries) schedule(ctx context.Context, cb Callback) {
 			c.outcome(ctx, cb, attempts, err)
 		}
 	}()
+	return true
 }
 
 // retry applies cb until it lands, a retry cannot fix it, or the window closes,

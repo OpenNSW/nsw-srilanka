@@ -42,7 +42,7 @@ type callbackIdentity struct {
 }
 
 // auditCallback emits one bounded delivery outcome without copying arbitrary payload
-// fields. held marks a callback accepted for retry: its 202 says it was received,
+// fields. held marks a delivery that started a retry: its 202 says it was received,
 // not applied, and a second record follows once its retries end (auditRetryOutcome).
 func (h *Handler) auditCallback(ctx context.Context, body []byte, status int, held bool) {
 	// No response was written if processing panicked. Never report that as success.
@@ -191,8 +191,8 @@ func (h *Handler) resolveDispatchNoteTarget(ctx context.Context, id callbackIden
 type callbackResponse struct {
 	http.ResponseWriter
 	status int
-	// held is set when the callback was accepted to be retried in the background
-	// instead of applied (see holdIfEarly).
+	// held is set when this delivery started a background retry of the callback
+	// instead of applying it (see holdIfEarly).
 	held bool
 }
 

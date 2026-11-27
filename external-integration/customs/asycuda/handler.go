@@ -72,8 +72,10 @@ func (h *Handler) holdIfEarly(w http.ResponseWriter, r *http.Request, eventType 
 	if h.callbacks == nil || !isEarly(err) {
 		return false
 	}
-	h.callbacks.schedule(r.Context(), Callback{EventType: eventType, Body: body})
-	if audited, ok := w.(*callbackResponse); ok {
+	started := h.callbacks.schedule(r.Context(), Callback{EventType: eventType, Body: body})
+	// The retry's outcome is recorded on the trace of the delivery that started it,
+	// so only that delivery is marked held. One that joined it is a plain 202.
+	if audited, ok := w.(*callbackResponse); ok && started {
 		audited.held = true
 	}
 	slog.InfoContext(r.Context(), "slce: callback arrived early; accepted and held for retry",

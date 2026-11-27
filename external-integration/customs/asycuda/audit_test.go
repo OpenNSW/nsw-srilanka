@@ -247,6 +247,55 @@ func TestSLCEHandler_AuditMarksAHeldCallback(t *testing.T) {
 	assert.NotContains(t, r.Metadata, "retryOutcome")
 }
 
+// An identical callback that arrives while the first is still held joins its
+// retry. The retry's one outcome is recorded on the first delivery's trace, so
+// only that delivery is marked held, and the redelivery is a plain 202.
+func TestSLCEHandler_AuditJoinedRetry(t *testing.T) {
+	cs := new(mockCusdecService)
+	cs.On("ProcessCancellation", mock.Anything, mock.Anything).Return(cusdec.ErrCusdecNotFoundByRef).Twice()
+	cs.On("ProcessCancellation", mock.Anything, mock.Anything).Return(nil).Once()
+	decls := &auditDeclarationRepo{decl: &cusdec.CusdecDeclaration{ID: "declaration-1", CaseID: "case-1"}}
+	client, capture := nswaudit.NewWithCapture()
+	h := NewHandler(cs, new(mockCDNService)).WithAuditor(client, decls, nil)
+	retries := h.newRetries(timing(time.Minute))
+	// The retry waits for both deliveries, so the second finds it pending.
+	release := make(chan struct{})
+	retries.apply = func(ctx context.Context, eventType string, body []byte) error {
+		<-release
+		return h.applyCallback(ctx, eventType, body)
+	}
+	h.callbacks = retries
+	redelivery := callbackAuditRequest(cancelledPayload)
+	redelivery = redelivery.WithContext(trace.ContextWithTraceID(redelivery.Context(), "redelivery-trace"))
+
+	first, second := httptest.NewRecorder(), httptest.NewRecorder()
+	h.HandleWebhook(first, callbackAuditRequest(cancelledPayload))
+	h.HandleWebhook(second, redelivery)
+	require.Equal(t, http.StatusAccepted, first.Code)
+	require.Equal(t, http.StatusAccepted, second.Code)
+	close(release)
+	retries.wait()
+
+	byTrace := map[string][]nswaudit.Record{}
+	for _, r := range capture.Records() {
+		byTrace[r.TraceID] = append(byTrace[r.TraceID], r)
+	}
+	require.Len(t, byTrace, 2)
+	started := byTrace["callback-trace"]
+	require.Len(t, started, 2)
+	assert.Equal(t, true, started[0].Metadata["heldForRetry"])
+	assert.Equal(t, "applied", started[1].Metadata["retryOutcome"])
+
+	joined := byTrace["redelivery-trace"]
+	require.Len(t, joined, 1)
+	assert.Equal(t, nswaudit.StatusSuccess, joined[0].Status)
+	assert.Equal(t, http.StatusAccepted, joined[0].Metadata["httpStatus"])
+	assert.Equal(t, "declaration-1", joined[0].TargetID)
+	assert.NotContains(t, joined[0].Metadata, "heldForRetry")
+	assert.NotContains(t, joined[0].Metadata, "retryOutcome")
+	cs.AssertExpectations(t)
+}
+
 // A held callback gets a second record once its retries end, against the same
 // document, actor and trace as its delivery, saying how they ended.
 func TestSLCEHandler_AuditRetryOutcome(t *testing.T) {
