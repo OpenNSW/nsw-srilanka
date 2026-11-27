@@ -191,6 +191,10 @@ backend:
       # Request-body size cap and server timeouts (Slowloris/DoS hardening). The
       # server warns at startup when the cap is above 1 MiB.
       maxRequestBytes: 1048576   # 1 MiB
+      # Refuse (400) a request body field the endpoint does not declare, and
+      # anything after the JSON value, on the endpoints that otherwise ignore
+      # them: task submissions and drafts, agency flow starts and file uploads.
+      strictRequestBodies: true
       readHeaderTimeout: 5s
       readTimeout: 15s
       writeTimeout: 30s

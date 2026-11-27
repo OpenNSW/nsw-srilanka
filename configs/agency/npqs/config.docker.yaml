@@ -16,6 +16,7 @@ server:
   # config.docker.yaml services entry "npqs" also calls 8081.
   serviceURL: http://localhost:8081
   maxRequestBytes: 1048576
+  strictRequestBodies: true
   readHeaderTimeout: 5s
   readTimeout: 15s
   writeTimeout: 30s

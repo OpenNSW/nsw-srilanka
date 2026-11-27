@@ -616,6 +616,28 @@ server:
 	}
 }
 
+// Strict request bodies are off unless the config turns them on.
+func TestLoad_StrictRequestBodies(t *testing.T) {
+	cfg, err := loadYAML(t, configYAML(t, ""))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Server.StrictRequestBodies {
+		t.Error("Server.StrictRequestBodies = true with the key unset, want false")
+	}
+
+	cfg, err = loadYAML(t, configYAML(t, `
+server:
+  strictRequestBodies: true
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.Server.StrictRequestBodies {
+		t.Error("Server.StrictRequestBodies = false, want true")
+	}
+}
+
 // Unlike the env vars this file replaced, a value that does not parse fails
 // the load rather than silently falling back to the default.
 func TestLoad_UnparseableValueRejected(t *testing.T) {

@@ -474,13 +474,14 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	fileHandler := newFileHandler(storageStack, fileAccess, auditor)
+	bodies := requestBodyOptions(cfg.Server)
+	fileHandler := newFileHandler(storageStack, fileAccess, auditor, bodies.files...)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), tasks.RenderConfigs(artifacts))
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	logRequestLimit(cfg.Server)
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes, bodies.tasks...)
 	// A task's template decides who may read it and whether it can be claimed.
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
 	taskHandler.RenderConfigOf = tasks.RenderConfigs(artifacts)
@@ -596,7 +597,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// Mode-specific routes: TNSW's consignment, company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
-		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, cfg.Server.MaxRequestBytes, withAuth, withScope)
+		mountAgency(mux, db, artifacts, flowService, cfg.Flows.Clients, task.Store, globalCatalog, cfg.Server.MaxRequestBytes, bodies.start, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,
@@ -672,6 +673,28 @@ func logRequestLimit(cfg config.ServerConfig) {
 	if cfg.RequestLimitAboveRecommended() {
 		slog.Warn("server.maxRequestBytes is above the recommended limit; each task submission can take several times that much memory",
 			"maxRequestBytes", cfg.MaxRequestBytes, "recommended", config.RecommendedMaxRequestBytes)
+	}
+}
+
+// bodyOptions are the options server.strictRequestBodies gives the handlers whose
+// request bodies have a lenient contract.
+type bodyOptions struct {
+	files []nswstorage.FileHandlerOption
+	tasks []tasks.HTTPHandlerOption
+	start []caseflow.ClientHandlerOption
+}
+
+// requestBodyOptions returns each handler's WithStrictRequestBodies when
+// server.strictRequestBodies is set, and no options otherwise, so each handler keeps its
+// lenient contract.
+func requestBodyOptions(cfg config.ServerConfig) bodyOptions {
+	if !cfg.StrictRequestBodies {
+		return bodyOptions{}
+	}
+	return bodyOptions{
+		files: []nswstorage.FileHandlerOption{nswstorage.WithStrictRequestBodies()},
+		tasks: []tasks.HTTPHandlerOption{tasks.WithStrictRequestBodies()},
+		start: []caseflow.ClientHandlerOption{caseflow.WithStrictRequestBodies()},
 	}
 }
 

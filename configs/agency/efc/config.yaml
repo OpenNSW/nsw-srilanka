@@ -15,6 +15,7 @@ server:
   logLevel: debug
   serviceURL: http://localhost:8085
   maxRequestBytes: 1048576
+  strictRequestBodies: true
   readHeaderTimeout: 5s
   readTimeout: 15s
   writeTimeout: 30s

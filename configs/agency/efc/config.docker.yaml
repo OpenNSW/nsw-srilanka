@@ -16,6 +16,7 @@ server:
   # config.docker.yaml services entry "efc" also calls 8085.
   serviceURL: http://localhost:8085
   maxRequestBytes: 1048576
+  strictRequestBodies: true
   readHeaderTimeout: 5s
   readTimeout: 15s
   writeTimeout: 30s

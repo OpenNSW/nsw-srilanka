@@ -46,6 +46,10 @@ server:
   # Maximum JSON request body size, in bytes (1 MiB). The server warns at
   # startup when it is larger.
   maxRequestBytes: 1048576
+  # Refuse (400) a request body field the endpoint does not declare, and
+  # anything after the JSON value, on the endpoints that otherwise ignore
+  # them: task submissions and drafts, agency flow starts and file uploads.
+  strictRequestBodies: true
   # Durations are Go duration strings (5s, 1m30s).
   readHeaderTimeout: 5s
   readTimeout: 15s
