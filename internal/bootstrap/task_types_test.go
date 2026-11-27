@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/tasktypes"
+	"github.com/OpenNSW/core/platform/tasktypes"
 )
 
 // stubPaymentService stands in for the payment service; registering never calls it.

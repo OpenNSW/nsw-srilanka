@@ -1,6 +1,6 @@
 // Package plugins holds the task types specific to Sri Lanka's integrations
 // (SLC Edge, SLPA, the IPPC ePhyto Hub) and wires them into a plugin registry.
-// The generic task types they build on live in internal/tasks/tasktypes.
+// The generic task types they build on live in core/platform/tasktypes.
 // The taskType keys must match the Type field on SubTaskTemplate configs
 // loaded into the artifact registry.
 package plugins
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/OpenNSW/core/platform/tasktypes"
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
@@ -20,7 +21,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/gatepass"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/invoice"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/tasktypes"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared

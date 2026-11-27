@@ -8,9 +8,9 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 
 	"github.com/OpenNSW/core/platform/authn"
+	"github.com/OpenNSW/core/platform/filefields"
 	"github.com/OpenNSW/core/platform/storage/fileaccess"
 	"github.com/OpenNSW/core/platform/taskauthz"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 )
 
 // FileRefs issues the file references a caller sees in place of the stored
