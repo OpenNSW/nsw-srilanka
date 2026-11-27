@@ -107,7 +107,9 @@ Runs when a Markdown file or a docs check setting (`.markdownlint-cli2.jsonc`,
 runs the matching make target:
 
 1. **Markdown Lint** — `make mdlint`, rules in `.markdownlint-cli2.jsonc`
-2. **Link Check** — `make linkcheck`, settings in `lychee.toml`
+2. **Link Check** — `make linkcheck`, settings in `lychee.toml`. Links to
+   GitHub pull requests, issues and commits are skipped; **Release version**
+   checks the ones a release adds.
 3. **Prose Check** — `make prose` (advisory). When Vale flags a correct project
    word, add it to `.github/styles/config/vocabularies/TNSW/accept.txt`.
 
@@ -155,7 +157,10 @@ once. A release PR into a maintenance branch `release/X.Y.x` may only release
 a patch of that line, `vX.Y.Z`. [CHANGELOG.md](CHANGELOG.md) is written only by a release PR, together
 with `version.txt`, so a PR that changes it without `version.txt` fails. Put the
 note for deployers in the PR's Deployment Notes instead; the release's
-CHANGELOG section is written from them.
+CHANGELOG section is written from them. The section's links to GitHub pull
+requests, issues and commits are looked up through the GitHub API
+(`.github/scripts/check-changelog-links.sh`): each pull request must be merged,
+and each issue and commit must exist.
 
 ### Required checks and the merge queue
 
@@ -198,7 +203,7 @@ Fill in the PR template's **Deployment Notes** whenever a deployer has to do som
    - moves `## [Unreleased]` under `## [X.Y.Z] - YYYY-MM-DD` in CHANGELOG.md, written for the people who deploy TNSW: upgrade notes first, then what was added, changed and fixed. In Claude Code, the `draft-changelog` skill drafts it from the merged PRs and their Deployment Notes. Use absolute links; the section is copied into the GitHub Release.
    - dates that heading **the day the PR will merge, in Sri Lanka time** (UTC+05:30): `TZ=Asia/Colombo date +%F`.
 
-   The **Release version** check confirms the version is valid, higher than the base branch's and not yet released, and that the PR writes its CHANGELOG section.
+   The **Release version** check confirms the version is valid, higher than the base branch's and not yet released, that the PR writes its CHANGELOG section, and that the section links only merged pull requests and existing issues and commits.
 
 2. **Merge it.** That is the release: the merge commit is tagged and released. Merge it only when you mean to ship, and if the PR has waited, update the heading's date to today first. The release run warns when the date and the merge day differ.
 3. **If the release fails at "Release Notes"**, nothing was built. Fix the cause in a new release PR; the tag is only created once the checks pass. To retry a release that failed later on, re-run the failed run of `release.yml`.

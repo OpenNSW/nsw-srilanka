@@ -1,4 +1,6 @@
-// Package plugins wires the native taskflow plugins into a plugin registry.
+// Package plugins holds the task types specific to Sri Lanka's integrations
+// (SLC Edge, SLPA, the IPPC ePhyto Hub) and wires them into a plugin registry.
+// The generic task types they build on live in core/platform/tasktypes.
 // The taskType keys must match the Type field on SubTaskTemplate configs
 // loaded into the artifact registry.
 package plugins
@@ -8,7 +10,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/OpenNSW/core/payment"
+	"github.com/OpenNSW/core/platform/tasktypes"
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
@@ -24,13 +26,6 @@ import (
 // Task type keys. These must match the SubTaskTemplate.Type values declared
 // in the JSON configs loaded into the artifact registry.
 const (
-	TaskTypeUserInput      = "USER_INPUT"
-	TaskTypeExternalReview = "EXTERNAL_REVIEW"
-	TaskTypePayment        = "PAYMENT"
-	TaskTypeAPICall        = "API_CALL"
-	TaskTypeAuthAPICall    = "AUTH_API_CALL"
-	TaskTypeNotification   = "NOTIFICATION"
-
 	// TaskTypeCustomsCusdecDispatch is the generic AUTH_API_CALL plugin wired
 	// with the Sri Lanka Customs (SLC Edge) CusDec response interpreter.
 	TaskTypeCustomsCusdecDispatch = "CUSTOMS_CUSDEC_DISPATCH"
@@ -146,60 +141,38 @@ type CustomsSubmissions struct {
 	Notes CDNNotes
 }
 
-// Register installs the taskv2 plugins on reg.
-//
-// EXTERNAL_REVIEW uses our local plugin (ExternalReviewPlugin) that resolves
-// targets via remote.Manager and starts the OGA's review flow. Payment
-// uses our local plugin (PaymentPlugin) that initiates checkout sessions via
-// payments.PaymentService. NOTIFICATION uses NotificationPlugin which
-// dispatches SMS/email through notifications.Manager. ogaFiles issues the file
-// tokens EXTERNAL_REVIEW sends OGAs, and cases the case attributes it sends them.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.Service, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions, cases CaseAttributes) error {
+// Register installs the Sri Lankan task types on reg. Most are the generic
+// AUTH_API_CALL plugin (tasktypes.APICallPlugin) wired with an integration's
+// interpreter; files lets an interpreter attach a trader's uploads, and customs
+// records what the SLC Edge steps sent.
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, files FileFetcher, customs CustomsSubmissions) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
 	if mgr == nil {
 		return fmt.Errorf("plugins: remote manager is nil")
 	}
-	if paymentService == nil {
-		return fmt.Errorf("plugins: payment service is nil")
-	}
-	if cases == nil {
-		return fmt.Errorf("plugins: case attributes reader is nil")
-	}
-	if (ogaFiles.ClientFor == nil) != (ogaFiles.IssueForClient == nil) {
-		return fmt.Errorf("plugins: OGA file tokens need both a client lookup and an issuer, or neither")
-	}
-	if ogaFiles.IssueForClient != nil && ogaFiles.RenderConfigOf == nil {
-		return fmt.Errorf("plugins: OGA file tokens need a render config resolver")
-	}
 
 	entries := []struct {
 		taskType string
 		plugin   flowplugins.TaskPlugin
 	}{
-		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
-		{TaskTypeValueWriter, NewValueWriterPlugin()},
-		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, ogaFiles, cases)},
-		{TaskTypePayment, NewPaymentPlugin(paymentService)},
-		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
-		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
-		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files, customs.Declarations))},
-		{TaskTypeCustomsCusdecVerify, NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
-		{TaskTypeCustomsCusdecRetrieve, NewAPICallPluginWithInterpreter(mgr, cusdec.NewRetrieveInterpreter())},
-		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter(customs.DispatchNotes))},
+		{TaskTypeCustomsCusdecDispatch, tasktypes.NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files, customs.Declarations))},
+		{TaskTypeCustomsCusdecVerify, tasktypes.NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
+		{TaskTypeCustomsCusdecRetrieve, tasktypes.NewAPICallPluginWithInterpreter(mgr, cusdec.NewRetrieveInterpreter())},
+		{TaskTypeCustomsCDNDispatch, tasktypes.NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter(customs.DispatchNotes))},
 		{TaskTypeCustomsBoatNotePrefill, NewBoatNotePrefillPlugin(mgr)},
 		{TaskTypeCustomsCaseDeclaration, NewCaseDeclarationPlugin(customs.Cases)},
 		{TaskTypeCustomsCDNCancel, NewCDNCancelPlugin(customs.Notes)},
-		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
-		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
-		{TaskTypeSLPASundryOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},
-		{TaskTypeSLPASundryServices, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewServicesInterpreter())},
-		{TaskTypeSLPAInvoiceGenerate, NewAPICallPluginWithInterpreter(mgr, invoice.NewGenerateInterpreter())},
-		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
-		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
-		{TaskTypeSLPAConsolidationDelete, NewAPICallPluginWithInterpreter(mgr, consolidation.NewDeleteInterpreter())},
-		{TaskTypeSLPAGatePass, NewAPICallPluginWithInterpreter(mgr, gatepass.NewInterpreter())},
+		{TaskTypeSLPAECDNUpload, tasktypes.NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
+		{TaskTypeSLPAServiceOrder, tasktypes.NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
+		{TaskTypeSLPASundryOrder, tasktypes.NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},
+		{TaskTypeSLPASundryServices, tasktypes.NewAPICallPluginWithInterpreter(mgr, serviceorder.NewServicesInterpreter())},
+		{TaskTypeSLPAInvoiceGenerate, tasktypes.NewAPICallPluginWithInterpreter(mgr, invoice.NewGenerateInterpreter())},
+		{TaskTypeSLPAConsolidationFetch, tasktypes.NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
+		{TaskTypeSLPAConsolidationSave, tasktypes.NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
+		{TaskTypeSLPAConsolidationDelete, tasktypes.NewAPICallPluginWithInterpreter(mgr, consolidation.NewDeleteInterpreter())},
+		{TaskTypeSLPAGatePass, tasktypes.NewAPICallPluginWithInterpreter(mgr, gatepass.NewInterpreter())},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter(files))},
 	}
 

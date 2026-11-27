@@ -25,11 +25,14 @@ import (
 	nswauthn "github.com/OpenNSW/core/platform/authn"
 	"github.com/OpenNSW/core/platform/catalog"
 	"github.com/OpenNSW/core/platform/payloadschema"
+	nswpayment "github.com/OpenNSW/core/platform/payment"
+	platformrenderer "github.com/OpenNSW/core/platform/renderer"
 	nswstorage "github.com/OpenNSW/core/platform/storage"
 	"github.com/OpenNSW/core/platform/storage/fileaccess"
 	"github.com/OpenNSW/core/platform/storage/filetoken"
 	"github.com/OpenNSW/core/platform/systemlog"
 	"github.com/OpenNSW/core/platform/taskauthz"
+	"github.com/OpenNSW/core/platform/tasktypes"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
 	sharedaudit "github.com/OpenNSW/core/shared/audit"
@@ -55,7 +58,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
-	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -199,7 +201,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		_ = database.Close(db)
 		return nil, err
 	}
-	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
+	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs, paymentReferenceIssuer))
 	// Built before payment and storage are handed to the task stack. Workers
 	// can emit events as soon as those services exist, so the auditor has to
 	// be attached here rather than after the task manager starts. Telemetry
@@ -296,9 +298,9 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// OGAs are sent file tokens issued to the machine client each calls back
 	// as. An agency doesn't own its files: what it stores are TNSW's tokens,
 	// which it sends back to TNSW as they are.
-	var ogaFiles taskplugins.OGAFiles
+	var fileTokens tasktypes.FileTokens
 	if !cfg.Storage.IsProxy() {
-		ogaFiles = taskplugins.OGAFiles{
+		fileTokens = tasktypes.FileTokens{
 			ClientFor: func(serviceID string) (string, bool) {
 				clientID, ok := globalCatalog.Clients[serviceID]
 				return clientID, ok
@@ -320,7 +322,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// attributes EXTERNAL_REVIEW sends, of which only the keys consignment lists.
 	flowRepo := caseflow.NewRepository(sqlDB)
 	sharedAttrs := caseflow.SharedAttributes{Repo: flowRepo, Keys: consignment.SharedCaseAttributes}
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, sharedAttrs, artifacts, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, fileTokens, sharedAttrs, artifacts, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -477,6 +479,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), tasks.RenderConfigs(artifacts))
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
+	logRequestLimit(cfg.Server)
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
 	// A task's template decides who may read it and whether it can be claimed.
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
@@ -662,6 +665,16 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	}, nil
 }
 
+// logRequestLimit warns when server.maxRequestBytes is above
+// config.RecommendedMaxRequestBytes: the API reads JSON request bodies up to it, and a
+// task submission is held in memory at several times its size.
+func logRequestLimit(cfg config.ServerConfig) {
+	if cfg.RequestLimitAboveRecommended() {
+		slog.Warn("server.maxRequestBytes is above the recommended limit; each task submission can take several times that much memory",
+			"maxRequestBytes", cfg.MaxRequestBytes, "recommended", config.RecommendedMaxRequestBytes)
+	}
+}
+
 func newHTTPServer(cfg config.ServerConfig, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
@@ -672,6 +685,11 @@ func newHTTPServer(cfg config.ServerConfig, handler http.Handler) *http.Server {
 		IdleTimeout:       cfg.IdleTimeout,
 	}
 }
+
+// paymentReferenceIssuer is the issuer of the default payment reference format,
+// TNSW/payment_ref, which the refid section of the server config defines. A fee
+// without a reference format of its own is issued one in it.
+const paymentReferenceIssuer = "TNSW"
 
 // parentWorkflowQueue is the Temporal task queue the macro/parent workflow
 // runner polls.
@@ -979,6 +997,30 @@ func (s registryStaticData) Title(ctx context.Context, manifestVersion int, id, 
 // TemporalManager runs the per-task (micro) sub-workflows, while the
 // parent/macro workflow runner is owned by the workflow package and wired
 // separately (see Stage 5 below).
+// registerTaskTypes installs the generic task types this deployment uses from
+// tasktypes and core's taskflow/plugins. registerFlowPlugins installs the ones
+// that need a store or source only the application has, and taskplugins the
+// Sri Lankan ones.
+func registerTaskTypes(reg *plugins.Registry, mgr *remote.Manager, paymentService payment.Service, fileTokens tasktypes.FileTokens, cases tasktypes.CaseAttributes) error {
+	entries := []struct {
+		taskType string
+		plugin   plugins.TaskPlugin
+	}{
+		{tasktypes.TaskTypeUserInput, plugins.NewUserInputPlugin()},
+		{tasktypes.TaskTypeValueWriter, tasktypes.NewValueWriterPlugin()},
+		{tasktypes.TaskTypeExternalReview, tasktypes.NewExternalReviewPlugin(mgr, fileTokens, cases)},
+		{tasktypes.TaskTypePayment, tasktypes.NewPaymentPlugin(paymentService)},
+		{tasktypes.TaskTypeAuthAPICall, tasktypes.NewAPICallPlugin(mgr)},
+	}
+
+	for _, e := range entries {
+		if err := reg.Register(e.taskType, e.plugin); err != nil {
+			return fmt.Errorf("failed to register %s plugin: %w", e.taskType, err)
+		}
+	}
+	return nil
+}
+
 // registerFlowPlugins installs the plugins this deployment adds on top of the
 // task-plugin set: the synchronous transforms that shape a fan-out, the CHA
 // writer, the reference ID generator, the HTML document generator, the lookup
@@ -986,10 +1028,10 @@ func (s registryStaticData) Title(ctx context.Context, manifestVersion int, id, 
 // that stores a copy of a document another service links to.
 //
 // A table rather than a run of near-identical registrations, as
-// taskplugins.Register does for the same reason — seven of them inline was most
-// of initTask's branching, and adding an eighth meant editing a function that
-// has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates taskplugins.HTMLTemplateSource, files taskplugins.DocumentSaver, staticData taskplugins.StaticData, caseTasks taskplugins.CaseTasks, fetcher taskplugins.RemoteFetcher) error {
+// registerTaskTypes and taskplugins.Register do for the same reason — seven
+// of them inline was most of initTask's branching, and adding an eighth meant
+// editing a function that has nothing else to do with plugins.
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry, htmlTemplates tasktypes.HTMLTemplateSource, files tasktypes.DocumentSaver, staticData tasktypes.StaticData, caseTasks taskplugins.CaseTasks, fetcher tasktypes.RemoteFetcher) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -1000,10 +1042,10 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{taskplugins.TaskTypeSLPAConsolidationResolve, trade.NewGenericExecutorPlugin(taskplugins.SLPAConsolidationResolveFunc)},
 		{taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)},
 		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
-		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
-		{taskplugins.TaskTypeHTMLDocumentGenerator, taskplugins.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files, staticData)},
+		{tasktypes.TaskTypeRefIDGenerator, tasktypes.NewRefIDGeneratorPlugin(refIDs)},
+		{tasktypes.TaskTypeHTMLDocumentGenerator, tasktypes.NewHTMLDocumentGeneratorPlugin(htmlTemplates, files, staticData)},
 		{taskplugins.TaskTypeSLPACaseContainers, taskplugins.NewSLPACaseContainersPlugin(caseTasks)},
-		{taskplugins.TaskTypeRemoteFileArchiver, taskplugins.NewRemoteFileArchiverPlugin(fetcher, files)},
+		{tasktypes.TaskTypeRemoteFileArchiver, tasktypes.NewRemoteFileArchiverPlugin(fetcher, files)},
 	}
 
 	for _, e := range entries {
@@ -1037,8 +1079,8 @@ func initTask(
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
-	ogaFiles taskplugins.OGAFiles,
-	caseAttrs taskplugins.CaseAttributes,
+	fileTokens tasktypes.FileTokens,
+	caseAttrs tasktypes.CaseAttributes,
 	artifacts *artifact.Set,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
@@ -1048,12 +1090,15 @@ func initTask(
 	pluginsRegistry := plugins.NewRegistry()
 	declarations := cusdec.NewDeclarationRepository(db)
 	dispatchNotes := cdn.NewDispatchNoteRepository(db)
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
+	if err := registerTaskTypes(pluginsRegistry, remoteManager, paymentService, fileTokens, caseAttrs); err != nil {
+		return nil, nil, err
+	}
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, storageService, taskplugins.CustomsSubmissions{
 		Declarations:  declarations,
 		DispatchNotes: dispatchNotes,
 		Cases:         declarations,
 		Notes:         dispatchNotes,
-	}, caseAttrs); err != nil {
+	}); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	taskStore := gormstore.New(db)
@@ -1063,7 +1108,7 @@ func initTask(
 	}
 
 	// Construct UI projectors and the renderer/zoneview assembler
-	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector(), taskrenderer.NewSLPASundryProjector())
+	projectors := append(uiprojector.DefaultProjectors(), platformrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector(), taskrenderer.NewSLPASundryProjector())
 	uiAssembler, err := uiprojector.NewAssembler(registryTemplateProvider{artifacts: artifacts}, projectors)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build ui assembler: %w", err)

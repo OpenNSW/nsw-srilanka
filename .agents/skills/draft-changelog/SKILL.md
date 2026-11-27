@@ -89,9 +89,10 @@ Finally, update the link references at the foot of the file:
 
 1. `bash .github/scripts/changelog-section.sh X.Y.Z` must print exactly your section. It is the extraction the release workflow runs, and the release fails before building anything if it prints nothing.
 2. `bash .github/scripts/changelog-section.sh X.Y.Z | grep -oE '\]\([^)]*\)' | grep -v '^](https://'` must print nothing — any output is a relative link.
-3. `bash .github/scripts/check-version.sh vX.Y.Z <previous vX.Y.Z>` passes (for a patch, `bash .github/scripts/check-release-line.sh release/X.Y.x vX.Y.Z` too), and `git status --short` shows only `CHANGELOG.md` and `version.txt` modified.
-4. Re-read the Upgrade notes against the collector output: each one has a source.
-5. Read the whole section once as a deployer, and cut any line they can't act on or check.
+3. `bash .github/scripts/check-changelog-links.sh X.Y.Z` passes: every pull request the section links is merged, and every issue and commit exists. Link Check skips these links, so this is the only check they get.
+4. `bash .github/scripts/check-version.sh vX.Y.Z <previous vX.Y.Z>` passes (for a patch, `bash .github/scripts/check-release-line.sh release/X.Y.x vX.Y.Z` too), and `git status --short` shows only `CHANGELOG.md` and `version.txt` modified.
+5. Re-read the Upgrade notes against the collector output: each one has a source.
+6. Read the whole section once as a deployer, and cut any line they can't act on or check.
 
 ## Hand off
 
