@@ -49,7 +49,7 @@ spec:
           {{- end }}
           # A separate image from the server (see the Dockerfile's `migrate`
           # stage, published as tnsw-migrate) — it runs the standalone
-          # nsw-agency migrate binary, not this backend's code.
+          # OpenNSW/tools migrate binary, not this backend's code.
           image: "{{ .Values.migration.image.repository }}:{{ include "lk-tnsw.imageTag" (dict "tag" (.Values.migration.image.tag | default .Values.backend.image.tag) "root" .) }}"
           imagePullPolicy: {{ .Values.migration.image.pullPolicy }}
           {{- if .Values.migration.command }}

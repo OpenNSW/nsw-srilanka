@@ -52,7 +52,7 @@ server:
   idleTimeout: 60s
 
 # One section for the server, the otc CLI and the schema migrator
-# (OpenNSW/agency cmd/migrate): core/database's Config
+# (OpenNSW/tools migrator): core/database's Config
 # (github.com/OpenNSW/core/database), whose keys the migrator shares. Always
 # set driver: the migrator defaults it to sqlite.
 db:

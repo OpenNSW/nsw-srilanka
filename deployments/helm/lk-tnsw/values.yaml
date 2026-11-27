@@ -118,7 +118,7 @@ backend:
 # Database migration Job, run as a Helm pre-install/pre-upgrade hook so the
 # schema is migrated before the new server rolls out. A component of its own:
 # it runs a DIFFERENT image from the server (see templates/migration/job.yaml)
-# — the external nsw-agency migrate binary, published from this repo's
+# — the external OpenNSW/tools migrate binary, published from this repo's
 # Dockerfile `migrate` stage as tnsw-migrate — and shares no configuration with
 # the backend, so it can connect as a database account of its own. Off by
 # default; enabled via the example override file.

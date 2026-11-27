@@ -33,43 +33,40 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
     -o /out/otc ./cmd/otc
 
 # -------------------------------------------------------------------
-# Migrate builder – builds the standalone migrator from OpenNSW/agency.
+# Migrate builder – builds the standalone migrator from OpenNSW/tools.
 # It lives in a separate module, so we fetch it inside a throwaway module rather
-# than adding it to this repo's go.mod. CGO is disabled: the tool imports
-# go-sqlite3, but we only drive postgres (pure-Go pgx), so sqlite stays an unused
-# runtime stub. We use `go build -o` rather than `go install`, because
+# than adding it to this repo's go.mod. CGO is disabled: both of its database
+# drivers, pgx and modernc.org/sqlite, are pure Go. We use `go build -o` rather than `go install`, because
 # `go install` refuses to write the binary when cross-compiling for a non-host
 # GOOS/GOARCH (multi-arch buildx) — which now binds on every cross-arch target,
 # since this stage is $BUILDPLATFORM-pinned. Do not switch it back to go install.
 # -------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine3.24 AS migrate-builder
 
-# Kept above the MIGRATE_VERSION ARG so a version bump invalidates only the fetch
+# Kept above the MIGRATE_* ARGs so a version bump invalidates only the fetch
 # and build layers below, not these steps. The GOPROXY path needs no git; it is
 # installed solely so a `direct`-mode fallback fetch still works.
 RUN apk add --no-cache git
 WORKDIR /tmp-build
 RUN GOWORK=off go mod init migrate-build
 
-# Bump to adopt a newer migrator (overridable via --build-arg / compose).
-# The value must be a pseudo-version rather than a release tag: the module sits
-# in the repo's backend/ subdirectory, so Go honours only a `backend/`-prefixed
-# tag, while the release tags sit at the repo root. A bare tag resolves the root
-# module and fails with "does not contain package .../backend/cmd/migrate",
-# because backend/ is carved out of the root module by its own go.mod.
-# Publishing `backend/vX.Y.Z` upstream would make the plain tag usable here.
-ARG MIGRATE_VERSION=v0.0.0-20260928195741-0530d08e5fdd
+# The migrator's package and release, both overridable via --build-arg /
+# compose. OpenNSW/tools tags its releases migrator/vX.Y.Z; the version here
+# leaves out the migrator/ prefix, as `go get` does. Bump MIGRATE_VERSION to
+# adopt a newer release. The Makefile and the Migrations check read both lines.
+ARG MIGRATE_PACKAGE=github.com/OpenNSW/tools/migrator/cmd/migrate
+ARG MIGRATE_VERSION=v0.1.0
 
 # Fetch kept in its own layer, above the TARGETOS/TARGETARCH ARGs: an ARG makes
 # every RUN beneath it platform-specific, so this way one download serves both
 # platforms rather than repeating the only network fetch in the build — which has
 # already flaked a release on a transient sum.golang.org error.
-RUN GOWORK=off go get github.com/OpenNSW/agency/backend/cmd/migrate@${MIGRATE_VERSION}
+RUN GOWORK=off go get ${MIGRATE_PACKAGE}@${MIGRATE_VERSION}
 
 ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
-    go build -ldflags="-s -w" -o /out/migrate github.com/OpenNSW/agency/backend/cmd/migrate
+    go build -ldflags="-s -w" -o /out/migrate ${MIGRATE_PACKAGE}
 
 # -------------------------------------------------------------------
 # Migrate image – self-contained schema migrator. Runs to completion
@@ -83,7 +80,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
 FROM alpine:3.24 AS migrate
 
 LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
-LABEL org.opencontainers.image.description="NSW schema migrator (OpenNSW/agency migrate tool)"
+LABEL org.opencontainers.image.description="NSW schema migrator (OpenNSW/tools migrator)"
 
 # ca-certificates for TLS to postgres; tzdata because Alpine carries no zoneinfo.
 # -H skips home-dir creation — WORKDIR below makes /app. The UID is pinned so

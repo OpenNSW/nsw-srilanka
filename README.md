@@ -241,9 +241,9 @@ Schema migrations live in `migrations/` as `NNNNNN_name.sql` files, numbered fro
 migration's `@DOWN` must undo its schema changes, and an applied migration is
 never edited: the **Migrations** check in CI enforces both (see
 [CONTRIBUTING.md](CONTRIBUTING.md#migration-check-migrationsyml)).
-They are applied by the standalone migrator from
-[`agency`](https://github.com/OpenNSW/agency) (`backend/cmd/migrate`),
-which tracks applied versions in a `__migrations` table and runs each migration
+They are applied by the standalone
+[migrator](https://github.com/OpenNSW/tools/tree/main/migrator) from
+OpenNSW/tools (`migrator/cmd/migrate`), which tracks applied versions in a `__migrations` table and runs each migration
 in its own transaction.
 
 **In Docker (default):** the `migrate` service builds the dedicated `migrate`
@@ -270,9 +270,10 @@ same `configs/config.yaml` the server uses — it reads the `db` section (its
 the file must resolve, so source `.env` first:
 
 ```bash
-# Read the pin out of the Dockerfile rather than repeating it — MIGRATE_VERSION
-# there is the single source of truth, and compose and the Makefile both defer to it.
-go install github.com/OpenNSW/agency/backend/cmd/migrate@"$(sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)"
+# Read the pin out of the Dockerfile rather than repeating it — MIGRATE_PACKAGE
+# and MIGRATE_VERSION there are the single source of truth, and compose and the
+# Makefile both defer to them.
+go install "$(sed -n 's/^ARG MIGRATE_PACKAGE=//p' Dockerfile)@$(sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)"
 
 set -a; . ./.env; set +a
 CONFIG_PATH=./configs/config.yaml \

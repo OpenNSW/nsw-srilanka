@@ -90,7 +90,7 @@ right image per node — no `nodeSelector` on `kubernetes.io/arch` is needed.
 ### Migration Job
 
 The migration Job (`migration.enabled: true`) is a component of its own. It
-runs the external OpenNSW/agency migrator's binary, not this backend's code,
+runs the external OpenNSW/tools migrator's binary, not this backend's code,
 and shares no configuration with the backend:
 
 - `migration.config` is the migrator's `config.yaml`. It reads only `db` (the

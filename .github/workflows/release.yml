@@ -192,7 +192,7 @@ jobs:
             image_name: tnsw-migrate
             context: .
             dockerfile: ./Dockerfile
-            description: NSW schema migrator (nsw-agency migrate tool)
+            description: NSW schema migrator (OpenNSW/tools migrator)
             # The migrator is a non-default stage; other entries have no target
             # and build their Dockerfile's default (last) stage.
             target: migrate

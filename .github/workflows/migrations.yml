@@ -97,23 +97,30 @@ jobs:
           cache: true
           cache-dependency-path: Dockerfile
 
-      # The version the Dockerfile pins for the tnsw-migrate image. When the
-      # change moves the pin, the base's version is installed too, so the
-      # upgrade pass applies the base's migrations with the migrator that
-      # created existing databases.
+      # The migrator the Dockerfile pins for the tnsw-migrate image: its
+      # package and version. When the change moves the pin, the base's
+      # migrator is installed too, so the upgrade pass applies the base's
+      # migrations with the migrator that created existing databases. A
+      # Dockerfile that pins only MIGRATE_VERSION, as release/1.2.x and older
+      # do, pins agency's migrator.
       - name: Install the migrator
         env:
           GOWORK: off
+          AGENCY_MIGRATE: github.com/OpenNSW/agency/backend/cmd/migrate
         run: |
-          pin() { sed -n 's/^ARG MIGRATE_VERSION=//p'; }
-          VERSION=$(pin < Dockerfile)
-          BASE_VERSION=$(git show HEAD^:Dockerfile | pin)
-          go install "github.com/OpenNSW/agency/backend/cmd/migrate@${VERSION}"
-          echo "Migrator ${VERSION}"
-          if [ -n "$BASE_VERSION" ] && [ "$BASE_VERSION" != "$VERSION" ]; then
-            GOBIN="${RUNNER_TEMP}/base-migrator" go install "github.com/OpenNSW/agency/backend/cmd/migrate@${BASE_VERSION}"
+          pin() { sed -n "s/^ARG $1=//p"; }
+          PACKAGE=$(pin MIGRATE_PACKAGE < Dockerfile)
+          VERSION=$(pin MIGRATE_VERSION < Dockerfile)
+          BASE_PACKAGE=$(git show HEAD^:Dockerfile | pin MIGRATE_PACKAGE)
+          BASE_VERSION=$(git show HEAD^:Dockerfile | pin MIGRATE_VERSION)
+          MIGRATOR="${PACKAGE:-$AGENCY_MIGRATE}@${VERSION}"
+          BASE_MIGRATOR="${BASE_PACKAGE:-$AGENCY_MIGRATE}@${BASE_VERSION}"
+          go install "$MIGRATOR"
+          echo "Migrator ${MIGRATOR}"
+          if [ -n "$BASE_VERSION" ] && [ "$BASE_MIGRATOR" != "$MIGRATOR" ]; then
+            GOBIN="${RUNNER_TEMP}/base-migrator" go install "$BASE_MIGRATOR"
             echo "BASE_MIGRATE=${RUNNER_TEMP}/base-migrator/migrate" >> "$GITHUB_ENV"
-            echo "Base migrator ${BASE_VERSION}"
+            echo "Base migrator ${BASE_MIGRATOR}"
           fi
 
       # Schemas are dumped inside the service container, so pg_dump matches
