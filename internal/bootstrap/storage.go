@@ -3,9 +3,20 @@ package bootstrap
 import (
 	"fmt"
 
+	nswaudit "github.com/OpenNSW/core/platform/audit"
 	"github.com/OpenNSW/core/platform/catalog"
 	nswstorage "github.com/OpenNSW/core/platform/storage"
 )
+
+// newFileHandler builds the storage HTTP handler wired with the deployment's
+// uploaders and audit client.
+func newFileHandler(stack *nswstorage.Stack, refs nswstorage.FileRefs, auditor nswaudit.Auditor) *nswstorage.FileHandler {
+	return nswstorage.NewFileHandler(stack.Service, refs,
+		nswstorage.WithUploads(stack.Uploads),
+		nswstorage.WithMachineUploads(stack.MachineUploads),
+		nswstorage.WithAuditor(auditor),
+	)
+}
 
 // internalUploadTypesByClient turns storage.allowedInternalUploadTypes, keyed by
 // a client's name in the global catalog, into the types by client ID. A name the
