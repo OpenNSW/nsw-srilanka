@@ -479,6 +479,7 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), tasks.RenderConfigs(artifacts))
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
+	logRequestLimit(cfg.Server)
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
 	// A task's template decides who may read it and whether it can be claimed.
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
@@ -662,6 +663,16 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 		Server: server,
 		close:  closeFn,
 	}, nil
+}
+
+// logRequestLimit warns when server.maxRequestBytes is above
+// config.RecommendedMaxRequestBytes: the API reads JSON request bodies up to it, and a
+// task submission is held in memory at several times its size.
+func logRequestLimit(cfg config.ServerConfig) {
+	if cfg.RequestLimitAboveRecommended() {
+		slog.Warn("server.maxRequestBytes is above the recommended limit; each task submission can take several times that much memory",
+			"maxRequestBytes", cfg.MaxRequestBytes, "recommended", config.RecommendedMaxRequestBytes)
+	}
 }
 
 func newHTTPServer(cfg config.ServerConfig, handler http.Handler) *http.Server {

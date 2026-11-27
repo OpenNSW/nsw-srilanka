@@ -188,8 +188,9 @@ backend:
       # off, startup warns once.
       logLevel: info
       serviceURL: "https://nsw-api.example.com"
-      # Request-body size cap and server timeouts (Slowloris/DoS hardening).
-      maxRequestBytes: 33554432   # 32 MiB
+      # Request-body size cap and server timeouts (Slowloris/DoS hardening). The
+      # server warns at startup when the cap is above 1 MiB.
+      maxRequestBytes: 1048576   # 1 MiB
       readHeaderTimeout: 5s
       readTimeout: 15s
       writeTimeout: 30s
