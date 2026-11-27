@@ -101,8 +101,7 @@ jobs:
       # package and version. When the change moves the pin, the base's
       # migrator is installed too, so the upgrade pass applies the base's
       # migrations with the migrator that created existing databases. A
-      # Dockerfile that pins only MIGRATE_VERSION, as release/1.2.x and older
-      # do, pins agency's migrator.
+      # Dockerfile without MIGRATE_PACKAGE pins agency's migrator.
       - name: Install the migrator
         env:
           GOWORK: off
