@@ -49,7 +49,7 @@ func TestInternalUploadTypesByClient(t *testing.T) {
 	}
 }
 
-func newTestStorageHandler(t *testing.T, auditor nswaudit.Auditor) (*nswstorage.Stack, *fileaccess.Access, *nswstorage.FileHandler) {
+func newTestStorageHandler(t *testing.T, auditor nswaudit.Auditor, opts ...nswstorage.FileHandlerOption) (*nswstorage.Stack, *fileaccess.Access, *nswstorage.FileHandler) {
 	t.Helper()
 	cfg := nswstorage.Config{
 		Config: corestorage.Config{
@@ -76,7 +76,7 @@ func newTestStorageHandler(t *testing.T, auditor nswaudit.Auditor) (*nswstorage.
 	require.NoError(t, err)
 	access, err := newFileAccess(cfg)
 	require.NoError(t, err)
-	return stack, access, newFileHandler(stack, access, auditor)
+	return stack, access, newFileHandler(stack, access, auditor, opts...)
 }
 
 func TestNewFileHandler_WiresUploadersAndAuditor(t *testing.T) {

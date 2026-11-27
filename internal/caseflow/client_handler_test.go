@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/platform/authn"
 )
 
@@ -217,10 +218,7 @@ func TestClientHandlerBadRequests(t *testing.T) {
 // A start request with a field it does not declare, or anything after the JSON value, still
 // starts the flow: those are ignored, as they always were.
 func TestClientHandlerIgnoresUnknownFieldsAndTrailingData(t *testing.T) {
-	for name, body := range map[string]string{
-		"unknown field": `{"workflowId":"notice","flowId":"task-1","template":"notice"}`,
-		"trailing data": `{"workflowId":"notice","flowId":"task-1"}{"workflowId":"notice"}`,
-	} {
+	for name, body := range lenientStartBodies {
 		t.Run(name, func(t *testing.T) {
 			h, _, wm := newClientHandler(t, clientFlows)
 			if rec := post(h, tnsw, body); rec.Code != http.StatusOK {
@@ -231,6 +229,48 @@ func TestClientHandlerIgnoresUnknownFieldsAndTrailingData(t *testing.T) {
 			}
 		})
 	}
+}
+
+// lenientStartBodies are start requests only startBodyOptions accepts. What follows the
+// value is not read, so data after it that is over the limit is still ignored.
+var lenientStartBodies = map[string]string{
+	"unknown field":                `{"workflowId":"notice","flowId":"task-1","template":"notice"}`,
+	"trailing data":                `{"workflowId":"notice","flowId":"task-1"}{"workflowId":"notice"}`,
+	"trailing data over the limit": `{"workflowId":"notice","flowId":"task-1"}` + strings.Repeat("x", testMaxRequestBytes),
+}
+
+// With WithStrictRequestBodies, a start request with a field it does not declare, or
+// anything after the JSON value, is a 400 that starts nothing; a valid one starts the flow.
+func TestClientHandlerStrictBodies(t *testing.T) {
+	newStrict := func(t *testing.T) (*ClientHandler, *startCapture) {
+		t.Helper()
+		repo, wm := newMemRepo(), &startCapture{}
+		return NewClientHandler(newService(t, repo, wm), clientFlows, catalogClients, testMaxRequestBytes, WithStrictRequestBodies()), wm
+	}
+	for name, body := range lenientStartBodies {
+		t.Run(name, func(t *testing.T) {
+			h, wm := newStrict(t)
+			rec := post(h, tnsw, body)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body %s", rec.Code, rec.Body)
+			}
+			if !strings.Contains(rec.Body.String(), httputil.MsgInvalidBody) {
+				t.Errorf("body = %s, want %q", rec.Body, httputil.MsgInvalidBody)
+			}
+			if len(wm.starts) != 0 {
+				t.Errorf("starts = %v, want none", wm.starts)
+			}
+		})
+	}
+	t.Run("valid body", func(t *testing.T) {
+		h, wm := newStrict(t)
+		if rec := post(h, tnsw, startBody); rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+		}
+		if len(wm.starts) != 1 {
+			t.Errorf("starts = %v, want one", wm.starts)
+		}
+	})
 }
 
 // A start body over the handler's limit is refused before any flow starts; one at the limit

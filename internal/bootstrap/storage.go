@@ -9,13 +9,13 @@ import (
 )
 
 // newFileHandler builds the storage HTTP handler wired with the deployment's
-// uploaders and audit client.
-func newFileHandler(stack *nswstorage.Stack, refs nswstorage.FileRefs, auditor nswaudit.Auditor) *nswstorage.FileHandler {
-	return nswstorage.NewFileHandler(stack.Service, refs,
+// uploaders and audit client, and opts.
+func newFileHandler(stack *nswstorage.Stack, refs nswstorage.FileRefs, auditor nswaudit.Auditor, opts ...nswstorage.FileHandlerOption) *nswstorage.FileHandler {
+	return nswstorage.NewFileHandler(stack.Service, refs, append([]nswstorage.FileHandlerOption{
 		nswstorage.WithUploads(stack.Uploads),
 		nswstorage.WithMachineUploads(stack.MachineUploads),
 		nswstorage.WithAuditor(auditor),
-	)
+	}, opts...)...)
 }
 
 // internalUploadTypesByClient turns storage.allowedInternalUploadTypes, keyed by

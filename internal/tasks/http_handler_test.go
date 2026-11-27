@@ -65,6 +65,11 @@ func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	}
 }
 
+func TestNewHTTPHandler_AppliesOptions(t *testing.T) {
+	assert.False(t, NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, nil, nil, 1024).strictBodies)
+	assert.True(t, NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, nil, nil, 1024, WithStrictRequestBodies()).strictBodies)
+}
+
 func TestHandleCompleteTaskStep_RejectsOversizedBody(t *testing.T) {
 	handler := &HTTPHandler{MaxRequestBytes: 8, Store: pendingFileTask(), CanAct: mayAct}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", strings.NewReader(`{"command":"approve","payload":{"key":"value"}}`))
@@ -167,6 +172,47 @@ func TestDecodeEnvelope(t *testing.T) {
 				return
 			}
 			assertAuditDigest(t, recs[0].Message, tt.wantDigest)
+		})
+	}
+}
+
+// With WithStrictRequestBodies, the envelope refuses a field besides command and payload,
+// with no digest since the envelope did not decode, and reads everything else as it
+// otherwise does: trailing data is still refused with the decoded envelope's digest.
+func TestDecodeEnvelope_Strict(t *testing.T) {
+	tests := map[string]struct {
+		body        string
+		wantCommand string
+		wantStatus  int
+		wantDigest  bool
+	}{
+		"envelope":      {body: `{"command":"approve","payload":{"key":"value"}}`, wantCommand: "approve"},
+		"empty body":    {body: ``},
+		"unknown field": {body: `{"command":"approve","payload":{},"note":"x"}`, wantStatus: http.StatusBadRequest},
+		"trailing data": {body: `{"command":"approve"}{"command":"escalate"}`, wantStatus: http.StatusBadRequest, wantDigest: true},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			client, capture := nswaudit.NewWithCapture()
+			handler := &HTTPHandler{MaxRequestBytes: 1024, Audit: client, strictBodies: true}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/steps/step-1", strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+
+			env, ok := handler.decodeEnvelope(rec, req, "taskId", "123", "stepId", "step-1")
+
+			if tt.wantStatus == 0 {
+				require.True(t, ok, "body %s", rec.Body)
+				assert.Equal(t, tt.wantCommand, env.Command)
+				assert.Empty(t, capture.Records())
+				return
+			}
+			require.False(t, ok)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.Contains(t, rec.Body.String(), httputil.MsgInvalidBody)
+			recs := capture.Records()
+			require.Len(t, recs, 1)
+			assert.Equal(t, tt.wantStatus, recs[0].Metadata["status"])
+			assert.Equal(t, tt.wantDigest, len(recs[0].Message) > 0, "digest %s", recs[0].Message)
 		})
 	}
 }

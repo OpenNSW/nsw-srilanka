@@ -86,6 +86,19 @@ type HTTPHandler struct {
 	// RenderConfigOf resolves a task's render config, whose title names the task in
 	// its view. Without it, the view names the task by its task template.
 	RenderConfigOf RenderConfigOf
+	// strictBodies makes a submission or draft envelope refuse what its contract
+	// otherwise ignores; see WithStrictRequestBodies.
+	strictBodies bool
+}
+
+// HTTPHandlerOption adjusts an HTTPHandler.
+type HTTPHandlerOption func(*HTTPHandler)
+
+// WithStrictRequestBodies makes the submission, callback and draft routes read their
+// envelope as httputil.DecodeJSON does by default: a field besides command and payload is
+// a 400. Without it, such a field is ignored.
+func WithStrictRequestBodies() HTTPHandlerOption {
+	return func(h *HTTPHandler) { h.strictBodies = true }
 }
 
 func NewHTTPHandler(
@@ -98,8 +111,9 @@ func NewHTTPHandler(
 	users UserService,
 	audit nswaudit.Auditor,
 	maxRequestBytes int64,
+	opts ...HTTPHandlerOption,
 ) *HTTPHandler {
-	return &HTTPHandler{
+	h := &HTTPHandler{
 		Manager:         manager,
 		Claims:          manager,
 		Store:           store,
@@ -111,6 +125,10 @@ func NewHTTPHandler(
 		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // HandleGetTask returns the ZoneView payload for a single task, scoped to the
@@ -383,8 +401,10 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 	return payload, req.digest, true
 }
 
-// envelopeBodyOptions is the task envelope's contract beyond DecodeJSON's defaults: a field
-// it does not declare is ignored.
+// envelopeBodyOptions is the task envelope's contract beyond DecodeJSON's defaults, unless
+// WithStrictRequestBodies is set: a field it does not declare is ignored.
+//
+// TODO(#1337): remove it, and WithStrictRequestBodies, when strict is the only contract.
 var envelopeBodyOptions = []httputil.DecodeOption{httputil.AllowUnknownFields()}
 
 // decodeEnvelope reads the {command, payload} envelope the completion and draft
@@ -409,7 +429,11 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, log
 		httputil.Error(w, r, status, message)
 	}
 
-	err := httputil.DecodeJSON(w, r, h.MaxRequestBytes, &req, envelopeBodyOptions...)
+	opts := envelopeBodyOptions
+	if h.strictBodies {
+		opts = nil
+	}
+	err := httputil.DecodeJSON(w, r, h.MaxRequestBytes, &req, opts...)
 	// The digest is taken from the JSON value whenever it decoded: also when what follows
 	// it is refused (ErrTrailingData), but not when the value itself is refused or absent.
 	if err == nil || errors.Is(err, httputil.ErrTrailingData) {

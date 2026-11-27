@@ -79,14 +79,27 @@ type Config struct {
 
 // ServerConfig holds server configuration.
 type ServerConfig struct {
-	Port              int           `yaml:"port"`
-	ServiceURL        string        `yaml:"serviceURL"`
-	LogLevel          slog.Level    `yaml:"logLevel"`
-	MaxRequestBytes   int64         `yaml:"maxRequestBytes"`
-	ReadHeaderTimeout time.Duration `yaml:"readHeaderTimeout"`
-	ReadTimeout       time.Duration `yaml:"readTimeout"`
-	WriteTimeout      time.Duration `yaml:"writeTimeout"`
-	IdleTimeout       time.Duration `yaml:"idleTimeout"`
+	Port            int        `yaml:"port"`
+	ServiceURL      string     `yaml:"serviceURL"`
+	LogLevel        slog.Level `yaml:"logLevel"`
+	MaxRequestBytes int64      `yaml:"maxRequestBytes"`
+	// StrictRequestBodies makes the endpoints whose JSON request bodies have a lenient
+	// contract read them as the other endpoints do:
+	//
+	//   - task submissions, callbacks and drafts answer 400 to a field besides command
+	//     and payload;
+	//   - agency flow starts and file upload requests answer 400 to a field they do not
+	//     declare, and to anything after the JSON value, and a file upload request over
+	//     its limit is a 413 instead of a 400.
+	//
+	// Unset or false, those endpoints ignore what it refuses.
+	//
+	// TODO(#1337): remove it when strict is the only contract.
+	StrictRequestBodies bool          `yaml:"strictRequestBodies"`
+	ReadHeaderTimeout   time.Duration `yaml:"readHeaderTimeout"`
+	ReadTimeout         time.Duration `yaml:"readTimeout"`
+	WriteTimeout        time.Duration `yaml:"writeTimeout"`
+	IdleTimeout         time.Duration `yaml:"idleTimeout"`
 }
 
 // ArtifactsConfig is how this deployment uses the versioned artifact manifests the

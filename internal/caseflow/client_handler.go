@@ -55,20 +55,41 @@ type ClientHandler struct {
 	clients map[string]string // OAuth2 client id -> catalog client name
 	// maxRequestBytes caps a start request body, whose input carries the caller's case data.
 	maxRequestBytes int64
+	// strictBodies makes a start request refuse what its contract otherwise ignores; see
+	// WithStrictRequestBodies.
+	strictBodies bool
 }
 
-// startBodyOptions is a start request's contract beyond DecodeJSON's defaults: a field it
-// does not declare, and anything after the JSON value, are ignored.
+// ClientHandlerOption adjusts a ClientHandler.
+type ClientHandlerOption func(*ClientHandler)
+
+// WithStrictRequestBodies makes the start route read its request as httputil.DecodeJSON
+// does by default: a field the request does not declare, or anything after the JSON
+// value, is a 400. Without it, both are ignored.
+func WithStrictRequestBodies() ClientHandlerOption {
+	return func(h *ClientHandler) { h.strictBodies = true }
+}
+
+// startBodyOptions is a start request's contract beyond DecodeJSON's defaults, unless
+// WithStrictRequestBodies is set: a field it does not declare, and anything after the JSON
+// value, are ignored. What follows the value is not read, so it does not count towards
+// the limit.
+//
+// TODO(#1337): remove it, and WithStrictRequestBodies, when strict is the only contract.
 var startBodyOptions = []httputil.DecodeOption{httputil.AllowUnknownFields(), httputil.AllowTrailingData()}
 
 // NewClientHandler creates a ClientHandler. clients is the catalog's Clients map (name ->
 // client id). maxRequestBytes caps a start request body.
-func NewClientHandler(flows *Service, list ClientFlows, clients map[string]string, maxRequestBytes int64) *ClientHandler {
+func NewClientHandler(flows *Service, list ClientFlows, clients map[string]string, maxRequestBytes int64, opts ...ClientHandlerOption) *ClientHandler {
 	byID := make(map[string]string, len(clients))
 	for name, id := range clients {
 		byID[id] = name
 	}
-	return &ClientHandler{flows: flows, list: list, clients: byID, maxRequestBytes: maxRequestBytes}
+	h := &ClientHandler{flows: flows, list: list, clients: byID, maxRequestBytes: maxRequestBytes}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // HandleStart handles POST /api/v1/internal/cases/{caseId}/flows. Response: Flow.
@@ -79,7 +100,11 @@ func (h *ClientHandler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	caseID := r.PathValue("caseId")
 	var req ClientStartRequest
-	if err := httputil.DecodeJSON(w, r, h.maxRequestBytes, &req, startBodyOptions...); err != nil {
+	opts := startBodyOptions
+	if h.strictBodies {
+		opts = nil
+	}
+	if err := httputil.DecodeJSON(w, r, h.maxRequestBytes, &req, opts...); err != nil {
 		httputil.WriteDecodeError(w, r, err)
 		return
 	}
