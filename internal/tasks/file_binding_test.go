@@ -2,18 +2,19 @@ package tasks
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"testing"
 
+	"github.com/OpenNSW/core/platform/authn"
+	"github.com/OpenNSW/core/platform/storage/fileaccess"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/OpenNSW/core/platform/authn"
-	"github.com/OpenNSW/core/platform/storage/fileaccess"
 )
 
 // fakeFileRefs issues references "ref1", "ref2", ... and resolves each only
@@ -174,7 +175,8 @@ func TestFileBinding_FromCallerResolvesTheStepsFields(t *testing.T) {
 	// "certificate" is declared only under another step's namespace.
 	payload := map[string]any{"invoice": invoice, "docs": []any{map[string]any{"file": doc}}, "certificate": "ref1", "__command": "submit"}
 
-	require.NoError(t, b.FromCaller(context.Background(), record, payload, alice))
+	added, removed, err := b.FromCaller(context.Background(), record, payload, alice)
+	require.NoError(t, err)
 
 	assert.Equal(t, map[string]any{
 		"invoice":     "k-invoice",
@@ -182,6 +184,8 @@ func TestFileBinding_FromCallerResolvesTheStepsFields(t *testing.T) {
 		"certificate": "ref1",
 		"__command":   "submit",
 	}, payload)
+	assert.Equal(t, []string{"k-doc", "k-invoice"}, added)
+	assert.Empty(t, removed)
 	assert.Equal(t, 1, calls)
 }
 
@@ -195,13 +199,13 @@ func TestFileBinding_FromCallerRefuses(t *testing.T) {
 	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(filesRenderConfig))
 	record := store.TaskRecord{ActiveTaskTemplateID: "form-step"}
 
-	err := b.FromCaller(context.Background(), record, map[string]any{"invoice": alicesRef}, userPrincipal("bob"))
+	_, _, err := b.FromCaller(context.Background(), record, map[string]any{"invoice": alicesRef}, userPrincipal("bob"))
 	assert.ErrorIs(t, err, fileaccess.ErrNotYours)
 
-	err = b.FromCaller(context.Background(), record, map[string]any{"invoice": expiredRef}, userPrincipal("bob"))
+	_, _, err = b.FromCaller(context.Background(), record, map[string]any{"invoice": expiredRef}, userPrincipal("bob"))
 	assert.ErrorIs(t, err, fileaccess.ErrExpired)
 
-	err = b.FromCaller(context.Background(), record, map[string]any{"invoice": readOnlyRef}, userPrincipal("bob"))
+	_, _, err = b.FromCaller(context.Background(), record, map[string]any{"invoice": readOnlyRef}, userPrincipal("bob"))
 	assert.ErrorIs(t, err, fileaccess.ErrScope)
 }
 
@@ -211,7 +215,7 @@ func TestFileBinding_FromCallerRefusesValuesThatAreNotReferences(t *testing.T) {
 	b := NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(filesRenderConfig))
 	record := store.TaskRecord{ActiveTaskTemplateID: "form-step"}
 
-	err := b.FromCaller(context.Background(), record, map[string]any{"invoice": "k-raw"}, userPrincipal("alice"))
+	_, _, err := b.FromCaller(context.Background(), record, map[string]any{"invoice": "k-raw"}, userPrincipal("alice"))
 	assert.ErrorIs(t, err, fileaccess.ErrInvalid)
 }
 
@@ -227,14 +231,20 @@ func TestFileBinding_FromCallerWithoutNamespaceOrFiles(t *testing.T) {
 	})
 	payload := map[string]any{"invoice": ref}
 	record := store.TaskRecord{ActiveTaskTemplateID: "bare-step"}
-	require.NoError(t, b.FromCaller(context.Background(), record, payload, userPrincipal("bob")))
+	added, removed, err := b.FromCaller(context.Background(), record, payload, userPrincipal("bob"))
+	require.NoError(t, err)
+	assert.Empty(t, added)
+	assert.Empty(t, removed)
 	assert.Equal(t, map[string]any{"invoice": ref}, payload)
 
 	// A task that declares no files needs no step template.
 	calls = 0
 	renderConfig = `{"id":"x:render"}`
 	record = store.TaskRecord{ActiveTaskTemplateID: "unknown"}
-	require.NoError(t, b.FromCaller(context.Background(), record, payload, userPrincipal("bob")))
+	added, removed, err = b.FromCaller(context.Background(), record, payload, userPrincipal("bob"))
+	require.NoError(t, err)
+	assert.Empty(t, added)
+	assert.Empty(t, removed)
 	assert.Zero(t, calls)
 }
 
@@ -243,6 +253,141 @@ func TestFileBinding_FromCallerFailsWithoutTheStepTemplate(t *testing.T) {
 	b := NewFileBinding(newFakeFileRefs(), namespaces(nil, &calls), fixedRenderConfig(filesRenderConfig))
 	record := store.TaskRecord{ActiveTaskTemplateID: "missing"}
 
-	err := b.FromCaller(context.Background(), record, map[string]any{}, userPrincipal("alice"))
+	_, _, err := b.FromCaller(context.Background(), record, map[string]any{}, userPrincipal("alice"))
 	assert.ErrorContains(t, err, `"missing"`)
+}
+
+func TestFileBinding_FromCallerDiffsStoredFiles(t *testing.T) {
+	refs := newFakeFileRefs()
+	alice := userPrincipal("alice")
+	refA, _ := refs.Issue(alice, "k-a", readSubmit...)
+	refB, _ := refs.Issue(alice, "k-b", readSubmit...)
+	refC, _ := refs.Issue(alice, "k-c", readSubmit...)
+	var calls int
+	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls), fixedRenderConfig(filesRenderConfig))
+
+	t.Run("first save reports attached files and ignores other namespaces", func(t *testing.T) {
+		record := store.TaskRecord{
+			ActiveTaskTemplateID: "form-step",
+			Data:                 decodeMap(t, `{"review":{"certificate":"k-other"}}`),
+		}
+		added, removed, err := b.FromCaller(context.Background(), record, map[string]any{"invoice": refB, "docs": []any{map[string]any{"file": refA}}}, alice)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"k-a", "k-b"}, added)
+		assert.Empty(t, removed)
+	})
+
+	t.Run("unchanged files report no diff regardless of order or duplicates", func(t *testing.T) {
+		record := store.TaskRecord{
+			ActiveTaskTemplateID: "form-step",
+			Data:                 decodeMap(t, `{"form":{"invoice":"k-a","docs":[{"file":"k-b"},{"file":"k-a"}]}}`),
+		}
+		added, removed, err := b.FromCaller(context.Background(), record, map[string]any{"invoice": refB, "docs": []any{map[string]any{"file": refA}}}, alice)
+		require.NoError(t, err)
+		assert.Empty(t, added)
+		assert.Empty(t, removed)
+	})
+
+	t.Run("added and removed files are sorted and record is not mutated", func(t *testing.T) {
+		record := store.TaskRecord{
+			ActiveTaskTemplateID: "form-step",
+			Data:                 decodeMap(t, `{"form":{"invoice":"k-a","docs":[{"file":"k-b"}]},"review":{"certificate":"k-other"}}`),
+		}
+		before := record.DeepCopy()
+		added, removed, err := b.FromCaller(context.Background(), record, map[string]any{"invoice": refC, "docs": []any{map[string]any{"file": refB}}}, alice)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"k-c"}, added)
+		assert.Equal(t, []string{"k-a"}, removed)
+		assert.Equal(t, before, record)
+	})
+
+	t.Run("removing all files reports every previously stored key", func(t *testing.T) {
+		record := store.TaskRecord{
+			ActiveTaskTemplateID: "form-step",
+			Data:                 decodeMap(t, `{"form":{"invoice":"k-b","docs":[{"file":"k-a"}]}}`),
+		}
+		added, removed, err := b.FromCaller(context.Background(), record, map[string]any{"invoice": "", "docs": []any{}}, alice)
+		require.NoError(t, err)
+		assert.Empty(t, added)
+		assert.Equal(t, []string{"k-a", "k-b"}, removed)
+	})
+
+	t.Run("omitting file fields reports previously stored keys as removed", func(t *testing.T) {
+		record := store.TaskRecord{
+			ActiveTaskTemplateID: "form-step",
+			Data:                 decodeMap(t, `{"form":{"invoice":"k-b","docs":[{"file":"k-a"}]}}`),
+		}
+		added, removed, err := b.FromCaller(context.Background(), record, map[string]any{"note": "cleared"}, alice)
+		require.NoError(t, err)
+		assert.Empty(t, added)
+		assert.Equal(t, []string{"k-a", "k-b"}, removed)
+	})
+
+	t.Run("malformed historical data does not block a valid save", func(t *testing.T) {
+		record := store.TaskRecord{
+			TaskID:               "t1",
+			ActiveStepID:         "s1",
+			ActiveTaskTemplateID: "form-step",
+			Data:                 decodeMap(t, `{"form":{"invoice":["not-a-string"]}}`),
+		}
+		payload := map[string]any{"invoice": refC}
+		added, removed, err := b.FromCaller(context.Background(), record, payload, alice)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"invoice": "k-c"}, payload)
+		assert.Empty(t, added)
+		assert.Empty(t, removed)
+	})
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+func TestFileBinding_FromCallerHashesAuditValuesInProxyMode(t *testing.T) {
+	refs := newFakeFileRefs()
+	alice := userPrincipal("alice")
+	const (
+		oldToken  = "jwe.tnsw.old-token"
+		keptToken = "jwe.tnsw.kept-token"
+		newTokenA = "jwe.tnsw.new-token-a"
+		newTokenB = "jwe.tnsw.new-token-b"
+	)
+	refKept, _ := refs.Issue(alice, keptToken, readSubmit...)
+	refNewA, _ := refs.Issue(alice, newTokenA, readSubmit...)
+	refNewB, _ := refs.Issue(alice, newTokenB, readSubmit...)
+	var calls int
+	b := NewFileBinding(
+		refs,
+		namespaces(map[string]string{"form-step": "form"}, &calls),
+		fixedRenderConfig(filesRenderConfig),
+		WithHashedAuditValues(),
+	)
+	record := store.TaskRecord{
+		ActiveTaskTemplateID: "form-step",
+		Data: decodeMap(t, `{
+			"form": {"invoice": "`+oldToken+`", "docs": [{"file": "`+keptToken+`"}]}
+		}`),
+	}
+	payload := map[string]any{
+		"invoice": refNewA,
+		"docs":    []any{map[string]any{"file": refKept}, map[string]any{"file": refNewB}},
+	}
+
+	added, removed, err := b.FromCaller(context.Background(), record, payload, alice)
+	require.NoError(t, err)
+
+	// Payload still receives the raw stored tokens for core and workflows.
+	assert.Equal(t, map[string]any{
+		"invoice": newTokenA,
+		"docs":    []any{map[string]any{"file": keptToken}, map[string]any{"file": newTokenB}},
+	}, payload)
+
+	wantAdded := []string{sha256Hex(newTokenA), sha256Hex(newTokenB)}
+	slices.Sort(wantAdded)
+	assert.Equal(t, wantAdded, added)
+	assert.Equal(t, []string{sha256Hex(oldToken)}, removed)
+	assert.NotContains(t, added, newTokenA)
+	assert.NotContains(t, added, newTokenB)
+	assert.NotContains(t, removed, oldToken)
 }
